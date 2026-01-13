@@ -44,6 +44,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - **Files Added**: `src/loki_link.c`, `include/loki/link.h`
   - **Dependencies**: Ableton Link 3.1.5 (GPL v2+)
 
+- **MIDI File Export**: Export Alda compositions to Standard MIDI Files (.mid)
+  - **Ex Command**: `:export <filename.mid>` - Export current events to MIDI file
+  - **Lua API**: `loki.midi.export(filename)` - Returns true on success, nil + error on failure
+  - Exports as Type 0 MIDI (single track) for single-channel compositions
+  - Exports as Type 1 MIDI (multi-track) for multi-channel compositions
+  - Preserves tempo, program changes, pan, and all MIDI events
+  - **Files Added**: `src/loki_midi_export.cpp`, `include/loki/midi_export.h`
+  - **Dependencies**: midifile library (BSD-2-Clause)
+
 - **Lua Keybinding Customization System**: User-definable keybindings via Lua
   - `loki.keymap(modes, key, callback, [description])` - Register a keybinding
   - `loki.keyunmap(modes, key)` - Remove a keybinding

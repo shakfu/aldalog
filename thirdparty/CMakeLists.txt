@@ -29,3 +29,7 @@ target_include_directories(alda PRIVATE
 include(${CMAKE_CURRENT_SOURCE_DIR}/link-3.1.5/AbletonLinkConfig.cmake)
 # Creates abl_link static library (C wrapper for Link)
 include(${CMAKE_CURRENT_SOURCE_DIR}/link-3.1.5/extensions/abl_link/abl_link.cmake)
+
+# midifile - Standard MIDI File library (BSD-2-Clause)
+set(BUILD_MIDILIBRARY_ONLY ON CACHE BOOL "" FORCE)
+add_subdirectory(midifile)

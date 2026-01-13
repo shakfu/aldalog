@@ -90,4 +90,7 @@ int cmd_set(editor_ctx_t *ctx, const char *args);
 /* :link [on|off] - Toggle or set Ableton Link synchronization */
 int cmd_link(editor_ctx_t *ctx, const char *args);
 
+/* :export <filename> - Export Alda events to MIDI file */
+int cmd_export(editor_ctx_t *ctx, const char *args);
+
 #endif /* LOKI_COMMAND_H */

@@ -417,21 +417,21 @@ All dependencies are in `thirdparty/`:
 
 ### 9.1 High Priority (Immediate Value)
 
-1. **Implement Visual Mode Delete**
+1. [x] **Implement Visual Mode Delete**
    - Location: `loki_modal.c:621-629`
    - Complexity: Low
    - Impact: High (core vim functionality)
 
-2. **System Clipboard Integration**
+2. [x] **System Clipboard Integration**
    - Use OSC 52 escape sequences for terminal clipboard
    - Works over SSH, no external dependencies
    - Complexity: Low
 
-3. **Add Undo/Redo Tests**
+3. [x] **Add Undo/Redo Tests**
    - Create `tests/test_undo.c`
    - Test grouping heuristics, memory limits, edge cases
 
-4. **Add Line Numbers Display**
+4. [not-working] **Add Line Numbers Display**
    - Common editor feature
    - Requires gutter calculation adjustment
 

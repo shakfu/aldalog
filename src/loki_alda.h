@@ -188,6 +188,29 @@ int loki_alda_load_soundfont(editor_ctx_t *ctx, const char *path);
  */
 void loki_alda_check_callbacks(editor_ctx_t *ctx, lua_State *L);
 
+/* ======================= MIDI Export Support ======================= */
+
+/* Include context.h for AldaScheduledEvent type */
+#include <alda/context.h>
+
+/**
+ * Get pointer to scheduled events for MIDI export.
+ * Returns the internal event array after parsing.
+ *
+ * @param count Output: number of events in array (or NULL to ignore)
+ * @return Pointer to events array, or NULL if not initialized
+ * @note Caller must not modify events. Valid until next eval call.
+ */
+const AldaScheduledEvent* loki_alda_get_events(int *count);
+
+/**
+ * Get the number of unique channels used in current events.
+ * Useful for determining Type 0 vs Type 1 MIDI export.
+ *
+ * @return Number of unique channels (1-16), or 0 if no events
+ */
+int loki_alda_get_channel_count(void);
+
 /* ======================= Utility Functions ======================= */
 
 /**

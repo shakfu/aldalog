@@ -14,6 +14,24 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(LOKI_BUILD_SHARED "Build libloki as a shared library" OFF)
+option(ENABLE_LTO_IPO "Enable Link-time interprocedural optimization" OFF)
+
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    message(STATUS "Found ccache in ${CCACHE_PROGRAM}")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+endif()
+
+if (ENABLE_LTO_IPO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT ipo_lto_supported OUTPUT check_lto_ipo_error)
+    if(ipo_lto_supported)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+        message(STATUS "IPO / LTO enabled")
+    else()
+        message(STATUS "IPO / LTO not supported: <${check_lto_ipo_error}>")
+    endif()
+endif()
 
 # Use local Lua 5.5.0 from thirdparty (self-contained build)
 set(LUA_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/lua-5.5.0/src)
@@ -43,6 +61,7 @@ add_library(libloki ${LOKI_LIBRARY_TYPE}
     src/loki_buffers.c
     src/loki_alda.c
     src/loki_link.c
+    src/loki_midi_export.cpp
 )
 
 target_include_directories(libloki
@@ -51,6 +70,7 @@ target_include_directories(libloki
         ${LUA_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/alda-midi/lib/include
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/link-3.1.5/extensions/abl_link/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/midifile/include
 )
 
 target_compile_options(libloki PRIVATE -Wall -Wextra -pedantic)
@@ -62,6 +82,7 @@ target_link_libraries(libloki
         ${CMAKE_DL_LIBS}
         alda
         abl_link
+        midifile
 )
 
 if (NOT MSVC)

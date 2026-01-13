@@ -8,7 +8,9 @@
 
 ## Medium Priority
 
-- [ ] Add support for Ableton Link
+- [x] Add support for Ableton Link
+
+- [x] Add support for midifile
 
 ## Low Priority
 

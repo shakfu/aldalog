@@ -9,6 +9,8 @@
 #include "loki_terminal.h"
 #include "loki_buffers.h"
 #include "loki/link.h"
+#include "loki/midi_export.h"
+#include "loki_alda.h"
 #include <lua.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -40,6 +42,7 @@ static command_def_t builtin_commands[] = {
     {"e",      cmd_edit,        "Edit file",                      1, 1},
     {"edit",   cmd_edit,        "Edit file",                      1, 1},
     {"link",   cmd_link,        "Toggle Ableton Link sync",       0, 1},
+    {"export", cmd_export,      "Export to MIDI file",            1, 1},
     {NULL, NULL, NULL, 0, 0}  /* Sentinel */
 };
 
@@ -501,6 +504,29 @@ int cmd_link(editor_ctx_t *ctx, const char *args) {
         loki_link_get_tempo(ctx),
         (unsigned long)loki_link_num_peers(ctx));
     return 1;
+}
+
+int cmd_export(editor_ctx_t *ctx, const char *args) {
+    if (!args || !args[0]) {
+        editor_set_status_msg(ctx, "Usage: :export <filename.mid>");
+        return 0;
+    }
+
+    /* Check if Alda is initialized */
+    if (!loki_alda_is_initialized(ctx)) {
+        editor_set_status_msg(ctx, "No Alda context (play Alda code first)");
+        return 0;
+    }
+
+    /* Export to MIDI file */
+    if (loki_midi_export(ctx, args) == 0) {
+        editor_set_status_msg(ctx, "%s exported", args);
+        return 1;
+    } else {
+        const char *err = loki_midi_export_error();
+        editor_set_status_msg(ctx, "Export failed: %s", err ? err : "unknown error");
+        return 0;
+    }
 }
 
 /* ======================== Dynamic Command Registration (for Lua) ======================== */

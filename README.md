@@ -57,6 +57,7 @@ REPL commands (use with or without `:` prefix):
 | `:midi` | Switch to MIDI output |
 | `:synth` | Switch to built-in synth |
 | `:link [on\|off]` | Toggle Ableton Link sync |
+| `:export FILE` | Export to MIDI file |
 
 ### Editor Mode (Live-Coding)
 
@@ -154,6 +155,31 @@ loki.link.on_start_stop("my_transport_handler")
 loki.link.cleanup()
 ```
 
+## MIDI Export
+
+Export your Alda compositions to Standard MIDI Files (.mid) for use in DAWs and other music software.
+
+### Quick Start
+
+1. Play some Alda code to generate events (Ctrl-E or Ctrl-P)
+2. Run `:export song.mid` to export
+
+### Lua API
+
+```lua
+-- Export to MIDI file
+local ok, err = loki.midi.export("song.mid")
+if not ok then
+    loki.status("Export failed: " .. err)
+end
+```
+
+### Notes
+
+- Single-channel compositions export as Type 0 MIDI (single track)
+- Multi-channel compositions export as Type 1 MIDI (multiple tracks)
+- All events (notes, program changes, tempo, pan) are preserved
+
 ## Documentation
 
 See the `docs` folder for full technical documentation.
@@ -164,6 +190,7 @@ See the `docs` folder for full technical documentation.
 - [kilo](https://github.com/antirez/kilo) by Salvatore Sanfilippo (antirez) - original editor
 - [loki](https://github.com/shakfu/loki) - Lua-enhanced fork
 - [link](https://github.com/Ableton/link) - Ableton Link
+- [midifile](https://github.com/craigsapp/midifile) - C++ library for reading/writing Standard MIDI Files
 - [libremidi](https://github.com/celtera/libremidi) - A modern C++ MIDI 1 / MIDI 2 real-time & file I/O library. Supports Windows, macOS, Linux and WebMIDI.
 - [TinySoundFont](https://github.com/schellingb/TinySoundFont) - SoundFont2 synthesizer library in a single C/C++ file
 - [miniaudio](https://github.com/mackron/miniaudio) - Audio playback and capture library written in C, in a single source file.

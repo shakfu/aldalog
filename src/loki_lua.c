@@ -34,6 +34,7 @@
 #include "loki_command.h"  /* Command mode and ex-style commands */
 #include "loki_alda.h"       /* Alda music language integration */
 #include "loki/link.h"       /* Ableton Link integration */
+#include "loki/midi_export.h" /* MIDI file export */
 #include "loki_buffers.h"    /* Buffer management for buffer_get_current() */
 
 /* ======================= Lua API bindings ================================ */
@@ -1403,6 +1404,36 @@ static void lua_register_link_module(lua_State *L) {
     lua_setfield(L, -2, "link");  /* Set as loki.link */
 }
 
+/* ======================= MIDI Export Lua Bindings ======================= */
+
+/* Lua API: loki.midi.export(filename) - Export Alda events to MIDI file
+ * Returns: true on success, nil + error message on failure */
+static int lua_midi_export(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    const char *filename = luaL_checkstring(L, 1);
+
+    if (loki_midi_export(ctx, filename) == 0) {
+        lua_pushboolean(L, 1);
+        return 1;
+    } else {
+        lua_pushnil(L);
+        const char *err = loki_midi_export_error();
+        lua_pushstring(L, err ? err : "unknown error");
+        return 2;
+    }
+}
+
+/* Register midi module as loki.midi subtable */
+static void lua_register_midi_module(lua_State *L) {
+    /* Assumes loki table is on top of stack */
+    lua_newtable(L);  /* Create midi subtable */
+
+    lua_pushcfunction(L, lua_midi_export);
+    lua_setfield(L, -2, "export");
+
+    lua_setfield(L, -2, "midi");  /* Set as loki.midi */
+}
+
 /* Register alda module as loki.alda subtable */
 static void lua_register_alda_module(lua_State *L) {
     /* Assumes loki table is on top of stack */
@@ -1572,6 +1603,9 @@ void loki_lua_bind_editor(lua_State *L) {
 
     /* Register link module as loki.link */
     lua_register_link_module(L);
+
+    /* Register midi module as loki.midi */
+    lua_register_midi_module(L);
 
     /* Set as global 'loki' */
     lua_setglobal(L, "loki");

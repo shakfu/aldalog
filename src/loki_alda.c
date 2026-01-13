@@ -382,6 +382,44 @@ int loki_alda_get_tempo(editor_ctx_t *ctx) {
     return g_alda_state.alda_ctx.global_tempo;
 }
 
+/* ======================= MIDI Export Support ======================= */
+
+const AldaScheduledEvent* loki_alda_get_events(int *count) {
+    if (!g_alda_state.initialized) {
+        if (count) *count = 0;
+        return NULL;
+    }
+
+    if (count) *count = g_alda_state.alda_ctx.event_count;
+    return g_alda_state.alda_ctx.events;
+}
+
+int loki_alda_get_channel_count(void) {
+    if (!g_alda_state.initialized || g_alda_state.alda_ctx.event_count == 0) {
+        return 0;
+    }
+
+    /* Track which channels are used with a bitmask */
+    unsigned int channels_used = 0;
+    int event_count = g_alda_state.alda_ctx.event_count;
+    const AldaScheduledEvent *events = g_alda_state.alda_ctx.events;
+
+    for (int i = 0; i < event_count; i++) {
+        if (events[i].channel >= 0 && events[i].channel < 16) {
+            channels_used |= (1u << events[i].channel);
+        }
+    }
+
+    /* Count set bits */
+    int count = 0;
+    while (channels_used) {
+        count += channels_used & 1;
+        channels_used >>= 1;
+    }
+
+    return count;
+}
+
 int loki_alda_set_synth_enabled(editor_ctx_t *ctx, int enable) {
     (void)ctx;
 
