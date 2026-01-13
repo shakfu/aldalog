@@ -184,6 +184,9 @@ struct editor_ctx {
 
     /* Alda mode flag (set when .alda file opened and Alda initialized) */
     int alda_mode;
+
+    /* Line numbers display flag */
+    int line_numbers;
 };
 
 /* Legacy type name for compatibility during migration.

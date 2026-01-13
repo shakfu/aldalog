@@ -618,14 +618,21 @@ static void process_visual_mode(editor_ctx_t *ctx, int fd, int c) {
             editor_set_status_msg(ctx, "Yanked selection");
             break;
 
-        /* Delete selection (without undo for now) */
+        /* Delete selection (yank first for 'd', just delete for 'x') */
         case 'd':
-        case 'x':
-            copy_selection_to_clipboard(ctx); /* Save to clipboard first */
-            /* TODO: delete selection - need to implement this */
-            editor_set_status_msg(ctx, "Delete not implemented yet");
+            copy_selection_to_clipboard(ctx); /* Save to clipboard first (yank) */
+            {
+                int deleted = delete_selection(ctx);
+                editor_set_status_msg(ctx, "Deleted %d characters", deleted);
+            }
             ctx->mode = MODE_NORMAL;
-            ctx->sel_active = 0;
+            break;
+        case 'x':
+            {
+                int deleted = delete_selection(ctx);
+                editor_set_status_msg(ctx, "Deleted %d characters", deleted);
+            }
+            ctx->mode = MODE_NORMAL;
             break;
 
         /* Global commands */

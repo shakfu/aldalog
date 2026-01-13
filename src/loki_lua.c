@@ -242,6 +242,29 @@ static int lua_loki_set_theme(lua_State *L) {
     return 0;
 }
 
+/* =========================== Display Settings Lua API ======================== */
+
+/* Lua API: loki.line_numbers([enabled]) - Get or set line numbers display
+ * With no argument: returns current state (true/false)
+ * With boolean argument: sets line numbers on/off
+ * Example: loki.line_numbers(true) to enable, loki.line_numbers(false) to disable */
+static int lua_loki_line_numbers(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    if (!ctx) return 0;
+
+    /* If no arguments, return current state */
+    if (lua_gettop(L) == 0) {
+        lua_pushboolean(L, ctx->line_numbers);
+        return 1;
+    }
+
+    /* Set line numbers based on argument */
+    int enabled = lua_toboolean(L, 1);
+    ctx->line_numbers = enabled ? 1 : 0;
+
+    return 0;
+}
+
 /* =========================== Modal System Lua API =========================== */
 
 /* Lua API: loki.get_mode() - Get current editor mode */
@@ -1045,6 +1068,10 @@ void loki_lua_bind_editor(lua_State *L) {
 
     lua_pushcfunction(L, lua_loki_set_theme);
     lua_setfield(L, -2, "set_theme");
+
+    /* Display settings */
+    lua_pushcfunction(L, lua_loki_line_numbers);
+    lua_setfield(L, -2, "line_numbers");
 
     /* Modal system functions */
     lua_pushcfunction(L, lua_loki_get_mode);

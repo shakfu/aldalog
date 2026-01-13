@@ -13,7 +13,8 @@ Early development. Core functionality works but the API is evolving.
 - **Editor Mode**: Vim-like modal editor with live-coding support
 - **REPL Mode**: Interactive Alda composition - type notation directly
 - **Play Mode**: Headless playback for scripts and automation
-- Built-in software synthesizer (`TinySoundFont`) or MIDI output
+- Builtin MIDI output using [libremidi](https://github.com/celtera/libremidi).
+- Built-in software synthesizer using [TinySoundFont](https://github.com/schellingb/TinySoundFont) and [miniaudio](https://github.com/mackron/miniaudio).
 - Async playback (non-blocking)
 - Lua scripting for editor customization
 

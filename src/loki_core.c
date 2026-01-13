@@ -557,6 +557,23 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
     /* Reduce available rows if tabs are showing */
     int available_rows = ctx->screenrows - tabs_showing;
 
+    /* Calculate gutter width for line numbers */
+    int gutter_width = 0;
+    if (ctx->line_numbers && ctx->numrows > 0) {
+        /* Width = digits needed for max line number + 1 for separator */
+        int max_line = ctx->numrows;
+        gutter_width = 1; /* At least 1 digit */
+        while (max_line >= 10) {
+            gutter_width++;
+            max_line /= 10;
+        }
+        gutter_width += 1; /* Space separator after number */
+    }
+
+    /* Available cols for text after gutter */
+    int text_cols = ctx->screencols - gutter_width;
+    if (text_cols < 1) text_cols = 1;
+
     for (y = 0; y < available_rows; y++) {
         int filerow = ctx->rowoff+y;
 
@@ -573,9 +590,29 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
                 while(padding--) terminal_buffer_append(&ab," ",1);
                 terminal_buffer_append(&ab,welcome,welcomelen);
             } else {
-                terminal_buffer_append(&ab,"~\x1b[0K\r\n",7);
+                /* Empty lines: show gutter filler if line numbers enabled */
+                if (ctx->line_numbers && gutter_width > 0) {
+                    terminal_buffer_append(&ab,"\x1b[90m",5); /* Dark gray */
+                    for (int i = 0; i < gutter_width - 1; i++)
+                        terminal_buffer_append(&ab," ",1);
+                    terminal_buffer_append(&ab,"~",1);
+                    terminal_buffer_append(&ab,"\x1b[39m",5); /* Reset */
+                } else {
+                    terminal_buffer_append(&ab,"~",1);
+                }
+                terminal_buffer_append(&ab,"\x1b[0K\r\n",6);
             }
             continue;
+        }
+
+        /* Render line number gutter */
+        if (ctx->line_numbers && gutter_width > 0) {
+            char line_num_buf[16];
+            int line_num_len = snprintf(line_num_buf, sizeof(line_num_buf),
+                "%*d ", gutter_width - 1, filerow + 1);
+            terminal_buffer_append(&ab,"\x1b[90m",5); /* Dark gray for line numbers */
+            terminal_buffer_append(&ab, line_num_buf, line_num_len);
+            terminal_buffer_append(&ab,"\x1b[39m",5); /* Reset foreground */
         }
 
         r = &ctx->row[filerow];
@@ -584,8 +621,8 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
         int current_color = -1;
 
         /* Word wrap: clamp to screen width and find word boundary */
-        if (ctx->word_wrap && len > ctx->screencols && r->cb_lang == CB_LANG_NONE) {
-            len = ctx->screencols;
+        if (ctx->word_wrap && len > text_cols && r->cb_lang == CB_LANG_NONE) {
+            len = text_cols;
             /* Find last space/separator to break at word boundary */
             int last_space = -1;
             for (int k = 0; k < len; k++) {
@@ -599,7 +636,7 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
         }
 
         if (len > 0) {
-            if (len > ctx->screencols) len = ctx->screencols;
+            if (len > text_cols) len = text_cols;
             char *c = r->render+ctx->coloff;
             unsigned char *hl = r->hl+ctx->coloff;
             int j;
@@ -738,6 +775,14 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
                     cx += 7-((cx)%8);
                 cx++;
             }
+        }
+        /* Account for line numbers gutter */
+        if (ctx->line_numbers && ctx->numrows > 0) {
+            int gw = 1;
+            int max_ln = ctx->numrows;
+            while (max_ln >= 10) { gw++; max_ln /= 10; }
+            gw += 1; /* Space separator */
+            cx += gw;
         }
         /* Account for tab bar at top if multiple buffers are open */
         int tab_offset = (buffer_count() > 1) ? 1 : 0;

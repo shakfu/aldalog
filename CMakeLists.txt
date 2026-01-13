@@ -201,3 +201,14 @@ target_include_directories(test_indent PRIVATE
 )
 target_link_libraries(test_indent PRIVATE libloki test_framework)
 add_test(NAME test_indent COMMAND test_indent)
+
+# Unit tests for undo/redo system
+add_executable(test_undo tests/test_undo.c)
+target_include_directories(test_undo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    ${LUA_INCLUDE_DIR}
+)
+target_link_libraries(test_undo PRIVATE libloki test_framework)
+add_test(NAME test_undo COMMAND test_undo)

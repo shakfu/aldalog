@@ -155,6 +155,12 @@ void copy_selection_to_clipboard(editor_ctx_t *ctx) {
     ctx->sel_active = 0;  /* Clear selection after copy */
 }
 
+/* Forward declarations for row operations */
+void editor_row_del_char(editor_ctx_t *ctx, t_erow *row, int at);
+void editor_row_append_string(editor_ctx_t *ctx, t_erow *row, char *s, size_t len);
+void editor_del_row(editor_ctx_t *ctx, int at);
+void editor_update_row(editor_ctx_t *ctx, t_erow *row);
+
 /* Get selected text as a newly allocated string.
  * Caller must free the returned string.
  * Returns NULL if no selection or allocation failure. */
@@ -205,4 +211,112 @@ char *get_selection_text(editor_ctx_t *ctx) {
     text[text_len] = '\0';
 
     return text;
+}
+
+/* Delete selected text from the buffer.
+ * Records undo operations for each deletion.
+ * Clears selection and positions cursor at selection start.
+ * Returns number of characters deleted, or 0 if no selection. */
+int delete_selection(editor_ctx_t *ctx) {
+    if (!ctx->sel_active || ctx->numrows == 0) {
+        return 0;
+    }
+
+    /* Normalize selection: ensure start comes before end */
+    int start_y = ctx->sel_start_y;
+    int start_x = ctx->sel_start_x;
+    int end_y = ctx->sel_end_y;
+    int end_x = ctx->sel_end_x;
+
+    if (start_y > end_y || (start_y == end_y && start_x > end_x)) {
+        int tmp;
+        tmp = start_y; start_y = end_y; end_y = tmp;
+        tmp = start_x; start_x = end_x; end_x = tmp;
+    }
+
+    /* Bounds checking */
+    if (start_y >= ctx->numrows) start_y = ctx->numrows - 1;
+    if (end_y >= ctx->numrows) end_y = ctx->numrows - 1;
+    if (start_y < 0) start_y = 0;
+    if (end_y < 0) end_y = 0;
+
+    t_erow *start_row = &ctx->row[start_y];
+    t_erow *end_row = &ctx->row[end_y];
+
+    if (start_x > start_row->size) start_x = start_row->size;
+    if (end_x > end_row->size) end_x = end_row->size;
+    if (start_x < 0) start_x = 0;
+    if (end_x < 0) end_x = 0;
+
+    int deleted_chars = 0;
+
+    /* Clear selection before modifying buffer */
+    ctx->sel_active = 0;
+
+    if (start_y == end_y) {
+        /* Single line selection: delete characters from start_x to end_x */
+        t_erow *row = &ctx->row[start_y];
+
+        /* Delete characters from end to start to avoid index shifting issues */
+        for (int i = end_x - 1; i >= start_x; i--) {
+            if (i < row->size) {
+                editor_row_del_char(ctx, row, i);
+                deleted_chars++;
+            }
+        }
+    } else {
+        /* Multi-line selection */
+
+        /* 1. Save text after end_x on end row (will be appended to start row) */
+        char *remaining = NULL;
+        int remaining_len = 0;
+        if (end_x < end_row->size) {
+            remaining_len = end_row->size - end_x;
+            remaining = malloc(remaining_len);
+            if (remaining) {
+                memcpy(remaining, end_row->chars + end_x, remaining_len);
+            }
+        }
+
+        /* 2. Truncate start row to start_x */
+        int chars_removed_start = start_row->size - start_x;
+        start_row->chars[start_x] = '\0';
+        start_row->size = start_x;
+        editor_update_row(ctx, start_row);
+        deleted_chars += chars_removed_start;
+
+        /* 3. Delete middle rows and end row (from end to start to avoid index shifting) */
+        for (int y = end_y; y > start_y; y--) {
+            deleted_chars += ctx->row[y].size + 1; /* +1 for newline */
+            editor_del_row(ctx, y);
+        }
+
+        /* 4. Append remaining text from end row to start row */
+        if (remaining && remaining_len > 0) {
+            /* Refresh start_row pointer after possible reallocation */
+            start_row = &ctx->row[start_y];
+            editor_row_append_string(ctx, start_row, remaining, remaining_len);
+        }
+        free(remaining);
+    }
+
+    /* Position cursor at start of deleted region */
+    ctx->cy = start_y - ctx->rowoff;
+    if (ctx->cy < 0) {
+        ctx->rowoff = start_y;
+        ctx->cy = 0;
+    } else if (ctx->cy >= ctx->screenrows) {
+        ctx->rowoff = start_y - ctx->screenrows + 1;
+        ctx->cy = ctx->screenrows - 1;
+    }
+
+    ctx->cx = start_x - ctx->coloff;
+    if (ctx->cx < 0) {
+        ctx->coloff = start_x;
+        ctx->cx = 0;
+    }
+
+    ctx->dirty++;
+
+    return deleted_chars;
 }

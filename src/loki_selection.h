@@ -29,4 +29,10 @@ void copy_selection_to_clipboard(editor_ctx_t *ctx);
  * Returns NULL if no selection or allocation failure */
 char *get_selection_text(editor_ctx_t *ctx);
 
+/* Delete selected text from the buffer
+ * Records undo operations for each deletion
+ * Clears selection and positions cursor at selection start
+ * Returns number of characters deleted, or 0 if no selection */
+int delete_selection(editor_ctx_t *ctx);
+
 #endif /* LOKI_SELECTION_H */
