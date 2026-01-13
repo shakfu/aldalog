@@ -19,6 +19,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Lua Keybinding Customization System**: User-definable keybindings via Lua
+  - `loki.keymap(modes, key, callback, [description])` - Register a keybinding
+  - `loki.keyunmap(modes, key)` - Remove a keybinding
+  - Supports modes: 'n' (normal), 'i' (insert), 'v' (visual), 'c' (command)
+  - Key notation: single chars ('a'), control keys ('<C-a>'), special keys ('<Enter>', '<Esc>', '<Tab>', etc.)
+  - Lua callbacks are checked before built-in handlers in each mode
+  - Alda keybindings (Ctrl-E, Ctrl-P, Ctrl-G) now customizable via `.aldev/keybindings/alda_keys.lua`
+
 - **REPL Syntax Highlighting**: Real-time Alda syntax highlighting in the REPL as you type
   - Custom line editor with terminal raw mode (no external dependencies)
   - Keywords (tempo, volume, pan, etc.) highlighted in magenta
@@ -63,6 +71,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - `tempo 120` (missing parentheses) now shows error instead of hanging
   - Parser now properly advances past unexpected tokens
   - Correct syntax `(tempo 120)` continues to work as expected
+
+- **Lua API Cursor Position Bug**: Fixed `loki.get_cursor()` returning screen position instead of file position
+  - Was returning `ctx->cy` (screen row) instead of `ctx->rowoff + ctx->cy` (file row)
+  - Caused Lua keybindings like Ctrl-E to operate on wrong line when scrolled
+  - Also fixed column position to include horizontal scroll offset
+
+- **Lua API Stale Context Bug**: Fixed Lua API using stale editor context with multiple buffers
+  - `lua_get_editor_context()` was returning a pointer stored at Lua init time
+  - Now dynamically calls `buffer_get_current()` to get the active buffer's context
+  - Falls back to registry pointer for backwards compatibility with tests
 
 ---
 

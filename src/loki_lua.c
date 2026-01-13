@@ -33,6 +33,7 @@
 #include "loki_languages.h"  /* Language definitions and dynamic registration */
 #include "loki_command.h"  /* Command mode and ex-style commands */
 #include "loki_alda.h"       /* Alda music language integration */
+#include "loki_buffers.h"    /* Buffer management for buffer_get_current() */
 
 /* ======================= Lua API bindings ================================ */
 
@@ -42,13 +43,18 @@
  * its value, just that it's a unique pointer for the registry. */
 static const char editor_ctx_registry_key = 0;
 
-/* Helper function to retrieve editor context from Lua registry.
- * This is called by all Lua API functions to get the current editor context.
- * Returns NULL if context is not found (shouldn't happen in normal operation). */
+/* Helper function to get current editor context.
+ * Tries buffer_get_current() first for multi-buffer support.
+ * Falls back to registry pointer for tests/single-buffer mode. */
 static editor_ctx_t* lua_get_editor_context(lua_State *L) {
+    /* Try buffer system first (for normal editor operation) */
+    editor_ctx_t *ctx = buffer_get_current();
+    if (ctx) return ctx;
+
+    /* Fallback to registry pointer (for tests or single-buffer mode) */
     lua_pushlightuserdata(L, (void *)&editor_ctx_registry_key);
     lua_gettable(L, LUA_REGISTRYINDEX);
-    editor_ctx_t *ctx = (editor_ctx_t *)lua_touserdata(L, -1);
+    ctx = (editor_ctx_t *)lua_touserdata(L, -1);
     lua_pop(L, 1);
     return ctx;
 }
@@ -84,13 +90,15 @@ static int lua_loki_get_lines(lua_State *L) {
     return 1;
 }
 
-/* Lua API: loki.get_cursor() - Get cursor position (returns row, col) */
+/* Lua API: loki.get_cursor() - Get cursor position (returns row, col)
+ * Returns FILE position, not screen position (accounts for scroll offset) */
 static int lua_loki_get_cursor(lua_State *L) {
     editor_ctx_t *ctx = lua_get_editor_context(L);
     if (!ctx) return 0;
 
-    lua_pushinteger(L, ctx->cy);
-    lua_pushinteger(L, ctx->cx);
+    /* Return file position: screen pos + scroll offset */
+    lua_pushinteger(L, ctx->rowoff + ctx->cy);
+    lua_pushinteger(L, ctx->coloff + ctx->cx);
     return 2;
 }
 
@@ -790,6 +798,202 @@ static int lua_loki_status_stdout(lua_State *L) {
     return 0;
 }
 
+/* ======================= Keybinding System ================================== */
+
+/* Parse key notation string to key code
+ * Supports:
+ *   - Single characters: 'a', 'x', ':'
+ *   - Control keys: '<C-a>', '<C-s>'
+ *   - Special keys: '<Enter>', '<Esc>', '<Tab>', '<BS>'
+ *   - Arrow keys: '<Up>', '<Down>', '<Left>', '<Right>'
+ *   - Other: '<Home>', '<End>', '<PageUp>', '<PageDown>', '<Del>'
+ * Returns -1 on parse error */
+static int parse_key_notation(const char *notation) {
+    if (!notation || !*notation) return -1;
+
+    /* Single character */
+    if (notation[1] == '\0') {
+        return (unsigned char)notation[0];
+    }
+
+    /* Special key notation: <...> */
+    if (notation[0] != '<') return -1;
+
+    size_t len = strlen(notation);
+    if (len < 3 || notation[len-1] != '>') return -1;
+
+    /* Control key: <C-x> */
+    if (len == 5 && notation[1] == 'C' && notation[2] == '-') {
+        char c = notation[3];
+        if (c >= 'a' && c <= 'z') {
+            return c - 'a' + 1;  /* Ctrl-a = 1, Ctrl-z = 26 */
+        }
+        if (c >= 'A' && c <= 'Z') {
+            return c - 'A' + 1;
+        }
+        return -1;
+    }
+
+    /* Named special keys (case-insensitive comparison) */
+    const char *name = notation + 1;  /* Skip '<' */
+
+    if (strcasecmp(name, "Enter>") == 0 || strcasecmp(name, "CR>") == 0 ||
+        strcasecmp(name, "Return>") == 0) return ENTER;
+    if (strcasecmp(name, "Esc>") == 0 || strcasecmp(name, "Escape>") == 0) return ESC;
+    if (strcasecmp(name, "Tab>") == 0) return TAB;
+    if (strcasecmp(name, "BS>") == 0 || strcasecmp(name, "Backspace>") == 0) return BACKSPACE;
+    if (strcasecmp(name, "Up>") == 0) return ARROW_UP;
+    if (strcasecmp(name, "Down>") == 0) return ARROW_DOWN;
+    if (strcasecmp(name, "Left>") == 0) return ARROW_LEFT;
+    if (strcasecmp(name, "Right>") == 0) return ARROW_RIGHT;
+    if (strcasecmp(name, "Home>") == 0) return HOME_KEY;
+    if (strcasecmp(name, "End>") == 0) return END_KEY;
+    if (strcasecmp(name, "PageUp>") == 0) return PAGE_UP;
+    if (strcasecmp(name, "PageDown>") == 0) return PAGE_DOWN;
+    if (strcasecmp(name, "Del>") == 0 || strcasecmp(name, "Delete>") == 0) return DEL_KEY;
+    if (strcasecmp(name, "S-Up>") == 0) return SHIFT_ARROW_UP;
+    if (strcasecmp(name, "S-Down>") == 0) return SHIFT_ARROW_DOWN;
+    if (strcasecmp(name, "S-Left>") == 0) return SHIFT_ARROW_LEFT;
+    if (strcasecmp(name, "S-Right>") == 0) return SHIFT_ARROW_RIGHT;
+    if (strcasecmp(name, "S-Return>") == 0 || strcasecmp(name, "S-Enter>") == 0) return SHIFT_RETURN;
+
+    return -1;
+}
+
+/* Convert mode character to mode table name */
+static const char *mode_char_to_name(char mode) {
+    switch (mode) {
+        case 'n': return "normal";
+        case 'i': return "insert";
+        case 'v': return "visual";
+        case 'c': return "command";
+        default: return NULL;
+    }
+}
+
+/* Ensure _loki_keymaps table and mode subtable exist */
+static void ensure_keymap_tables(lua_State *L, const char *mode_name) {
+    /* Get or create _loki_keymaps */
+    lua_getglobal(L, "_loki_keymaps");
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        lua_newtable(L);
+        lua_pushvalue(L, -1);
+        lua_setglobal(L, "_loki_keymaps");
+    }
+
+    /* Get or create mode subtable */
+    lua_getfield(L, -1, mode_name);
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        lua_newtable(L);
+        lua_pushvalue(L, -1);
+        lua_setfield(L, -3, mode_name);
+    }
+    /* Stack: _loki_keymaps, mode_table */
+}
+
+/* Lua API: loki.keymap(modes, key, callback, [description])
+ * Register a keybinding for one or more modes
+ *
+ * modes: string of mode characters ('n', 'i', 'v', 'c')
+ * key: key notation string (e.g., 'a', '<C-s>', '<Enter>')
+ * callback: Lua function to call when key is pressed
+ * description: optional description for help
+ *
+ * Example:
+ *   loki.keymap('n', 'gd', function() loki.status("Go to definition") end)
+ *   loki.keymap('nv', '<C-y>', function() ... end, "Copy line")
+ */
+static int lua_loki_keymap(lua_State *L) {
+    const char *modes = luaL_checkstring(L, 1);
+    const char *key_notation = luaL_checkstring(L, 2);
+    luaL_checktype(L, 3, LUA_TFUNCTION);
+    const char *description = luaL_optstring(L, 4, NULL);
+
+    /* Parse key notation to key code */
+    int keycode = parse_key_notation(key_notation);
+    if (keycode < 0) {
+        return luaL_error(L, "Invalid key notation: %s", key_notation);
+    }
+
+    /* Register for each mode character */
+    for (const char *m = modes; *m; m++) {
+        const char *mode_name = mode_char_to_name(*m);
+        if (!mode_name) {
+            return luaL_error(L, "Invalid mode character: %c (use n/i/v/c)", *m);
+        }
+
+        ensure_keymap_tables(L, mode_name);
+        /* Stack: _loki_keymaps, mode_table */
+
+        /* Store callback: mode_table[keycode] = callback */
+        lua_pushinteger(L, keycode);
+        lua_pushvalue(L, 3);  /* Push callback function */
+        lua_settable(L, -3);
+
+        /* Store description if provided: mode_table["desc_" .. keycode] = description */
+        if (description) {
+            char desc_key[32];
+            snprintf(desc_key, sizeof(desc_key), "desc_%d", keycode);
+            lua_pushstring(L, description);
+            lua_setfield(L, -2, desc_key);
+        }
+
+        lua_pop(L, 2);  /* Pop mode_table and _loki_keymaps */
+    }
+
+    return 0;
+}
+
+/* Lua API: loki.keyunmap(modes, key)
+ * Remove a keybinding for one or more modes
+ *
+ * modes: string of mode characters ('n', 'i', 'v', 'c')
+ * key: key notation string
+ */
+static int lua_loki_keyunmap(lua_State *L) {
+    const char *modes = luaL_checkstring(L, 1);
+    const char *key_notation = luaL_checkstring(L, 2);
+
+    int keycode = parse_key_notation(key_notation);
+    if (keycode < 0) {
+        return luaL_error(L, "Invalid key notation: %s", key_notation);
+    }
+
+    for (const char *m = modes; *m; m++) {
+        const char *mode_name = mode_char_to_name(*m);
+        if (!mode_name) continue;
+
+        lua_getglobal(L, "_loki_keymaps");
+        if (!lua_istable(L, -1)) {
+            lua_pop(L, 1);
+            continue;
+        }
+
+        lua_getfield(L, -1, mode_name);
+        if (!lua_istable(L, -1)) {
+            lua_pop(L, 2);
+            continue;
+        }
+
+        /* Set mode_table[keycode] = nil */
+        lua_pushinteger(L, keycode);
+        lua_pushnil(L);
+        lua_settable(L, -3);
+
+        /* Also remove description */
+        char desc_key[32];
+        snprintf(desc_key, sizeof(desc_key), "desc_%d", keycode);
+        lua_pushnil(L);
+        lua_setfield(L, -2, desc_key);
+
+        lua_pop(L, 2);
+    }
+
+    return 0;
+}
+
 /* ======================= Alda Music Language Bindings ======================= */
 
 /* Lua API: loki.alda.init(port_name) - Initialize alda subsystem */
@@ -1088,6 +1292,13 @@ void loki_lua_bind_editor(lua_State *L) {
 
     lua_pushcfunction(L, lua_loki_register_language);
     lua_setfield(L, -2, "register_language");
+
+    /* Keybinding functions */
+    lua_pushcfunction(L, lua_loki_keymap);
+    lua_setfield(L, -2, "keymap");
+
+    lua_pushcfunction(L, lua_loki_keyunmap);
+    lua_setfield(L, -2, "keyunmap");
 
     lua_newtable(L); /* storage for registered help */
     lua_setfield(L, -2, "__repl_help");

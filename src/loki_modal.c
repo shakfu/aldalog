@@ -41,6 +41,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Lua headers for keymap dispatch */
+#include "lua.h"
+#include "lauxlib.h"
+
 /* Control key definition (if not already defined) */
 #ifndef CTRL_R
 #define CTRL_R 18
@@ -48,6 +52,47 @@
 
 /* Number of times CTRL-Q must be pressed before actually quitting */
 #define KILO_QUIT_TIMES 3
+
+/* Try to dispatch a keypress to a Lua keymap callback.
+ * Checks _loki_keymaps.{mode}[keycode] for a registered function.
+ * Returns 1 if handled by Lua, 0 if not (fall through to built-in). */
+static int try_lua_keymap(editor_ctx_t *ctx, const char *mode, int key) {
+    lua_State *L = ctx->L;
+    if (!L) return 0;
+
+    /* Get _loki_keymaps global table */
+    lua_getglobal(L, "_loki_keymaps");
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        return 0;
+    }
+
+    /* Get mode subtable (e.g., _loki_keymaps.normal) */
+    lua_getfield(L, -1, mode);
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 2);
+        return 0;
+    }
+
+    /* Get callback function at mode_table[keycode] */
+    lua_pushinteger(L, key);
+    lua_gettable(L, -2);
+    if (!lua_isfunction(L, -1)) {
+        lua_pop(L, 3);  /* Pop nil/value, mode_table, _loki_keymaps */
+        return 0;
+    }
+
+    /* Found a Lua keymap - call it */
+    int pcall_result = lua_pcall(L, 0, 0, 0);
+    if (pcall_result != LUA_OK) {
+        const char *err = lua_tostring(L, -1);
+        editor_set_status_msg(ctx, "Lua error: %s", err ? err : "(no message)");
+        lua_pop(L, 1);  /* Pop error message */
+    }
+
+    lua_pop(L, 2);  /* Pop mode_table and _loki_keymaps */
+    return 1;  /* Handled by Lua */
+}
 
 /* Helper: Check if a line is empty (blank or whitespace only) */
 static int is_empty_line(editor_ctx_t *ctx, int row) {
@@ -223,6 +268,11 @@ static char *get_current_part(editor_ctx_t *ctx) {
 
 /* Process normal mode keypresses */
 static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
+    /* Check Lua keymaps first */
+    if (try_lua_keymap(ctx, "normal", c)) {
+        return;  /* Handled by Lua callback */
+    }
+
     switch(c) {
         case 'h': editor_move_cursor(ctx, ARROW_LEFT); break;
         case 'j': editor_move_cursor(ctx, ARROW_DOWN); break;
@@ -418,6 +468,11 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
 
 /* Process insert mode keypresses */
 static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
+    /* Check Lua keymaps first */
+    if (try_lua_keymap(ctx, "insert", c)) {
+        return;  /* Handled by Lua callback */
+    }
+
     switch(c) {
         case ESC:
             ctx->mode = MODE_NORMAL;
@@ -571,6 +626,11 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
 
 /* Process visual mode keypresses */
 static void process_visual_mode(editor_ctx_t *ctx, int fd, int c) {
+    /* Check Lua keymaps first */
+    if (try_lua_keymap(ctx, "visual", c)) {
+        return;  /* Handled by Lua callback */
+    }
+
     switch(c) {
         case ESC:
             ctx->mode = MODE_NORMAL;
