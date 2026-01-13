@@ -15,6 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # TODO: Add Windows support - requires porting termios/pthread to Win32 APIs
         include:
           - name: Linux
             os: ubuntu-latest
@@ -26,11 +27,11 @@ jobs:
             artifact_suffix: macos
             binary_path: build/aldev
             exe_suffix: ""
-          - name: Windows
-            os: windows-latest
-            artifact_suffix: windows
-            binary_path: build/Release/aldev.exe
-            exe_suffix: ".exe"
+          # - name: Windows
+          #   os: windows-latest
+          #   artifact_suffix: windows
+          #   binary_path: build/Release/aldev.exe
+          #   exe_suffix: ".exe"
     env:
       BUILD_DIR: build
       BUILD_TYPE: Release
