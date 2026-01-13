@@ -73,7 +73,9 @@ target_include_directories(libloki
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/midifile/include
 )
 
-target_compile_options(libloki PRIVATE -Wall -Wextra -pedantic)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(libloki PRIVATE -Wall -Wextra -pedantic)
+endif()
 
 target_link_libraries(libloki
     PUBLIC
@@ -110,7 +112,9 @@ target_include_directories(alda_bin PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/alda-midi/lib/include
 )
-target_compile_options(alda_bin PRIVATE -Wall -Wextra -pedantic)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(alda_bin PRIVATE -Wall -Wextra -pedantic)
+endif()
 target_link_libraries(alda_bin PRIVATE libloki)
 
 add_custom_target(show-config
