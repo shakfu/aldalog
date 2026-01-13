@@ -236,3 +236,47 @@ target_include_directories(test_undo PRIVATE
 )
 target_link_libraries(test_undo PRIVATE libloki test_framework)
 add_test(NAME test_undo COMMAND test_undo)
+
+# Unit tests for selection and clipboard operations
+add_executable(test_selection tests/test_selection.c)
+target_include_directories(test_selection PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    ${LUA_INCLUDE_DIR}
+)
+target_link_libraries(test_selection PRIVATE libloki test_framework)
+add_test(NAME test_selection COMMAND test_selection)
+
+# Unit tests for vim-style command mode
+add_executable(test_command tests/test_command.c)
+target_include_directories(test_command PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    ${LUA_INCLUDE_DIR}
+)
+target_link_libraries(test_command PRIVATE libloki test_framework)
+add_test(NAME test_command COMMAND test_command)
+
+# Unit tests for terminal buffer operations
+add_executable(test_terminal tests/test_terminal.c)
+target_include_directories(test_terminal PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    ${LUA_INCLUDE_DIR}
+)
+target_link_libraries(test_terminal PRIVATE libloki test_framework)
+add_test(NAME test_terminal COMMAND test_terminal)
+
+# Unit tests for row operations
+add_executable(test_row_operations tests/test_row_operations.c)
+target_include_directories(test_row_operations PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    ${LUA_INCLUDE_DIR}
+)
+target_link_libraries(test_row_operations PRIVATE libloki test_framework)
+add_test(NAME test_row_operations COMMAND test_row_operations)
