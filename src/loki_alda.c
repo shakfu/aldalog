@@ -12,6 +12,7 @@
 
 #include "loki_alda.h"
 #include "loki_internal.h"
+#include "loki/link.h"
 
 /* Alda library headers */
 #include <alda/alda.h>
@@ -211,6 +212,11 @@ int loki_alda_eval_async(editor_ctx_t *ctx, const char *code, const char *lua_ca
     /* Sort events for playback */
     alda_events_sort(&g_alda_state.alda_ctx);
 
+    /* Use Link tempo if enabled */
+    double effective_tempo = loki_link_effective_tempo(
+        ctx, (double)g_alda_state.alda_ctx.global_tempo);
+    g_alda_state.alda_ctx.global_tempo = (int)effective_tempo;
+
     /* Set up slot */
     slot->active = 1;
     slot->playing = 1;
@@ -263,8 +269,15 @@ int loki_alda_eval_sync(editor_ctx_t *ctx, const char *code) {
         return -1;
     }
 
-    /* Sort and play */
+    /* Sort events */
     alda_events_sort(&g_alda_state.alda_ctx);
+
+    /* Use Link tempo if enabled */
+    double effective_tempo = loki_link_effective_tempo(
+        ctx, (double)g_alda_state.alda_ctx.global_tempo);
+    g_alda_state.alda_ctx.global_tempo = (int)effective_tempo;
+
+    /* Play */
     int result = alda_events_play(&g_alda_state.alda_ctx);
 
     pthread_mutex_unlock(&g_alda_state.mutex);

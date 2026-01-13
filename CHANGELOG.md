@@ -19,6 +19,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Ableton Link Integration**: Tempo synchronization with other Link-enabled applications
+  - Sync tempo with Ableton Live, hardware devices, and other Link-compatible software on local network
+  - **Ex Command**: `:link [on|off|1|0]` - Toggle or set Link synchronization
+  - **Status Bar**: Shows "ALDA LINK" instead of "ALDA NORMAL" when Link is active
+  - **Playback Integration**: When Link is enabled, playback uses the Link session tempo
+  - **Lua API** (`loki.link` table):
+    - `loki.link.init([bpm])` - Initialize Link with optional starting tempo (default 120)
+    - `loki.link.cleanup()` - Clean up Link resources
+    - `loki.link.enable(bool)` - Enable/disable Link networking
+    - `loki.link.is_enabled()` - Check if Link is enabled
+    - `loki.link.tempo()` - Get current session tempo
+    - `loki.link.set_tempo(bpm)` - Set session tempo (propagates to peers)
+    - `loki.link.beat([quantum])` - Get current beat position (default quantum: 4)
+    - `loki.link.phase([quantum])` - Get phase within quantum [0, quantum)
+    - `loki.link.peers()` - Get number of connected peers
+    - `loki.link.start_stop_sync(bool)` - Enable/disable transport sync
+    - `loki.link.is_playing()` - Get transport state
+    - `loki.link.play()` - Start transport
+    - `loki.link.stop()` - Stop transport
+    - `loki.link.on_peers(fn)` - Register callback for peer count changes
+    - `loki.link.on_tempo(fn)` - Register callback for tempo changes
+    - `loki.link.on_start_stop(fn)` - Register callback for transport changes
+  - **Files Added**: `src/loki_link.c`, `include/loki/link.h`
+  - **Dependencies**: Ableton Link 3.1.5 (GPL v2+)
+
 - **Lua Keybinding Customization System**: User-definable keybindings via Lua
   - `loki.keymap(modes, key, callback, [description])` - Register a keybinding
   - `loki.keyunmap(modes, key)` - Remove a keybinding

@@ -33,6 +33,7 @@
 #include "loki_languages.h"  /* Language definitions and dynamic registration */
 #include "loki_command.h"  /* Command mode and ex-style commands */
 #include "loki_alda.h"       /* Alda music language integration */
+#include "loki/link.h"       /* Ableton Link integration */
 #include "loki_buffers.h"    /* Buffer management for buffer_get_current() */
 
 /* ======================= Lua API bindings ================================ */
@@ -1166,6 +1167,242 @@ static int lua_alda_get_error(lua_State *L) {
     return 1;
 }
 
+/* ======================= Ableton Link Bindings ======================= */
+
+/* Lua API: loki.link.init(bpm) - Initialize Link subsystem */
+static int lua_link_init(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    double bpm = 120.0;
+
+    if (lua_gettop(L) >= 1 && lua_isnumber(L, 1)) {
+        bpm = lua_tonumber(L, 1);
+    }
+
+    int result = loki_link_init(ctx, bpm);
+    if (result != 0) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Failed to initialize Link");
+        return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+/* Lua API: loki.link.cleanup() - Cleanup Link subsystem */
+static int lua_link_cleanup(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    loki_link_cleanup(ctx);
+    return 0;
+}
+
+/* Lua API: loki.link.is_initialized() - Check if Link is initialized */
+static int lua_link_is_initialized(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    lua_pushboolean(L, loki_link_is_initialized(ctx));
+    return 1;
+}
+
+/* Lua API: loki.link.enable(bool) - Enable/disable Link */
+static int lua_link_enable(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    int enable = lua_toboolean(L, 1);
+    loki_link_enable(ctx, enable);
+    return 0;
+}
+
+/* Lua API: loki.link.is_enabled() - Check if Link is enabled */
+static int lua_link_is_enabled(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    lua_pushboolean(L, loki_link_is_enabled(ctx));
+    return 1;
+}
+
+/* Lua API: loki.link.tempo() - Get session tempo */
+static int lua_link_tempo(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    lua_pushnumber(L, loki_link_get_tempo(ctx));
+    return 1;
+}
+
+/* Lua API: loki.link.set_tempo(bpm) - Set session tempo */
+static int lua_link_set_tempo(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    double bpm = luaL_checknumber(L, 1);
+    loki_link_set_tempo(ctx, bpm);
+    return 0;
+}
+
+/* Lua API: loki.link.beat(quantum) - Get current beat position */
+static int lua_link_beat(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    double quantum = 4.0;
+
+    if (lua_gettop(L) >= 1 && lua_isnumber(L, 1)) {
+        quantum = lua_tonumber(L, 1);
+    }
+
+    lua_pushnumber(L, loki_link_get_beat(ctx, quantum));
+    return 1;
+}
+
+/* Lua API: loki.link.phase(quantum) - Get phase within quantum */
+static int lua_link_phase(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    double quantum = 4.0;
+
+    if (lua_gettop(L) >= 1 && lua_isnumber(L, 1)) {
+        quantum = lua_tonumber(L, 1);
+    }
+
+    lua_pushnumber(L, loki_link_get_phase(ctx, quantum));
+    return 1;
+}
+
+/* Lua API: loki.link.peers() - Get number of connected peers */
+static int lua_link_peers(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    lua_pushinteger(L, (lua_Integer)loki_link_num_peers(ctx));
+    return 1;
+}
+
+/* Lua API: loki.link.start_stop_sync(bool) - Enable start/stop sync */
+static int lua_link_start_stop_sync(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    int enable = lua_toboolean(L, 1);
+    loki_link_enable_start_stop_sync(ctx, enable);
+    return 0;
+}
+
+/* Lua API: loki.link.is_start_stop_sync_enabled() */
+static int lua_link_is_start_stop_sync_enabled(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    lua_pushboolean(L, loki_link_is_start_stop_sync_enabled(ctx));
+    return 1;
+}
+
+/* Lua API: loki.link.is_playing() - Get transport state */
+static int lua_link_is_playing(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    lua_pushboolean(L, loki_link_is_playing(ctx));
+    return 1;
+}
+
+/* Lua API: loki.link.play() - Start transport */
+static int lua_link_play(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    loki_link_set_playing(ctx, 1);
+    return 0;
+}
+
+/* Lua API: loki.link.stop() - Stop transport */
+static int lua_link_stop(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    loki_link_set_playing(ctx, 0);
+    return 0;
+}
+
+/* Lua API: loki.link.on_peers(callback) - Register peers callback */
+static int lua_link_on_peers(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    const char *callback = NULL;
+
+    if (lua_gettop(L) >= 1 && !lua_isnil(L, 1)) {
+        callback = luaL_checkstring(L, 1);
+    }
+
+    loki_link_set_peers_callback(ctx, callback);
+    return 0;
+}
+
+/* Lua API: loki.link.on_tempo(callback) - Register tempo callback */
+static int lua_link_on_tempo(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    const char *callback = NULL;
+
+    if (lua_gettop(L) >= 1 && !lua_isnil(L, 1)) {
+        callback = luaL_checkstring(L, 1);
+    }
+
+    loki_link_set_tempo_callback(ctx, callback);
+    return 0;
+}
+
+/* Lua API: loki.link.on_start_stop(callback) - Register start/stop callback */
+static int lua_link_on_start_stop(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    const char *callback = NULL;
+
+    if (lua_gettop(L) >= 1 && !lua_isnil(L, 1)) {
+        callback = luaL_checkstring(L, 1);
+    }
+
+    loki_link_set_start_stop_callback(ctx, callback);
+    return 0;
+}
+
+/* Register link module as loki.link subtable */
+static void lua_register_link_module(lua_State *L) {
+    /* Assumes loki table is on top of stack */
+    lua_newtable(L);  /* Create link subtable */
+
+    lua_pushcfunction(L, lua_link_init);
+    lua_setfield(L, -2, "init");
+
+    lua_pushcfunction(L, lua_link_cleanup);
+    lua_setfield(L, -2, "cleanup");
+
+    lua_pushcfunction(L, lua_link_is_initialized);
+    lua_setfield(L, -2, "is_initialized");
+
+    lua_pushcfunction(L, lua_link_enable);
+    lua_setfield(L, -2, "enable");
+
+    lua_pushcfunction(L, lua_link_is_enabled);
+    lua_setfield(L, -2, "is_enabled");
+
+    lua_pushcfunction(L, lua_link_tempo);
+    lua_setfield(L, -2, "tempo");
+
+    lua_pushcfunction(L, lua_link_set_tempo);
+    lua_setfield(L, -2, "set_tempo");
+
+    lua_pushcfunction(L, lua_link_beat);
+    lua_setfield(L, -2, "beat");
+
+    lua_pushcfunction(L, lua_link_phase);
+    lua_setfield(L, -2, "phase");
+
+    lua_pushcfunction(L, lua_link_peers);
+    lua_setfield(L, -2, "peers");
+
+    lua_pushcfunction(L, lua_link_start_stop_sync);
+    lua_setfield(L, -2, "start_stop_sync");
+
+    lua_pushcfunction(L, lua_link_is_start_stop_sync_enabled);
+    lua_setfield(L, -2, "is_start_stop_sync_enabled");
+
+    lua_pushcfunction(L, lua_link_is_playing);
+    lua_setfield(L, -2, "is_playing");
+
+    lua_pushcfunction(L, lua_link_play);
+    lua_setfield(L, -2, "play");
+
+    lua_pushcfunction(L, lua_link_stop);
+    lua_setfield(L, -2, "stop");
+
+    lua_pushcfunction(L, lua_link_on_peers);
+    lua_setfield(L, -2, "on_peers");
+
+    lua_pushcfunction(L, lua_link_on_tempo);
+    lua_setfield(L, -2, "on_tempo");
+
+    lua_pushcfunction(L, lua_link_on_start_stop);
+    lua_setfield(L, -2, "on_start_stop");
+
+    lua_setfield(L, -2, "link");  /* Set as loki.link */
+}
+
 /* Register alda module as loki.alda subtable */
 static void lua_register_alda_module(lua_State *L) {
     /* Assumes loki table is on top of stack */
@@ -1332,6 +1569,9 @@ void loki_lua_bind_editor(lua_State *L) {
 
     /* Register alda module as loki.alda */
     lua_register_alda_module(L);
+
+    /* Register link module as loki.link */
+    lua_register_link_module(L);
 
     /* Set as global 'loki' */
     lua_setglobal(L, "loki");

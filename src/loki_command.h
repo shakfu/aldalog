@@ -87,4 +87,7 @@ int cmd_help(editor_ctx_t *ctx, const char *args);
 /* :set <option> [value] - Set editor option */
 int cmd_set(editor_ctx_t *ctx, const char *args);
 
+/* :link [on|off] - Toggle or set Ableton Link synchronization */
+int cmd_link(editor_ctx_t *ctx, const char *args);
+
 #endif /* LOKI_COMMAND_H */

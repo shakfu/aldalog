@@ -42,6 +42,7 @@ add_library(libloki ${LOKI_LIBRARY_TYPE}
     src/loki_undo.c
     src/loki_buffers.c
     src/loki_alda.c
+    src/loki_link.c
 )
 
 target_include_directories(libloki
@@ -49,6 +50,7 @@ target_include_directories(libloki
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${LUA_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/alda-midi/lib/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/link-3.1.5/extensions/abl_link/include
 )
 
 target_compile_options(libloki PRIVATE -Wall -Wextra -pedantic)
@@ -59,6 +61,7 @@ target_link_libraries(libloki
         Threads::Threads
         ${CMAKE_DL_LIBS}
         alda
+        abl_link
 )
 
 if (NOT MSVC)

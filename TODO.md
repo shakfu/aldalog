@@ -8,6 +8,8 @@
 
 ## Medium Priority
 
+- [ ] Add support for Ableton Link
+
 ## Low Priority
 
 ## Completed

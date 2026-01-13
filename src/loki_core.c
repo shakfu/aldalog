@@ -45,6 +45,7 @@ see LICENSE.
 #include "loki_syntax.h"
 #include "loki_indent.h"
 #include "loki_alda.h"
+#include "loki/link.h"
 
 void editor_set_status_msg(editor_ctx_t *ctx, const char *fmt, ...) {
     if (!ctx) return;
@@ -703,8 +704,11 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
 
     /* Get mode indicator */
     const char *mode_str = "";
+    int link_active = ctx->alda_mode &&
+        loki_link_is_initialized(ctx) && loki_link_is_enabled(ctx);
+
     switch(ctx->mode) {
-        case MODE_NORMAL: mode_str = "NORMAL"; break;
+        case MODE_NORMAL: mode_str = link_active ? "LINK" : "NORMAL"; break;
         case MODE_INSERT: mode_str = "INSERT"; break;
         case MODE_VISUAL: mode_str = "VISUAL"; break;
         case MODE_COMMAND: mode_str = "COMMAND"; break;

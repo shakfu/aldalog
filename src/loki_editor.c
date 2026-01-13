@@ -29,6 +29,7 @@
 #include "loki_buffers.h"
 #include "loki_syntax.h"
 #include "loki_alda.h"
+#include "loki/link.h"
 
 /* ======================== Main Editor Instance ============================ */
 
@@ -370,6 +371,11 @@ int loki_editor_main(int argc, char **argv) {
         }
 
         terminal_handle_resize(ctx);
+
+        /* Process any pending Link callbacks */
+        if (ctx->L) {
+            loki_link_check_callbacks(ctx, ctx->L);
+        }
 
         /* Process any pending alda playback callbacks */
         if (ctx->L) {

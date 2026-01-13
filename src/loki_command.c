@@ -8,6 +8,7 @@
 #include "loki_internal.h"
 #include "loki_terminal.h"
 #include "loki_buffers.h"
+#include "loki/link.h"
 #include <lua.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -38,6 +39,7 @@ static command_def_t builtin_commands[] = {
     {"set",    cmd_set,         "Set option (wrap, etc)",         0, 2},
     {"e",      cmd_edit,        "Edit file",                      1, 1},
     {"edit",   cmd_edit,        "Edit file",                      1, 1},
+    {"link",   cmd_link,        "Toggle Ableton Link sync",       0, 1},
     {NULL, NULL, NULL, 0, 0}  /* Sentinel */
 };
 
@@ -460,6 +462,45 @@ int cmd_set(editor_ctx_t *ctx, const char *args) {
     }
 
     return 0;
+}
+
+int cmd_link(editor_ctx_t *ctx, const char *args) {
+    /* Initialize Link if not already done */
+    if (!loki_link_is_initialized(ctx)) {
+        if (loki_link_init(ctx, 120.0) != 0) {
+            editor_set_status_msg(ctx, "Failed to initialize Link");
+            return 0;
+        }
+    }
+
+    if (!args || !args[0]) {
+        /* Toggle Link */
+        int enabled = loki_link_is_enabled(ctx);
+        loki_link_enable(ctx, !enabled);
+        editor_set_status_msg(ctx, "Link %s (%.1f BPM, %lu peers)",
+            !enabled ? "enabled" : "disabled",
+            loki_link_get_tempo(ctx),
+            (unsigned long)loki_link_num_peers(ctx));
+        return 1;
+    }
+
+    /* Parse argument */
+    int enable = -1;
+    if (strcmp(args, "1") == 0 || strcasecmp(args, "on") == 0) {
+        enable = 1;
+    } else if (strcmp(args, "0") == 0 || strcasecmp(args, "off") == 0) {
+        enable = 0;
+    } else {
+        editor_set_status_msg(ctx, "Usage: :link [on|off|1|0]");
+        return 0;
+    }
+
+    loki_link_enable(ctx, enable);
+    editor_set_status_msg(ctx, "Link %s (%.1f BPM, %lu peers)",
+        enable ? "enabled" : "disabled",
+        loki_link_get_tempo(ctx),
+        (unsigned long)loki_link_num_peers(ctx));
+    return 1;
 }
 
 /* ======================== Dynamic Command Registration (for Lua) ======================== */
