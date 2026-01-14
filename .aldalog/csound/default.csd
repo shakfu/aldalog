@@ -9,7 +9,7 @@
 ;;   bend_ch<CH>   - Pitch bend normalized -1 to 1
 ;;
 <CsOptions>
--d -n -m0
+-d -n -m0 --daemon
 </CsOptions>
 
 <CsInstruments>
@@ -24,7 +24,7 @@ opcode MidiPitch, k, ii
   kbend chnget sprintf("bend_ch%d", ich)
   kpch = cpsmidinn(imidi + kbend * 2)  ; +/- 2 semitones bend
   xout kpch
-endin
+endop
 
 ;; ----------------------------------------------------------------------------
 ;; Instrument 1: Subtractive Synth (saw + filter)
@@ -68,8 +68,10 @@ instr 2
   kpch MidiPitch ipch, ich
   kenv madsr 0.001, 0.4, 0.2, 0.5
 
-  ; FM with slight detuning
-  acar fmb3 0.4, kpch, 2, 2.01, 5
+  ; Simple FM synthesis (carrier + modulator)
+  kmodidx = 3 * kenv  ; Modulation index decreases with envelope
+  amod oscili kmodidx * kpch, kpch * 2.01
+  acar oscili 0.4, kpch + amod
 
   aout = acar * kenv * ivel
   outs aout, aout

@@ -10,8 +10,8 @@
 #ifdef BUILD_CSOUND_BACKEND
 
 #include "alda/csound_backend.h"
+#include "alda/tsf_backend.h"
 #include "csound.h"
-#include "miniaudio.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,6 +42,7 @@ static inline void cs_mutex_unlock(cs_mutex_t* m) { pthread_mutex_unlock(m); }
 #define CS_SAMPLE_RATE      44100
 #define CS_CHANNELS         2
 #define CS_KSMPS            64      /* Control rate samples */
+#define CS_PERIOD_FRAMES    512     /* Audio callback period size */
 #define CS_MAX_NOTES        256     /* Max simultaneous notes */
 #define CS_ERROR_BUF_SIZE   512
 
@@ -83,15 +84,13 @@ typedef struct {
     /* Thread safety */
     cs_mutex_t mutex;
 
-    /* Audio buffer for rendering */
+    /* Audio buffer for rendering (Csound's output buffer) */
     MYFLT* spin;        /* Input buffer (unused, we're synthesis-only) */
     MYFLT* spout;       /* Output buffer from Csound */
     int spout_samples;  /* Samples in spout per ksmps cycle */
     int spout_pos;      /* Current position in spout buffer */
 
-    /* miniaudio device */
-    ma_device device;
-    int device_initialized;
+    /* Audio is handled by TSF backend's miniaudio device */
 } CsoundBackend;
 
 static CsoundBackend g_cs = {0};
@@ -180,10 +179,14 @@ int alda_csound_init(void) {
     /* Configure for host-implemented audio I/O */
     csoundSetHostImplementedAudioIO(g_cs.csound, 1, 0);
 
+    /* Capture messages in buffer instead of printing to stdout/stderr */
+    csoundCreateMessageBuffer(g_cs.csound, 0);
+
     /* Set options before compilation */
-    csoundSetOption(g_cs.csound, "-n");           /* No sound output */
+    csoundSetOption(g_cs.csound, "-n");           /* No sound output (we handle it) */
     csoundSetOption(g_cs.csound, "-d");           /* Suppress displays */
-    csoundSetOption(g_cs.csound, "-m0");          /* Minimal messages */
+    csoundSetOption(g_cs.csound, "-m0");          /* Suppress messages */
+    csoundSetOption(g_cs.csound, "--daemon");     /* Daemon mode: ignore score section */
 
     /* Initialize default programs */
     for (int i = 0; i < 16; i++) {
@@ -203,17 +206,12 @@ void alda_csound_cleanup(void) {
 
     cs_mutex_lock(&g_cs.mutex);
 
-    /* Uninitialize audio device */
-    if (g_cs.device_initialized) {
-        ma_device_uninit(&g_cs.device);
-        g_cs.device_initialized = 0;
-    }
-
     if (g_cs.csound) {
         if (g_cs.started) {
             csoundStop(g_cs.csound);
             csoundCleanup(g_cs.csound);
         }
+        csoundDestroyMessageBuffer(g_cs.csound);
         csoundDestroy(g_cs.csound);
         g_cs.csound = NULL;
     }
@@ -248,11 +246,14 @@ int alda_csound_load_csd(const char* path) {
     if (g_cs.started) {
         csoundStop(g_cs.csound);
         csoundCleanup(g_cs.csound);
+        csoundDestroyMessageBuffer(g_cs.csound);
         csoundReset(g_cs.csound);
         csoundSetHostImplementedAudioIO(g_cs.csound, 1, 0);
+        csoundCreateMessageBuffer(g_cs.csound, 0);
         csoundSetOption(g_cs.csound, "-n");
         csoundSetOption(g_cs.csound, "-d");
         csoundSetOption(g_cs.csound, "-m0");
+        csoundSetOption(g_cs.csound, "--daemon");
         g_cs.started = 0;
         g_cs.enabled = 0;
     }
@@ -264,6 +265,24 @@ int alda_csound_load_csd(const char* path) {
         set_error("Failed to compile CSD file");
         return -1;
     }
+
+    /* Start Csound */
+    result = csoundStart(g_cs.csound);
+    if (result != 0) {
+        cs_mutex_unlock(&g_cs.mutex);
+        set_error("Failed to start Csound");
+        return -1;
+    }
+
+    /* Send infinite duration event (daemon mode ignores score section) */
+    csoundReadScore(g_cs.csound, "f0 86400\n");
+
+    /* Get audio buffer pointers */
+    g_cs.spout = csoundGetSpout(g_cs.csound);
+    g_cs.spin = csoundGetSpin(g_cs.csound);
+    g_cs.spout_samples = csoundGetKsmps(g_cs.csound) * csoundGetNchnls(g_cs.csound);
+    g_cs.spout_pos = g_cs.spout_samples;  /* Force first ksmps cycle */
+    g_cs.started = 1;
 
     g_cs.instruments_loaded = 1;
 
@@ -302,19 +321,10 @@ int alda_csound_has_instruments(void) {
 }
 
 /* ============================================================================
- * Audio Callback
- * ============================================================================ */
-
-static void csound_audio_callback(ma_device* device, void* output, const void* input, ma_uint32 frame_count) {
-    (void)device;
-    (void)input;
-
-    float* out = (float*)output;
-    alda_csound_render(out, (int)frame_count);
-}
-
-/* ============================================================================
  * Enable/Disable
+ *
+ * Csound audio is rendered through TSF's miniaudio device.
+ * When enabled, TSF's audio callback delegates to alda_csound_render().
  * ============================================================================ */
 
 int alda_csound_enable(void) {
@@ -351,36 +361,16 @@ int alda_csound_enable(void) {
         g_cs.started = 1;
     }
 
-    /* Initialize audio device if needed */
-    if (!g_cs.device_initialized) {
-        ma_device_config config = ma_device_config_init(ma_device_type_playback);
-        config.playback.format = ma_format_f32;
-        config.playback.channels = CS_CHANNELS;
-        config.sampleRate = CS_SAMPLE_RATE;
-        config.dataCallback = csound_audio_callback;
-        config.pUserData = NULL;
-        config.periodSizeInFrames = CS_KSMPS;
-
-        ma_result result = ma_device_init(NULL, &config, &g_cs.device);
-        if (result != MA_SUCCESS) {
-            cs_mutex_unlock(&g_cs.mutex);
-            set_error("Failed to initialize audio device");
-            return -1;
-        }
-
-        g_cs.device_initialized = 1;
-    }
-
-    /* Start audio playback */
-    ma_result result = ma_device_start(&g_cs.device);
-    if (result != MA_SUCCESS) {
-        cs_mutex_unlock(&g_cs.mutex);
-        set_error("Failed to start audio device");
-        return -1;
-    }
-
     g_cs.enabled = 1;
     cs_mutex_unlock(&g_cs.mutex);
+
+    /* Use TSF's audio device for output - TSF callback checks alda_csound_is_enabled()
+     * and delegates to alda_csound_render() when Csound is active */
+    if (alda_tsf_enable() != 0) {
+        g_cs.enabled = 0;
+        set_error("Failed to start audio (TSF backend)");
+        return -1;
+    }
 
     return 0;
 }
@@ -393,12 +383,8 @@ void alda_csound_disable(void) {
     /* Stop all notes */
     alda_csound_all_notes_off();
 
-    /* Stop audio device */
-    if (g_cs.device_initialized) {
-        ma_device_stop(&g_cs.device);
-    }
-
     g_cs.enabled = 0;
+    /* Note: TSF device keeps running but callback will see enabled=0 */
 }
 
 int alda_csound_is_enabled(void) {

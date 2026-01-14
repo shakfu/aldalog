@@ -11,6 +11,7 @@
 #include "alda/scheduler.h"
 #include "alda/midi_backend.h"
 #include "alda/tsf_backend.h"
+#include "alda/csound_backend.h"
 #include <uv.h>
 #include <stdlib.h>
 #include <string.h>
@@ -91,7 +92,32 @@ static void send_event(AldaScheduledEvent* evt) {
     int channel = evt->channel;  /* 0-based in events */
     int channel_1based = channel + 1;  /* TSF/midi_backend expect 1-based */
 
-    /* Route to TSF if enabled (takes priority) */
+    /* Route to Csound if enabled (takes highest priority) */
+    if (async_sys.ctx && async_sys.ctx->csound_enabled && alda_csound_is_enabled()) {
+        switch (evt->type) {
+            case ALDA_EVT_NOTE_ON:
+                alda_csound_send_note_on(channel_1based, evt->data1, evt->data2);
+                break;
+            case ALDA_EVT_NOTE_OFF:
+                alda_csound_send_note_off(channel_1based, evt->data1);
+                break;
+            case ALDA_EVT_PROGRAM:
+                alda_csound_send_program(channel_1based, evt->data1);
+                break;
+            case ALDA_EVT_CC:
+                alda_csound_send_cc(channel_1based, evt->data1, evt->data2);
+                break;
+            case ALDA_EVT_PAN:
+                alda_csound_send_cc(channel_1based, 10, evt->data1);  /* CC 10 = Pan */
+                break;
+            case ALDA_EVT_TEMPO:
+                /* Handled elsewhere */
+                break;
+        }
+        return;
+    }
+
+    /* Route to TSF if enabled */
     if (async_sys.ctx && async_sys.ctx->tsf_enabled && alda_tsf_is_enabled()) {
         switch (evt->type) {
             case ALDA_EVT_NOTE_ON:

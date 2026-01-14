@@ -10,6 +10,7 @@
 #include "miniaudio.h"
 
 #include "alda/tsf_backend.h"
+#include "alda/csound_backend.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -65,6 +66,13 @@ static void tsf_audio_callback(ma_device* device, void* output, const void* inpu
 
     float* out = (float*)output;
 
+    /* Csound takes priority when enabled */
+    if (alda_csound_is_enabled()) {
+        alda_csound_render(out, (int)frame_count);
+        return;
+    }
+
+    /* Otherwise use TSF */
     tsf_mutex_lock(&g_tsf.mutex);
     if (g_tsf.synth && g_tsf.enabled) {
         tsf_render_float(g_tsf.synth, out, (int)frame_count, 0);
@@ -182,12 +190,16 @@ const char* alda_tsf_get_preset_name(int index) {
  * ============================================================================ */
 
 int alda_tsf_enable(void) {
+    /* Auto-initialize if needed */
     if (!g_tsf.initialized) {
-        fprintf(stderr, "TSF: Backend not initialized\n");
-        return -1;
+        if (alda_tsf_init() != 0) {
+            return -1;
+        }
     }
 
-    if (!g_tsf.synth) {
+    /* Soundfont is only required for TSF playback, not for Csound
+     * The audio callback checks alda_csound_is_enabled() first */
+    if (!g_tsf.synth && !alda_csound_is_enabled()) {
         fprintf(stderr, "TSF: No soundfont loaded\n");
         return -1;
     }
