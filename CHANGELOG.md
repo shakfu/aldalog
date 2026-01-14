@@ -19,6 +19,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Csound Synthesis Backend**: Optional advanced synthesis engine as alternative to TinySoundFont
+  - Full Csound 6.18.1 integration for powerful synthesis beyond sample playback
+  - Host-implemented audio I/O via miniaudio (same audio stack as TSF)
+  - MIDI events translated to Csound score events with fractional instrument IDs
+  - Pre-defined instruments in `.aldev/csound/default.csd` (16 GM-compatible instruments)
+  - **Build Option**: `make csound` or `-DBUILD_CSOUND_BACKEND=ON`
+  - **Lua API** (`loki.alda` extensions):
+    - `loki.alda.csound_available()` - Check if Csound is compiled in
+    - `loki.alda.csound_load(path)` - Load a .csd instrument file
+    - `loki.alda.set_csound(bool)` - Enable/disable Csound synthesis
+    - `loki.alda.set_backend(name)` - Unified backend selection ("tsf", "csound", or "midi")
+  - **Dependencies**: Csound 6.18.1, libsndfile (both built from source in thirdparty/)
+  - **Binary Size**: ~4.4MB with Csound vs ~1.6MB without
+  - **Files Added**:
+    - `thirdparty/alda-midi/lib/src/csound_backend.c`
+    - `thirdparty/alda-midi/lib/include/alda/csound_backend.h`
+    - `.aldev/csound/default.csd`
+    - `CSOUND_PLAN.md`
+
 - **Ableton Link Integration**: Tempo synchronization with other Link-enabled applications
   - Sync tempo with Ableton Live, hardware devices, and other Link-compatible software on local network
   - **Ex Command**: `:link [on|off|1|0]` - Toggle or set Link synchronization

@@ -13,6 +13,7 @@ It currently only works on macOS and Linux.
 - **Built-in MIDI output** powered by [libremidi](https://github.com/celtera/libremidi)
 - **MIDI file export** powered by [midifile](https://github.com/craigsapp/midifile)
 - **Integrated software synthesizer** using [TinySoundFont](https://github.com/schellingb/TinySoundFont) and [miniaudio](https://github.com/mackron/miniaudio)
+- **Optional Csound synthesis** for advanced sound design using [Csound](https://csound.com/)
 - **Networked tempo synchronization** with DAWs and other performers using [Ableton Link](https://github.com/Ableton/link)
 - **Lua scripting** for editor customization.
 
@@ -23,7 +24,8 @@ Early development. Core functionality works but the API is evolving.
 ## Building
 
 ```bash
-make
+make              # Standard build with TinySoundFont
+make csound       # Build with Csound synthesis backend (larger binary)
 ```
 
 ## Usage
@@ -181,6 +183,52 @@ end
 - Multi-channel compositions export as Type 1 MIDI (multiple tracks)
 - All events (notes, program changes, tempo, pan) are preserved
 
+## Csound Synthesis
+
+Aldalog optionally supports [Csound](https://csound.com/) as an advanced synthesis backend, providing full synthesis capabilities beyond TinySoundFont's sample playback.
+
+### Building with Csound
+
+```bash
+make csound       # Build with Csound backend (~4.4MB binary)
+```
+
+### Quick Start
+
+```lua
+-- Check if Csound is available
+if loki.alda.csound_available() then
+    -- Load Csound instruments
+    loki.alda.csound_load(".aldev/csound/default.csd")
+
+    -- Switch to Csound backend
+    loki.alda.set_backend("csound")
+end
+```
+
+### Lua API
+
+```lua
+-- Check availability
+loki.alda.csound_available()      -- true if compiled with Csound
+
+-- Load instruments from .csd file
+loki.alda.csound_load("instruments.csd")
+
+-- Enable/disable Csound
+loki.alda.set_csound(true)        -- Enable Csound (disables TSF)
+loki.alda.set_csound(false)       -- Disable Csound
+
+-- Unified backend selection
+loki.alda.set_backend("csound")   -- Use Csound synthesis
+loki.alda.set_backend("tsf")      -- Use TinySoundFont (SoundFont)
+loki.alda.set_backend("midi")     -- Use external MIDI only
+```
+
+### Default Instruments
+
+The included `.aldev/csound/default.csd` provides 16 instruments mapped to MIDI channels, including subtractive synth, FM piano, pad, pluck, organ, bass, strings, brass, and drums.
+
 ## Documentation
 
 See the `docs` folder for full technical documentation.
@@ -190,6 +238,7 @@ See the `docs` folder for full technical documentation.
 - [Alda](https://alda.io) - music programming language by Dave Yarwood
 - [kilo](https://github.com/antirez/kilo) by Salvatore Sanfilippo (antirez) - original editor
 - [loki](https://github.com/shakfu/loki) - Lua-enhanced fork
+- [Csound](https://csound.com/) - sound synthesis system (optional)
 - [link](https://github.com/Ableton/link) - Ableton Link
 - [midifile](https://github.com/craigsapp/midifile) - C++ library for reading/writing Standard MIDI Files
 - [libremidi](https://github.com/celtera/libremidi) - A modern C++ MIDI 1 / MIDI 2 real-time & file I/O library. Supports Windows, macOS, Linux and WebMIDI.
