@@ -1,5 +1,6 @@
 .DEFAULT_GOAL := all
-.PHONY: all build configure library alda editor repl clean test show-config csound configure-csound
+.PHONY: all build configure library alda editor repl clean test show-config \
+		csound configure-csound
 
 BUILD_DIR ?= build
 CMAKE ?= cmake
@@ -25,12 +26,6 @@ library: configure
 # Primary target: unified aldalog binary
 aldalog: configure
 	@$(CMAKE) --build $(BUILD_DIR) --target alda_bin --config Release
-
-# Compatibility aliases
-editor: aldalog
-repl: aldalog
-loki: aldalog
-alda: aldalog
 
 show-config: configure
 	@$(CMAKE) --build $(BUILD_DIR) --target show-config --config Release

@@ -56,8 +56,10 @@ if(BUILD_CSOUND_BACKEND)
     # Minimal Csound build configuration
     # Set these before add_subdirectory so they take effect
     set(BUILD_STATIC_LIBRARY ON CACHE BOOL "" FORCE)
+    # set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set(BUILD_UTILITIES OFF CACHE BOOL "" FORCE)
     set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
     set(BUILD_INSTALLER OFF CACHE BOOL "" FORCE)
     set(USE_CURL OFF CACHE BOOL "" FORCE)
     set(USE_GETTEXT OFF CACHE BOOL "" FORCE)
@@ -83,6 +85,7 @@ if(BUILD_CSOUND_BACKEND)
     set(USE_PORTMIDI OFF CACHE BOOL "" FORCE)
     set(BUILD_STATIC_MODULES ON CACHE BOOL "" FORCE)
     set(USE_MP3 OFF CACHE BOOL "" FORCE)  # libsndfile built without MP3
+    # set(DEFAULT_USER_PLUGINDIR "${CMAKE_SOURCE_DIR}/.aldalog/csound/plugins" CACHE STRING "" FORCE)
 
     add_subdirectory(csound-6.18.1)
 
