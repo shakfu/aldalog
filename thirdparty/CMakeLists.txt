@@ -42,6 +42,10 @@ if(BUILD_CSOUND_BACKEND)
     set(ENABLE_PACKAGE_CONFIG OFF CACHE BOOL "" FORCE)
     set(INSTALL_PKGCONFIG_MODULE OFF CACHE BOOL "" FORCE)
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)     # Static library
+    # Linux needs _GNU_SOURCE for S_ISSOCK macro in file_io.c
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_compile_definitions(_GNU_SOURCE)
+    endif()
     add_subdirectory(libsndfile)
 
     # Configure Csound to find our libsndfile
