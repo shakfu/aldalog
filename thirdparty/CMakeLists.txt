@@ -46,6 +46,8 @@ if(BUILD_CSOUND_BACKEND)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_compile_definitions(_GNU_SOURCE)
     endif()
+    # Build with PIC in case Csound shared library is built
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "" FORCE)
     add_subdirectory(libsndfile)
 
     # Configure Csound to find our libsndfile
