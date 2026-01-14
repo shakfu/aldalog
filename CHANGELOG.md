@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 - **Csound Synthesis Backend**: Optional advanced synthesis engine as alternative to TinySoundFont
   - Full Csound 6.18.1 integration for powerful synthesis beyond sample playback
-  - Host-implemented audio I/O via miniaudio (same audio stack as TSF)
+  - Independent miniaudio audio device (each backend manages its own audio output)
   - MIDI events translated to Csound score events with fractional instrument IDs
   - Pre-defined instruments in `.aldalog/csound/default.csd` (16 GM-compatible instruments)
   - **Build Option**: `make csound` or `-DBUILD_CSOUND_BACKEND=ON`
@@ -124,6 +124,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Binary size reduced from 1.2MB to 1.1MB
 
 ### Fixed
+
+- **Csound Audio Not Playing**: Fixed Csound synthesis producing no audio output
+  - Root cause: `async.c` event dispatcher was routing MIDI events only to TSF, ignoring Csound
+  - Added Csound routing to `send_event()` with highest priority
+  - Each backend now has its own independent miniaudio device (cleaner architecture)
+  - Disproved theory that macOS couldn't handle multiple miniaudio instances
 
 - **Parser Infinite Loop on Invalid Syntax**: Fixed hang when entering invalid Alda syntax in REPL
   - `tempo 120` (missing parentheses) now shows error instead of hanging

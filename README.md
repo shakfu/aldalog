@@ -252,6 +252,10 @@ loki.alda.set_backend("midi")     -- Use external MIDI only
 
 The included `.aldalog/csound/default.csd` provides 16 instruments mapped to MIDI channels, including subtractive synth, FM piano, pad, pluck, organ, bass, strings, brass, and drums.
 
+### Architecture Notes
+
+Csound and TinySoundFont each have independent miniaudio audio devices. When you switch backends, the appropriate audio device is started/stopped. They do not share audio resources, allowing clean separation of concerns.
+
 ## Documentation
 
 See the `docs` folder for full technical documentation.
