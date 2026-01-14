@@ -49,6 +49,46 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
 
+  build-csound:
+    name: Build ${{ matrix.name }} (Csound)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            artifact_suffix: linux-csound
+            binary_path: build/aldalog
+          - name: macOS
+            os: macos-latest
+            artifact_suffix: macos-csound
+            binary_path: build/aldalog
+    env:
+      BUILD_DIR: build
+      BUILD_TYPE: Release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure CMake (with Csound)
+        run: cmake -S . -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_CSOUND_BACKEND=ON
+
+      - name: Build
+        run: cmake --build ${{ env.BUILD_DIR }} --config ${{ env.BUILD_TYPE }}
+
+      - name: Collect artifact
+        run: |
+          cmake -E make_directory artifacts
+          cmake -E copy "${{ matrix.binary_path }}" "artifacts/aldalog-${{ matrix.artifact_suffix }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aldalog-${{ matrix.artifact_suffix }}
+          path: artifacts/*
+          if-no-files-found: error
+
   # build-windows:
   #   name: Build Windows (MSYS2)
   #   runs-on: windows-latest
@@ -93,8 +133,8 @@ jobs:
   bundle:
     name: Bundle cross-platform binaries
     runs-on: ubuntu-latest
-    # needs: [build-unix, build-windows]
-    needs: [build-unix]
+    # needs: [build-unix, build-windows, build-csound]
+    needs: [build-unix, build-csound]
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
