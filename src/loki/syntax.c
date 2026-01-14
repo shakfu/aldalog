@@ -67,6 +67,9 @@ void syntax_update_row(editor_ctx_t *ctx, t_erow *row) {
         if (ctx->syntax->type == HL_TYPE_MARKDOWN) {
             editor_update_syntax_markdown(ctx, row);
             default_ran = 1;
+        } else if (ctx->syntax->type == HL_TYPE_CSOUND) {
+            editor_update_syntax_csound(ctx, row);
+            default_ran = 1;
         } else {
             int i, prev_sep, in_string, in_comment;
             char *p;

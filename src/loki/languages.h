@@ -32,6 +32,7 @@ unsigned int loki_get_builtin_language_count(void);
 /* Syntax highlighting functions */
 void highlight_code_line(t_erow *row, char **keywords, char *scs, char *separators);
 void editor_update_syntax_markdown(editor_ctx_t *ctx, t_erow *row);
+void editor_update_syntax_csound(editor_ctx_t *ctx, t_erow *row);
 
 /* Dynamic language registration */
 int add_dynamic_language(struct t_editor_syntax *lang);

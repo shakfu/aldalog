@@ -61,6 +61,37 @@ char *Alda_HL_keywords[] = {
 	NULL
 };
 
+/* Csound orchestra keywords (from csound_orcparse.h token definitions) */
+char *Csound_HL_keywords[] = {
+	/* Control flow */
+	"if","then","ithen","kthen","elseif","else","endif","fi",
+	"while","do","od","endwhile","until","goto","igoto","kgoto",
+	/* Structure */
+	"instr","endin","opcode","endop",
+	/* Header variables (types - highlighted differently) */
+	"sr|","kr|","ksmps|","nchnls|","nchnls_i|","0dbfs|","A4|",
+	/* Common opcodes (subset - there are thousands) */
+	"oscili","oscil","poscil","vco2","vco","lfo",
+	"moogladder","moogvcf","lowpass2","butterlp","butterhp","butterbp",
+	"noise","rand","random","rnd","birnd",
+	"linen","linenr","linseg","linsegr","expseg","expsegr","expon",
+	"madsr","adsr","mxadsr","xadsr",
+	"pluck","wgbow","wgflute","wgclar","wgbrass",
+	"reverb","freeverb","reverb2","nreverb",
+	"delay","delayr","delayw","deltap","deltapi","deltapn",
+	"chnget","chnset","chnexport","chnclear",
+	"in","ins","inch","out","outs","outch","outh","outq",
+	"cpsmidinn","cpspch","octpch","pchmidi","cpsmidi","ampmidi",
+	"tablei","table","tablew","ftgen","ftgentmp",
+	"init","=",
+	"print","prints","printks","printf",
+	"xin","xout","setksmps",
+	"sprintf","strcat","strcmp","strlen",
+	NULL
+};
+
+char *Csound_HL_extensions[] = {".csd",".orc",".sco",NULL};
+
 /* Extensions */
 char *C_HL_extensions[] = {".c",".h",".cpp",".hpp",".cc",NULL};
 char *Python_HL_extensions[] = {".py",".pyw",NULL};
@@ -118,6 +149,15 @@ struct t_editor_syntax HLDB[] = {
         ",.()+-/*=~%[]{}:;<>|",
         HL_HIGHLIGHT_STRINGS | HL_HIGHLIGHT_NUMBERS,
         HL_TYPE_C
+    },
+    /* Csound CSD files - special handling for multi-section format */
+    {
+        Csound_HL_extensions,
+        Csound_HL_keywords,
+        ";","/*","*/",
+        ",.()+-/*=~%[]{}:;<>|",
+        HL_HIGHLIGHT_STRINGS | HL_HIGHLIGHT_NUMBERS,
+        HL_TYPE_CSOUND
     },
     /* Terminator */
     {NULL, NULL, "", "", "", NULL, 0, HL_TYPE_C}
@@ -405,6 +445,264 @@ void editor_update_syntax_markdown(editor_ctx_t *ctx, t_erow *row) {
         }
 
         i++;
+    }
+}
+
+/* ======================= Csound CSD Syntax Highlighting =================== */
+
+/* Helper: Check if line contains a CSD section tag and return the section type.
+ * Returns -1 if no section change, otherwise CSD_SECTION_* constant.
+ * Sets *is_closing to 1 if it's a closing tag. */
+static int detect_csd_section_tag(const char *line, int len, int *is_closing) {
+    *is_closing = 0;
+
+    /* Skip leading whitespace */
+    int i = 0;
+    while (i < len && (line[i] == ' ' || line[i] == '\t')) i++;
+
+    if (i >= len || line[i] != '<') return -1;
+    i++;
+
+    /* Check for closing tag */
+    if (i < len && line[i] == '/') {
+        *is_closing = 1;
+        i++;
+    }
+
+    /* Match section names (case-insensitive) */
+    int remaining = len - i;
+
+    if (remaining >= 9 && strncasecmp(line + i, "CsOptions", 9) == 0) {
+        return CSD_SECTION_OPTIONS;
+    }
+    if (remaining >= 14 && strncasecmp(line + i, "CsInstruments", 13) == 0) {
+        return CSD_SECTION_ORCHESTRA;
+    }
+    if (remaining >= 7 && strncasecmp(line + i, "CsScore", 7) == 0) {
+        return CSD_SECTION_SCORE;
+    }
+    if (remaining >= 17 && strncasecmp(line + i, "CsoundSynthesizer", 17) == 0) {
+        return CSD_SECTION_NONE;  /* Root tag, not a content section */
+    }
+
+    return -1;
+}
+
+/* Highlight Csound orchestra code (inside <CsInstruments>) */
+static void highlight_csound_orchestra(t_erow *row, char **keywords, char *separators) {
+    if (row->rsize == 0) return;
+
+    int i = 0, prev_sep = 1, in_string = 0, in_comment = 0;
+    char *p = row->render;
+
+    /* Check for multi-line comment continuation from previous row */
+    /* (Csound uses C-style block comments in orchestra) */
+
+    while (i < row->rsize) {
+        /* Handle block comments */
+        if (in_comment) {
+            row->hl[i] = HL_MLCOMMENT;
+            if (i < row->rsize - 1 && p[i] == '*' && p[i+1] == '/') {
+                row->hl[i+1] = HL_MLCOMMENT;
+                i += 2;
+                in_comment = 0;
+                prev_sep = 1;
+                continue;
+            }
+            i++;
+            continue;
+        }
+
+        /* Start of block comment */
+        if (i < row->rsize - 1 && p[i] == '/' && p[i+1] == '*') {
+            row->hl[i] = HL_MLCOMMENT;
+            row->hl[i+1] = HL_MLCOMMENT;
+            i += 2;
+            in_comment = 1;
+            continue;
+        }
+
+        /* Handle ; comments (to end of line) */
+        if (p[i] == ';') {
+            memset(row->hl + i, HL_COMMENT, row->rsize - i);
+            return;
+        }
+
+        /* Handle ;; comments (double semicolon, common in Csound) */
+        if (i < row->rsize - 1 && p[i] == ';' && p[i+1] == ';') {
+            memset(row->hl + i, HL_COMMENT, row->rsize - i);
+            return;
+        }
+
+        /* Handle strings */
+        if (in_string) {
+            row->hl[i] = HL_STRING;
+            if (i < row->rsize - 1 && p[i] == '\\') {
+                row->hl[i+1] = HL_STRING;
+                i += 2;
+                prev_sep = 0;
+                continue;
+            }
+            if (p[i] == in_string) in_string = 0;
+            i++;
+            prev_sep = 0;
+            continue;
+        }
+
+        if (p[i] == '"' || p[i] == '\'') {
+            in_string = p[i];
+            row->hl[i] = HL_STRING;
+            i++;
+            prev_sep = 0;
+            continue;
+        }
+
+        /* Handle numbers (including negative and float) */
+        if ((isdigit(p[i]) && (prev_sep || (i > 0 && row->hl[i-1] == HL_NUMBER))) ||
+            (p[i] == '.' && i > 0 && row->hl[i-1] == HL_NUMBER) ||
+            (p[i] == '-' && prev_sep && i < row->rsize - 1 && isdigit(p[i+1]))) {
+            row->hl[i] = HL_NUMBER;
+            i++;
+            prev_sep = 0;
+            continue;
+        }
+
+        /* Handle keywords */
+        if (prev_sep && keywords) {
+            int j;
+            for (j = 0; keywords[j]; j++) {
+                int klen = strlen(keywords[j]);
+                int kw2 = keywords[j][klen-1] == '|';
+                if (kw2) klen--;
+
+                if (i + klen <= row->rsize &&
+                    !memcmp(p + i, keywords[j], klen) &&
+                    (i + klen >= row->rsize || syntax_is_separator(p[i + klen], separators))) {
+                    memset(row->hl + i, kw2 ? HL_KEYWORD2 : HL_KEYWORD1, klen);
+                    i += klen;
+                    prev_sep = 0;
+                    goto next_orc;
+                }
+            }
+        }
+
+        prev_sep = syntax_is_separator(p[i], separators);
+        i++;
+next_orc:
+        continue;
+    }
+}
+
+/* Highlight Csound score code (inside <CsScore>) */
+static void highlight_csound_score(t_erow *row) {
+    if (row->rsize == 0) return;
+
+    char *p = row->render;
+    int i = 0;
+
+    /* Skip leading whitespace */
+    while (i < row->rsize && (p[i] == ' ' || p[i] == '\t')) i++;
+
+    if (i >= row->rsize) return;
+
+    /* Handle ; comments */
+    if (p[i] == ';') {
+        memset(row->hl + i, HL_COMMENT, row->rsize - i);
+        return;
+    }
+
+    /* Score statements start with a letter: i, f, e, s, t, a, b, etc. */
+    char stmt = p[i];
+    if (isalpha(stmt)) {
+        /* Highlight statement letter as keyword */
+        row->hl[i] = HL_KEYWORD1;
+        i++;
+
+        /* Rest of line is parameters - highlight numbers */
+        while (i < row->rsize) {
+            if (p[i] == ';') {
+                /* Comment to end of line */
+                memset(row->hl + i, HL_COMMENT, row->rsize - i);
+                return;
+            }
+            if (isdigit(p[i]) || p[i] == '.' ||
+                (p[i] == '-' && i + 1 < row->rsize && isdigit(p[i+1]))) {
+                row->hl[i] = HL_NUMBER;
+            }
+            i++;
+        }
+    }
+}
+
+/* Update syntax highlighting for Csound CSD files.
+ * This handles the multi-section structure of CSD files. */
+void editor_update_syntax_csound(editor_ctx_t *ctx, t_erow *row) {
+    unsigned char *new_hl = realloc(row->hl, row->rsize);
+    if (new_hl == NULL) return;
+    row->hl = new_hl;
+    memset(row->hl, HL_NORMAL, row->rsize);
+
+    char *p = row->render;
+
+    /* Get section state from previous row */
+    int prev_section = (row->idx > 0 && ctx && ctx->row)
+        ? ctx->row[row->idx - 1].csd_section
+        : CSD_SECTION_NONE;
+
+    /* Check if this line changes the section */
+    int is_closing = 0;
+    int section_tag = detect_csd_section_tag(p, row->rsize, &is_closing);
+
+    if (section_tag >= 0) {
+        /* This line is a section tag - highlight as keyword */
+        memset(row->hl, HL_KEYWORD1, row->rsize);
+
+        if (is_closing) {
+            /* Closing tag - section ends, go back to NONE */
+            row->csd_section = CSD_SECTION_NONE;
+        } else {
+            /* Opening tag - section starts */
+            row->csd_section = section_tag;
+        }
+        return;
+    }
+
+    /* No section change - inherit from previous row */
+    row->csd_section = prev_section;
+
+    /* Apply section-specific highlighting */
+    switch (row->csd_section) {
+        case CSD_SECTION_OPTIONS:
+            /* Options section: mostly command-line flags, highlight as comments/strings */
+            /* Simple approach: highlight -flags as keywords, rest as normal */
+            for (int i = 0; i < row->rsize; i++) {
+                if (p[i] == '-' && i + 1 < row->rsize && isalpha(p[i+1])) {
+                    /* Flag like -d, -n, -m0, etc. */
+                    row->hl[i] = HL_KEYWORD2;
+                    i++;
+                    while (i < row->rsize && (isalnum(p[i]) || p[i] == '-')) {
+                        row->hl[i] = HL_KEYWORD2;
+                        i++;
+                    }
+                    i--; /* Adjust for loop increment */
+                }
+            }
+            break;
+
+        case CSD_SECTION_ORCHESTRA:
+            /* Orchestra section: full Csound language highlighting */
+            highlight_csound_orchestra(row, Csound_HL_keywords,
+                ",.()+-/*=~%[]{}:;<>|");
+            break;
+
+        case CSD_SECTION_SCORE:
+            /* Score section: simpler syntax (i, f, e statements) */
+            highlight_csound_score(row);
+            break;
+
+        default:
+            /* Outside any section (e.g., XML structure) - leave as normal */
+            break;
     }
 }
 

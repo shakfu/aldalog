@@ -31,6 +31,7 @@
 
 #define HL_TYPE_C 0
 #define HL_TYPE_MARKDOWN 1
+#define HL_TYPE_CSOUND 2
 
 /* Code block language constants (for markdown) */
 #define CB_LANG_NONE 0
@@ -38,6 +39,12 @@
 #define CB_LANG_PYTHON 2
 #define CB_LANG_LUA 3
 #define CB_LANG_CYTHON 4
+
+/* CSD section constants (for Csound) */
+#define CSD_SECTION_NONE 0
+#define CSD_SECTION_OPTIONS 1
+#define CSD_SECTION_ORCHESTRA 2
+#define CSD_SECTION_SCORE 3
 
 /* ======================= Key Constants =================================== */
 
@@ -125,6 +132,7 @@ typedef struct t_erow {
     int hl_oc;          /* Row had open comment at end in last syntax highlight
                            check. */
     int cb_lang;        /* Code block language (for markdown): CB_LANG_* */
+    int csd_section;    /* CSD section (for Csound): CSD_SECTION_* */
 } t_erow;
 
 /* Lua REPL state */

@@ -9,7 +9,7 @@
   - Each node type should have dedicated tests
   - Currently only `tests/alda/test_shared_suite.c` exists
 
-- [ ] Add Alda interpreter tests
+- [x] Add Alda interpreter tests
   - Test MIDI event generation (tempo, volume, polyphony, markers, variables)
   - This is the core value proposition - needs coverage
 
