@@ -170,6 +170,7 @@ typedef struct AldaContext {
     int no_sleep_mode;   /* Disable timing (for tests) */
     int verbose_mode;    /* Debug output */
     int tsf_enabled;     /* Built-in synth enabled */
+    int csound_enabled;  /* Csound synth enabled */
 
     /* Repeat context for on-repetitions */
     int current_repetition;  /* 1-indexed, 0 means not in a repeat */

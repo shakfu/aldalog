@@ -7,6 +7,7 @@
 
 #include "alda/midi_backend.h"
 #include "alda/tsf_backend.h"
+#include "alda/csound_backend.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -314,7 +315,13 @@ int alda_midi_is_open(AldaContext* ctx) {
 void alda_midi_send_note_on(AldaContext* ctx, int channel, int pitch, int velocity) {
     if (!ctx) return;
 
-    /* Built-in synth takes priority when enabled */
+    /* Csound synth takes highest priority when enabled */
+    if (ctx->csound_enabled && alda_csound_is_enabled()) {
+        alda_csound_send_note_on(channel, pitch, velocity);
+        return;
+    }
+
+    /* TSF synth takes priority when enabled */
     if (ctx->tsf_enabled && alda_tsf_is_enabled()) {
         alda_tsf_send_note_on(channel, pitch, velocity);
         return;
@@ -333,7 +340,13 @@ void alda_midi_send_note_on(AldaContext* ctx, int channel, int pitch, int veloci
 void alda_midi_send_note_off(AldaContext* ctx, int channel, int pitch) {
     if (!ctx) return;
 
-    /* Built-in synth takes priority when enabled */
+    /* Csound synth takes highest priority when enabled */
+    if (ctx->csound_enabled && alda_csound_is_enabled()) {
+        alda_csound_send_note_off(channel, pitch);
+        return;
+    }
+
+    /* TSF synth takes priority when enabled */
     if (ctx->tsf_enabled && alda_tsf_is_enabled()) {
         alda_tsf_send_note_off(channel, pitch);
         return;
@@ -352,7 +365,13 @@ void alda_midi_send_note_off(AldaContext* ctx, int channel, int pitch) {
 void alda_midi_send_program(AldaContext* ctx, int channel, int program) {
     if (!ctx) return;
 
-    /* Built-in synth takes priority when enabled */
+    /* Csound synth takes highest priority when enabled */
+    if (ctx->csound_enabled && alda_csound_is_enabled()) {
+        alda_csound_send_program(channel, program);
+        return;
+    }
+
+    /* TSF synth takes priority when enabled */
     if (ctx->tsf_enabled && alda_tsf_is_enabled()) {
         alda_tsf_send_program(channel, program);
         return;
@@ -370,7 +389,13 @@ void alda_midi_send_program(AldaContext* ctx, int channel, int program) {
 void alda_midi_send_cc(AldaContext* ctx, int channel, int cc, int value) {
     if (!ctx) return;
 
-    /* Built-in synth takes priority when enabled */
+    /* Csound synth takes highest priority when enabled */
+    if (ctx->csound_enabled && alda_csound_is_enabled()) {
+        alda_csound_send_cc(channel, cc, value);
+        return;
+    }
+
+    /* TSF synth takes priority when enabled */
     if (ctx->tsf_enabled && alda_tsf_is_enabled()) {
         alda_tsf_send_cc(channel, cc, value);
         return;
@@ -389,7 +414,13 @@ void alda_midi_send_cc(AldaContext* ctx, int channel, int cc, int value) {
 void alda_midi_all_notes_off(AldaContext* ctx) {
     if (!ctx) return;
 
-    /* Built-in synth takes priority when enabled */
+    /* Csound synth takes highest priority when enabled */
+    if (ctx->csound_enabled && alda_csound_is_enabled()) {
+        alda_csound_all_notes_off();
+        return;
+    }
+
+    /* TSF synth takes priority when enabled */
     if (ctx->tsf_enabled && alda_tsf_is_enabled()) {
         alda_tsf_all_notes_off();
         return;

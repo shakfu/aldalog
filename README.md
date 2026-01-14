@@ -2,7 +2,7 @@
 
 **aldalog** is a self-contained live-coding text editor and REPL for the [Alda](https://alda.io) music programming language. It’s built on the [loki](https://github.com/shakfu/loki) editor (itself derived from antirez’s [kilo](https://github.com/antirez/kilo)) and integrates [alda-midi](https://github.com/shakfu/midi-langs) to provide a fast, expressive workflow.
 
-It currently only works on macOS and Linux
+It currently only works on macOS and Linux.
 
 ## Features
 

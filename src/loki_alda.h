@@ -177,6 +177,35 @@ int loki_alda_set_synth_enabled(editor_ctx_t *ctx, int enable);
  */
 int loki_alda_load_soundfont(editor_ctx_t *ctx, const char *path);
 
+/* ======================= Csound Backend ======================= */
+
+/**
+ * Enable/disable Csound synthesizer.
+ * When enabled, Csound handles audio synthesis instead of TSF.
+ * Csound and TSF are mutually exclusive.
+ *
+ * @param ctx Editor context
+ * @param enable 1 to enable, 0 to disable
+ * @return 0 on success, -1 if instruments not loaded
+ */
+int loki_alda_csound_set_enabled(editor_ctx_t *ctx, int enable);
+
+/**
+ * Load a Csound .csd file for instruments.
+ *
+ * @param ctx Editor context
+ * @param path Path to .csd file
+ * @return 0 on success, -1 on error
+ */
+int loki_alda_csound_load_csd(editor_ctx_t *ctx, const char *path);
+
+/**
+ * Check if Csound backend is available (compiled in).
+ *
+ * @return 1 if available, 0 if not compiled
+ */
+int loki_alda_csound_is_available(void);
+
 /* ======================= Main Loop Integration ======================= */
 
 /**

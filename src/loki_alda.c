@@ -16,6 +16,7 @@
 
 /* Alda library headers */
 #include <alda/alda.h>
+#include <alda/csound_backend.h>
 
 /* Lua headers for callbacks */
 #include "lua.h"
@@ -455,6 +456,72 @@ int loki_alda_load_soundfont(editor_ctx_t *ctx, const char *path) {
 
     if (alda_tsf_load_soundfont(path) != 0) {
         set_error("Failed to load soundfont");
+        return -1;
+    }
+
+    return 0;
+}
+
+/* ======================= Csound Backend ======================= */
+
+int loki_alda_csound_is_available(void) {
+    /* Check if Csound init succeeds (it returns -1 if not compiled) */
+    return alda_csound_is_enabled() || alda_csound_has_instruments() ||
+           (alda_csound_init() == 0);
+}
+
+int loki_alda_csound_set_enabled(editor_ctx_t *ctx, int enable) {
+    (void)ctx;
+
+    if (!g_alda_state.initialized) {
+        set_error("Alda not initialized");
+        return -1;
+    }
+
+    if (enable) {
+        if (!alda_csound_has_instruments()) {
+            set_error("No Csound instruments loaded");
+            return -1;
+        }
+        /* Disable TSF first if enabled */
+        if (g_alda_state.alda_ctx.tsf_enabled) {
+            alda_tsf_disable();
+            g_alda_state.alda_ctx.tsf_enabled = 0;
+        }
+        if (alda_csound_enable() != 0) {
+            set_error(alda_csound_get_error());
+            return -1;
+        }
+        g_alda_state.alda_ctx.csound_enabled = 1;
+    } else {
+        alda_csound_disable();
+        g_alda_state.alda_ctx.csound_enabled = 0;
+    }
+
+    return 0;
+}
+
+int loki_alda_csound_load_csd(editor_ctx_t *ctx, const char *path) {
+    (void)ctx;
+
+    if (!g_alda_state.initialized) {
+        set_error("Alda not initialized");
+        return -1;
+    }
+
+    if (!path || !*path) {
+        set_error("Invalid CSD path");
+        return -1;
+    }
+
+    /* Initialize Csound backend if not already */
+    if (alda_csound_init() != 0) {
+        set_error("Csound backend not available");
+        return -1;
+    }
+
+    if (alda_csound_load_csd(path) != 0) {
+        set_error(alda_csound_get_error());
         return -1;
     }
 

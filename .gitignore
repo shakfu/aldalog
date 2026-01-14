@@ -6,7 +6,7 @@ build/
 .*_cache
 .repl_history
 .aldalog/repl_history
-
+Android/
 
 # ai
 .claude

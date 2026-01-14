@@ -1168,6 +1168,82 @@ static int lua_alda_get_error(lua_State *L) {
     return 1;
 }
 
+/* ======================= Csound Bindings ======================= */
+
+/* Lua API: loki.alda.csound_available() - Check if Csound backend is compiled in */
+static int lua_alda_csound_available(lua_State *L) {
+    lua_pushboolean(L, loki_alda_csound_is_available());
+    return 1;
+}
+
+/* Lua API: loki.alda.csound_load(path) - Load a Csound .csd file */
+static int lua_alda_csound_load(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    const char *path = luaL_checkstring(L, 1);
+
+    int result = loki_alda_csound_load_csd(ctx, path);
+    if (result != 0) {
+        const char *err = loki_alda_get_error(ctx);
+        lua_pushnil(L);
+        lua_pushstring(L, err ? err : "Failed to load CSD");
+        return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+/* Lua API: loki.alda.set_csound(enable) - Enable/disable Csound synth */
+static int lua_alda_set_csound(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    int enable = lua_toboolean(L, 1);
+
+    int result = loki_alda_csound_set_enabled(ctx, enable);
+    if (result != 0) {
+        const char *err = loki_alda_get_error(ctx);
+        lua_pushnil(L);
+        lua_pushstring(L, err ? err : "Failed to set Csound");
+        return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+/* Lua API: loki.alda.set_backend(name) - Set audio backend: "tsf", "csound", or "midi" */
+static int lua_alda_set_backend(lua_State *L) {
+    editor_ctx_t *ctx = lua_get_editor_context(L);
+    const char *name = luaL_checkstring(L, 1);
+    int result = 0;
+
+    if (strcmp(name, "tsf") == 0) {
+        /* Enable TSF (disable Csound first if enabled) */
+        loki_alda_csound_set_enabled(ctx, 0);
+        result = loki_alda_set_synth_enabled(ctx, 1);
+    } else if (strcmp(name, "csound") == 0) {
+        /* Enable Csound (TSF is disabled automatically in csound_set_enabled) */
+        result = loki_alda_csound_set_enabled(ctx, 1);
+    } else if (strcmp(name, "midi") == 0) {
+        /* Disable both synths, use external MIDI only */
+        loki_alda_csound_set_enabled(ctx, 0);
+        loki_alda_set_synth_enabled(ctx, 0);
+    } else {
+        lua_pushnil(L);
+        lua_pushstring(L, "Invalid backend name. Use 'tsf', 'csound', or 'midi'");
+        return 2;
+    }
+
+    if (result != 0) {
+        const char *err = loki_alda_get_error(ctx);
+        lua_pushnil(L);
+        lua_pushstring(L, err ? err : "Failed to set backend");
+        return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 /* ======================= Ableton Link Bindings ======================= */
 
 /* Lua API: loki.link.init(bpm) - Initialize Link subsystem */
@@ -1480,6 +1556,19 @@ static void lua_register_alda_module(lua_State *L) {
 
     lua_pushcfunction(L, lua_alda_get_error);
     lua_setfield(L, -2, "get_error");
+
+    /* Csound backend */
+    lua_pushcfunction(L, lua_alda_csound_available);
+    lua_setfield(L, -2, "csound_available");
+
+    lua_pushcfunction(L, lua_alda_csound_load);
+    lua_setfield(L, -2, "csound_load");
+
+    lua_pushcfunction(L, lua_alda_set_csound);
+    lua_setfield(L, -2, "set_csound");
+
+    lua_pushcfunction(L, lua_alda_set_backend);
+    lua_setfield(L, -2, "set_backend");
 
     lua_setfield(L, -2, "alda");  /* Set as loki.alda */
 }

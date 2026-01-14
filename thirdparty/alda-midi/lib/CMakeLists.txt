@@ -11,6 +11,7 @@ set(LIBALDA_SOURCES
     src/instruments.c
     src/midi_backend.c
     src/tsf_backend.c
+    src/csound_backend.c
     src/scheduler.c
     src/interpreter.c
     src/attributes.c
@@ -28,6 +29,7 @@ set(LIBALDA_HEADERS
     include/alda/instruments.h
     include/alda/midi_backend.h
     include/alda/tsf_backend.h
+    include/alda/csound_backend.h
     include/alda/scheduler.h
     include/alda/interpreter.h
     include/alda/async.h
@@ -90,19 +92,38 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     )
 endif()
 
-# Installation rules
-install(TARGETS alda
-    EXPORT aldaTargets
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-)
+# Csound backend (optional)
+if(BUILD_CSOUND_BACKEND)
+    target_compile_definitions(alda PRIVATE BUILD_CSOUND_BACKEND)
+    target_include_directories(alda PRIVATE
+        ${CMAKE_SOURCE_DIR}/thirdparty/csound-6.18.1/include
+        ${CMAKE_SOURCE_DIR}/thirdparty/csound-6.18.1/H
+        ${CMAKE_BINARY_DIR}/thirdparty/csound-6.18.1/include  # Generated headers
+    )
+    # Link with Csound static library (PRIVATE to avoid export issues)
+    # On macOS: CsoundLib64-static, on Linux/Windows: csound64-static
+    if(APPLE)
+        target_link_libraries(alda PRIVATE CsoundLib64-static)
+    else()
+        target_link_libraries(alda PRIVATE csound64-static)
+    endif()
+endif()
 
-install(DIRECTORY include/alda
-    DESTINATION include
-)
+# Installation rules (skip when building with Csound to avoid export issues)
+if(NOT BUILD_CSOUND_BACKEND)
+    install(TARGETS alda
+        EXPORT aldaTargets
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+    )
 
-install(EXPORT aldaTargets
-    FILE aldaTargets.cmake
-    NAMESPACE alda::
-    DESTINATION lib/cmake/alda
-)
+    install(DIRECTORY include/alda
+        DESTINATION include
+    )
+
+    install(EXPORT aldaTargets
+        FILE aldaTargets.cmake
+        NAMESPACE alda::
+        DESTINATION lib/cmake/alda
+    )
+endif()
