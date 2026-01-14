@@ -34,114 +34,29 @@ Added Csound routing to `async.c:send_event()` with highest priority (before TSF
 
 ## Architecture
 
-### Current Design (after refactoring)
+### Current Design
 
-Csound backend now shares TSF's miniaudio audio device instead of creating its own:
+Each backend has its own independent miniaudio device:
 
-1. `tsf_backend.c` contains `MINIAUDIO_IMPLEMENTATION` and owns the `ma_device`
-2. `csound_backend.c` includes `tsf_backend.h` and calls `alda_tsf_enable()` to start audio
-3. TSF's audio callback (`tsf_audio_callback`) checks `alda_csound_is_enabled()`:
-   - If Csound is enabled, it calls `alda_csound_render()`
-   - Otherwise, it renders TSF audio
+1. `tsf_backend.c` - Contains `MINIAUDIO_IMPLEMENTATION`, owns its own `ma_device` for TSF synthesis
+2. `csound_backend.c` - Has its own `ma_device` for Csound synthesis (includes `miniaudio.h` without implementation)
+
+The backends are completely independent - no delegation or shared audio devices. The `async.c` event dispatcher routes MIDI events to the appropriate backend based on which is enabled (Csound takes priority).
 
 ### Key Files
 
 - `thirdparty/alda-midi/lib/src/csound_backend.c` - Csound synthesis backend
-- `thirdparty/alda-midi/lib/src/tsf_backend.c` - TSF backend with shared audio device
+- `thirdparty/alda-midi/lib/src/tsf_backend.c` - TSF synthesis backend
 - `thirdparty/alda-midi/lib/include/alda/csound_backend.h` - Csound API
 - `.aldalog/csound/default.csd` - Default Csound instruments
 
-## Attempted Fixes
+## Historical Notes
 
-### 1. Separate miniaudio device for Csound
-- Created own `ma_device` in csound_backend.c
-- Device reported as initialized and started (state=2)
-- **Result**: Audio callback never fired
-- **Theory**: macOS CoreAudio may not support multiple miniaudio devices
+### Failed Theory: Multiple miniaudio instances
+Early debugging suggested macOS CoreAudio couldn't support multiple miniaudio devices. This was **incorrect** - the actual issue was MIDI event routing.
 
-### 2. Shared audio device with TSF
-- Refactored to use TSF's miniaudio device
-- TSF callback delegates to `alda_csound_render()` when Csound enabled
-- Modified `alda_tsf_enable()` to not require soundfont when Csound is active
-- **Result**: Still no audio (current state)
-
-### 3. Csound initialization order
-- Moved `csoundStart()` to immediately after `csoundCompileCsd()`
-- Added `csoundReadScore()` to send infinite duration event
-- Added `--daemon` flag to ignore score section during compilation
-- **Result**: Fixed "csoundStart() has not been called" warning
-
-### 4. Message suppression
-- Added `csoundCreateMessageBuffer(csound, 0)` to capture messages
-- Set `-m0` flag to suppress verbose output
-- **Result**: Messages suppressed, but audio still not working
-
-## Current Code State
-
-### csound_backend.c enable function:
-```c
-int alda_csound_enable(void) {
-    // ... initialization checks ...
-
-    // Start Csound if not already started
-    if (!g_cs.started) {
-        csoundStart(g_cs.csound);
-        g_cs.spout = csoundGetSpout(g_cs.csound);
-        // ... get buffer pointers ...
-        g_cs.started = 1;
-    }
-
-    g_cs.enabled = 1;
-
-    // Use TSF's audio device for output
-    if (alda_tsf_enable() != 0) {
-        g_cs.enabled = 0;
-        return -1;
-    }
-    return 0;
-}
-```
-
-### tsf_backend.c audio callback:
-```c
-static void tsf_audio_callback(ma_device* device, void* output,
-                                const void* input, ma_uint32 frame_count) {
-    float* out = (float*)output;
-
-    // Csound takes priority when enabled
-    if (alda_csound_is_enabled()) {
-        alda_csound_render(out, (int)frame_count);
-        return;
-    }
-
-    // Otherwise use TSF
-    // ...
-}
-```
-
-## Next Steps to Investigate
-
-1. **Verify TSF audio works independently**
-   - Test with `-sf soundfont.sf2` to confirm TSF audio path works
-   - If TSF works, the shared audio device approach is valid
-
-2. **Add debug output to TSF callback**
-   - Confirm the callback IS being called
-   - Confirm `alda_csound_is_enabled()` returns true
-   - Confirm `alda_csound_render()` is being called
-
-3. **Check Csound render function**
-   - Add debug output to `alda_csound_render()`
-   - Verify `csoundPerformKsmps()` is returning samples
-   - Check if `g_cs.spout` contains non-zero values
-
-4. **Verify note events are being sent**
-   - Add debug to `alda_csound_send_note_on()`
-   - Confirm MIDI events reach Csound via `csoundInputMessage()`
-
-5. **Test Csound instruments directly**
-   - Create a simple test that plays a note without the editor
-   - Isolate whether issue is in Csound or in the integration
+### What Actually Fixed It
+The `async.c` event dispatcher was only routing to TSF, ignoring Csound entirely. Adding Csound routing to `send_event()` fixed the issue. Separate miniaudio instances work fine.
 
 ## CSD File Notes
 
