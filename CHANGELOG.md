@@ -36,6 +36,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Error handling (undefined variables, markers, missing parts)
   - Unit tests for pitch calculation and duration functions
 
+- **Csound CSD Syntax Highlighting**: Section-aware syntax highlighting for Csound `.csd`, `.orc`, `.sco` files
+  - Parses CSD XML structure to detect `<CsOptions>`, `<CsInstruments>`, `<CsScore>` sections
+  - **Orchestra section** (`<CsInstruments>`): Full Csound language highlighting
+    - Control flow: `if`, `then`, `else`, `endif`, `while`, `do`, `od`, `goto`, etc.
+    - Structure: `instr`, `endin`, `opcode`, `endop`
+    - Header variables: `sr`, `kr`, `ksmps`, `nchnls`, `0dbfs`, `A4`
+    - Common opcodes: `oscili`, `vco2`, `moogladder`, `pluck`, `reverb`, etc.
+    - Comments: `;` single-line, `/* */` block comments
+    - Strings and numbers
+  - **Score section** (`<CsScore>`): Statement-based highlighting
+    - Score statements (`i`, `f`, `e`, `s`, etc.) as keywords
+    - Numeric parameters
+    - `;` comments
+  - **Options section** (`<CsOptions>`): Command-line flag highlighting
+  - Section tags highlighted as keywords
+  - Section state tracked across rows (like markdown code blocks)
+  - Keywords extracted from Csound 6.18.1 lexer (`csound_orcparse.h`)
+  - **Files Modified**: `internal.h`, `languages.c`, `languages.h`, `syntax.c`
+
 - **Standalone CSD File Support**: Edit and play Csound .csd files directly
   - `psnd song.csd` - Open CSD file in editor with syntax highlighting
   - `psnd play song.csd` - Play CSD file headlessly and exit

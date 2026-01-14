@@ -277,6 +277,40 @@ The included `.psnd/csound/default.csd` provides 16 instruments mapped to MIDI c
 
 Csound and TinySoundFont each have independent miniaudio audio devices. When you switch backends, the appropriate audio device is started/stopped. They do not share audio resources, allowing clean separation of concerns.
 
+## Syntax Highlighting
+
+psnd provides built-in syntax highlighting for music programming languages with language-aware features.
+
+### Supported Languages
+
+| Extension | Language | Features |
+|-----------|----------|----------|
+| `.alda` | Alda | Instruments, attributes, note names, octave markers, comments |
+| `.csd` | Csound CSD | Section-aware (orchestra/score/options), opcodes, control flow |
+| `.orc` | Csound Orchestra | Full orchestra syntax |
+| `.sco` | Csound Score | Score statements, parameters |
+
+### Csound CSD Section Awareness
+
+CSD files contain multiple sections with different syntax. psnd detects these sections and applies appropriate highlighting:
+
+- **`<CsInstruments>`** - Full Csound orchestra highlighting:
+  - Control flow (`if`, `then`, `else`, `endif`, `while`, `do`, `od`, `goto`)
+  - Structure (`instr`, `endin`, `opcode`, `endop`)
+  - Header variables (`sr`, `kr`, `ksmps`, `nchnls`, `0dbfs`, `A4`)
+  - Common opcodes (`oscili`, `vco2`, `moogladder`, `pluck`, `reverb`, etc.)
+  - Comments (`;` single-line, `/* */` block)
+  - Strings and numbers
+
+- **`<CsScore>`** - Score statement highlighting:
+  - Statement letters (`i`, `f`, `e`, `s`, `t`, etc.)
+  - Numeric parameters
+  - Comments
+
+- **`<CsOptions>`** - Command-line flag highlighting
+
+Section tags themselves are highlighted as keywords, and section state is tracked across lines.
+
 ## Roadmap
 
 - Integrate additional MIDI DSLs from [midi-langs](https://github.com/shakfu/midi-langs), giving psnd multiple interchangeable front-ends
