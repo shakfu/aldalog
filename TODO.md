@@ -75,9 +75,10 @@
   - Implement first additional language from midi-langs project
   - Proves polyglot architecture works
 
-- [ ] Document extension API
-  - Guide for adding third-party languages
-  - Language registration API documentation
+- [x] Document extension API
+  - `docs/language-extension-api.md` - comprehensive guide
+  - Covers `loki.register_language()` API, lazy loading, examples
+  - Includes complete Alda language example
 
 ---
 
