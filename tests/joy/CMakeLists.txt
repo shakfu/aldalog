@@ -29,3 +29,18 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 set_tests_properties(joy_primitives_tests PROPERTIES LABELS "unit")
+
+# MIDI primitives and note parsing tests
+add_executable(test_joy_midi
+    test_midi.c
+    ${CMAKE_SOURCE_DIR}/tests/test_framework.c
+)
+target_link_libraries(test_joy_midi PRIVATE joy)
+target_link_libraries(test_joy_midi PRIVATE m)
+
+add_test(
+    NAME joy_midi_tests
+    COMMAND $<TARGET_FILE:test_joy_midi>
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+set_tests_properties(joy_midi_tests PROPERTIES LABELS "unit")

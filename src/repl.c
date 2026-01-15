@@ -21,6 +21,14 @@
 #include "loki/syntax.h"
 #include "loki/lua.h"
 
+/* Joy language headers */
+#include "joy_runtime.h"
+#include "joy_parser.h"
+#include "joy_midi_backend.h"
+#include "music_notation.h"
+#include "music_context.h"
+#include "midi_primitives.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -991,4 +999,236 @@ int alda_repl_main(int argc, char **argv) {
     alda_context_cleanup(&ctx);
 
     return result < 0 ? 1 : 0;
+}
+
+/* ============================================================================
+ * Joy REPL
+ * ============================================================================ */
+
+static void print_joy_repl_usage(const char *prog) {
+    printf("Usage: %s joy [options] [file.joy]\n", prog);
+    printf("\n");
+    printf("Joy concatenative music language interpreter with MIDI output.\n");
+    printf("If no file is provided, starts an interactive REPL.\n");
+    printf("\n");
+    printf("Options:\n");
+    printf("  -h, --help        Show this help message\n");
+    printf("  -v, --verbose     Enable verbose output\n");
+    printf("  -l, --list        List available MIDI ports\n");
+    printf("  -p, --port N      Use MIDI port N (0-based index)\n");
+    printf("  --virtual NAME    Create virtual MIDI port with NAME\n");
+    printf("\n");
+    printf("Examples:\n");
+    printf("  %s joy                   Start interactive Joy REPL\n", prog);
+    printf("  %s joy song.joy          Execute a Joy file\n", prog);
+    printf("  %s joy --virtual JoyOut  REPL with virtual MIDI port\n", prog);
+    printf("\n");
+}
+
+static void print_joy_repl_help(void) {
+    printf("Commands:\n");
+    printf("  quit exit       Exit the REPL\n");
+    printf("  help ?          Show this help\n");
+    printf("  .               Print stack\n");
+    printf("  midi-list       List MIDI ports\n");
+    printf("  midi-virtual    Create virtual MIDI port\n");
+    printf("  midi-panic      All notes off\n");
+    printf("\n");
+    printf("Joy Syntax:\n");
+    printf("  c d e f g a b   Note names (octave 4 by default)\n");
+    printf("  c5 d3 e6        Notes with explicit octave\n");
+    printf("  c+ c-           Sharps and flats\n");
+    printf("  [c d e] play    Play notes sequentially\n");
+    printf("  [c e g] chord   Play notes as chord\n");
+    printf("  c major chord   Build and play C major chord\n");
+    printf("  120 tempo       Set tempo to 120 BPM\n");
+    printf("  80 vol          Set volume to 80%%\n");
+    printf("\n");
+    printf("Combinators:\n");
+    printf("  [1 2 3] [2 *] map   -> [2 4 6]\n");
+    printf("  [c d e] [12 +] map  -> transpose up octave\n");
+    printf("  5 [c e g] times     -> repeat 5 times\n");
+    printf("\n");
+}
+
+static void joy_repl_loop(JoyContext *ctx, editor_ctx_t *syntax_ctx) {
+    ReplLineEditor ed;
+    char *input;
+    jmp_buf error_recovery;
+
+    repl_editor_init(&ed);
+
+    /* Set up error recovery */
+    ctx->error_jmp = &error_recovery;
+    joy_set_current_context(ctx);
+
+    printf("Joy REPL %s (type help for help, quit to exit)\n", LOKI_VERSION);
+
+    /* Enable raw mode for syntax-highlighted input */
+    repl_enable_raw_mode();
+
+    while (1) {
+        input = repl_readline(syntax_ctx, &ed, "joy> ");
+
+        if (input == NULL) {
+            /* EOF - exit cleanly */
+            break;
+        }
+
+        if (input[0] == '\0') {
+            continue;
+        }
+
+        repl_add_history(&ed, input);
+
+        /* Handle special commands */
+        if (strcmp(input, "quit") == 0 || strcmp(input, "exit") == 0) {
+            break;
+        }
+
+        if (strcmp(input, "help") == 0 || strcmp(input, "?") == 0) {
+            print_joy_repl_help();
+            continue;
+        }
+
+        /* Set up error recovery point */
+        if (setjmp(error_recovery) != 0) {
+            /* Error occurred during eval - continue REPL */
+            continue;
+        }
+
+        /* Evaluate Joy code */
+        joy_eval_line(ctx, input);
+    }
+
+    /* Disable raw mode before exit */
+    repl_disable_raw_mode();
+    repl_editor_cleanup(&ed);
+}
+
+int joy_repl_main(int argc, char **argv) {
+    int verbose = 0;
+    int list_ports = 0;
+    int port_index = -1;
+    const char *virtual_name = NULL;
+    const char *input_file = NULL;
+
+    /* Simple argument parsing (skip argv[0] which is "joy") */
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            print_joy_repl_usage("psnd");
+            return 0;
+        } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
+            verbose = 1;
+        } else if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--list") == 0) {
+            list_ports = 1;
+        } else if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) &&
+                   i + 1 < argc) {
+            port_index = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--virtual") == 0 && i + 1 < argc) {
+            virtual_name = argv[++i];
+        } else if (argv[i][0] != '-' && input_file == NULL) {
+            input_file = argv[i];
+        }
+    }
+
+    /* Initialize Joy context */
+    JoyContext *ctx = joy_context_new();
+    if (!ctx) {
+        fprintf(stderr, "Error: Failed to create Joy context\n");
+        return 1;
+    }
+
+    /* Register primitives */
+    joy_register_primitives(ctx);
+    music_notation_init(ctx);
+    joy_midi_register_primitives(ctx);
+
+    /* Set parser dictionary for DEFINE support */
+    joy_set_parser_dict(ctx->dictionary);
+
+    /* Initialize MIDI backend */
+    if (joy_midi_init() != 0) {
+        fprintf(stderr, "Warning: Failed to initialize MIDI backend\n");
+    }
+
+    /* Handle --list */
+    if (list_ports) {
+        joy_midi_list_ports();
+        joy_midi_cleanup();
+        music_notation_cleanup(ctx);
+        joy_context_free(ctx);
+        return 0;
+    }
+
+    /* Setup MIDI output */
+    int midi_opened = 0;
+
+    if (virtual_name) {
+        if (joy_midi_open_virtual(virtual_name) == 0) {
+            midi_opened = 1;
+            if (verbose) {
+                printf("Created virtual MIDI output: %s\n", virtual_name);
+            }
+        }
+    } else if (port_index >= 0) {
+        if (joy_midi_open_port(port_index) == 0) {
+            midi_opened = 1;
+        }
+    } else {
+        /* Try to open a virtual port by default */
+        if (joy_midi_open_virtual("JoyMIDI") == 0) {
+            midi_opened = 1;
+            if (verbose) {
+                printf("Created virtual MIDI output: JoyMIDI\n");
+            }
+        }
+    }
+
+    if (!midi_opened) {
+        fprintf(stderr, "Warning: No MIDI output available\n");
+        fprintf(stderr, "Use --virtual NAME or -p PORT to specify output\n");
+    }
+
+    int result = 0;
+
+    if (input_file) {
+        /* File mode - execute Joy file */
+        if (verbose) {
+            printf("Executing: %s\n", input_file);
+        }
+        result = joy_load_file(ctx, input_file);
+        if (result != 0) {
+            fprintf(stderr, "Error: Failed to execute file\n");
+        }
+    } else {
+        /* REPL mode - initialize syntax highlighting */
+        editor_ctx_t syntax_ctx;
+        editor_ctx_init(&syntax_ctx);
+        syntax_init_default_colors(&syntax_ctx);
+        syntax_select_for_filename(&syntax_ctx, "input.joy");
+
+        /* Load Lua and themes for consistent highlighting */
+        struct loki_lua_opts lua_opts = {
+            .bind_editor = 1,
+            .load_config = 1,
+            .reporter = NULL
+        };
+        syntax_ctx.L = loki_lua_bootstrap(&syntax_ctx, &lua_opts);
+
+        joy_repl_loop(ctx, &syntax_ctx);
+
+        /* Cleanup Lua */
+        if (syntax_ctx.L) {
+            lua_close(syntax_ctx.L);
+        }
+    }
+
+    /* Cleanup */
+    joy_midi_panic();
+    joy_midi_cleanup();
+    music_notation_cleanup(ctx);
+    joy_context_free(ctx);
+
+    return result;
 }

@@ -56,6 +56,9 @@ void chan_(JoyContext* ctx);
 void midi_init(void);
 void midi_cleanup(void);
 
+/* Register all MIDI primitives with a Joy context */
+void joy_midi_register_primitives(JoyContext* ctx);
+
 /* Low-level MIDI send (used by music_notation.c) */
 void send_note_on(int pitch, int velocity);
 void send_note_off(int pitch);

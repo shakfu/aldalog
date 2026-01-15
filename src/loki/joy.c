@@ -18,6 +18,7 @@
 #include "joy_midi_backend.h"
 #include "music_notation.h"
 #include "music_context.h"
+#include "midi_primitives.h"
 
 /* ======================= Internal State ======================= */
 
@@ -83,6 +84,9 @@ int loki_joy_init(editor_ctx_t *ctx) {
 
     /* Initialize music notation system (creates MusicContext) */
     music_notation_init(state->joy_ctx);
+
+    /* Register MIDI primitives (major, minor, tempo, vol, play, chord, etc.) */
+    joy_midi_register_primitives(state->joy_ctx);
 
     /* Set parser dictionary for DEFINE support */
     joy_set_parser_dict(state->joy_ctx->dictionary);

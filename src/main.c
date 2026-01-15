@@ -7,6 +7,7 @@
  *   psnd file.alda    -> Editor mode (live-coding editor)
  *   psnd play file    -> Play mode (headless playback)
  *   psnd repl         -> REPL mode (explicit)
+ *   psnd joy          -> Joy REPL mode (concatenative music language)
  */
 
 #include "loki/editor.h"
@@ -17,16 +18,23 @@
 /* External entry points */
 extern int alda_repl_main(int argc, char **argv);
 extern int alda_play_main(int argc, char **argv);
+extern int joy_repl_main(int argc, char **argv);
 
 static void print_unified_help(const char *prog) {
     printf("psnd %s - Music composition editor and REPL\n", LOKI_VERSION);
     printf("\n");
     printf("Usage:\n");
-    printf("  %s                     Start interactive REPL\n", prog);
+    printf("  %s                     Start interactive Alda REPL\n", prog);
+    printf("  %s joy                 Start interactive Joy REPL\n", prog);
     printf("  %s <file.alda>         Open Alda file in editor\n", prog);
+    printf("  %s <file.joy>          Open Joy file in editor\n", prog);
     printf("  %s <file.csd>          Open Csound file in editor\n", prog);
     printf("  %s play <file>         Play file (headless)\n", prog);
-    printf("  %s repl [options]      Start REPL with options\n", prog);
+    printf("  %s repl [options]      Start Alda REPL with options\n", prog);
+    printf("\n");
+    printf("Languages:\n");
+    printf("  Alda - Music notation language (default REPL)\n");
+    printf("  Joy  - Concatenative stack-based music language\n");
     printf("\n");
     printf("Editor Mode:\n");
     printf("  Opens a vim-like modal editor with live-coding support.\n");
@@ -38,24 +46,23 @@ static void print_unified_help(const char *prog) {
     printf("  -sf PATH               Use built-in TinySoundFont synth\n");
     printf("  -cs PATH               Use Csound synthesis with .csd file\n");
     printf("\n");
-    printf("REPL Mode:\n");
-    printf("  Interactive composition - type Alda notation directly.\n");
-    printf("  Type 'help' in REPL for commands.\n");
-    printf("\n");
-    printf("REPL Options:\n");
+    printf("REPL Options (Alda):\n");
     printf("  -l, --list             List available MIDI ports\n");
     printf("  -p, --port N           Use MIDI port N\n");
     printf("  -sf, --soundfont PATH  Use built-in synth with soundfont\n");
     printf("  -v, --verbose          Enable verbose output\n");
     printf("\n");
+    printf("Joy REPL Options:\n");
+    printf("  -l, --list             List available MIDI ports\n");
+    printf("  -p, --port N           Use MIDI port N\n");
+    printf("  --virtual NAME         Create virtual MIDI port\n");
+    printf("\n");
     printf("Examples:\n");
-    printf("  %s                     Start REPL, type: piano: c d e f g\n", prog);
-    printf("  %s -sf gm.sf2          REPL with built-in synth\n", prog);
+    printf("  %s                     Start Alda REPL: piano: c d e f g\n", prog);
+    printf("  %s joy                 Start Joy REPL: [c d e] play\n", prog);
+    printf("  %s -sf gm.sf2          Alda REPL with built-in synth\n", prog);
     printf("  %s song.alda           Edit song.alda\n", prog);
-    printf("  %s song.csd            Edit song.csd (Csound)\n", prog);
-    printf("  %s -cs inst.csd song.alda  Edit with Csound synthesis\n", prog);
     printf("  %s play song.alda      Play song.alda and exit\n", prog);
-    printf("  %s play song.csd       Play song.csd and exit\n", prog);
     printf("\n");
 }
 
@@ -75,6 +82,15 @@ static int has_csd_extension(const char *path) {
     if (len < 4)
         return 0;
     return strcmp(path + len - 4, ".csd") == 0;
+}
+
+static int has_joy_extension(const char *path) {
+    if (!path)
+        return 0;
+    size_t len = strlen(path);
+    if (len < 4)
+        return 0;
+    return strcmp(path + len - 4, ".joy") == 0;
 }
 
 int main(int argc, char **argv) {
@@ -103,13 +119,19 @@ int main(int argc, char **argv) {
         return alda_repl_main(argc - 2, argv + 2);
     }
 
+    if (strcmp(first_arg, "joy") == 0) {
+        /* Joy REPL mode: psnd joy [options] [file.joy] */
+        return joy_repl_main(argc - 1, argv + 1);
+    }
+
     if (strcmp(first_arg, "play") == 0) {
         /* Shift arguments past 'play': psnd play file.csd -> file.csd */
         return alda_play_main(argc - 2, argv + 2);
     }
 
-    /* Check if first arg looks like a file (has .alda or .csd extension) */
-    if (has_alda_extension(first_arg) || has_csd_extension(first_arg)) {
+    /* Check if first arg looks like a file (has .alda, .csd, or .joy extension) */
+    if (has_alda_extension(first_arg) || has_csd_extension(first_arg) ||
+        has_joy_extension(first_arg)) {
         /* Definitely a file -> editor mode */
         return loki_editor_main(argc, argv);
     }
