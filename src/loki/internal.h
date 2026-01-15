@@ -105,6 +105,9 @@ struct undo_state;
 /* Alda state - opaque pointer, defined in loki_alda.c */
 struct LokiAldaState;
 
+/* Joy state - opaque pointer, defined in loki_joy.c */
+struct LokiJoyState;
+
 /* ======================= Data Structures ================================== */
 
 /* Syntax highlighting color definition */
@@ -198,6 +201,9 @@ struct editor_ctx {
 
     /* Alda state - per-context state (NULL until initialized) */
     struct LokiAldaState *alda_state;
+
+    /* Joy state - per-context state (NULL until initialized) */
+    struct LokiJoyState *joy_state;
 
     /* Line numbers display flag */
     int line_numbers;

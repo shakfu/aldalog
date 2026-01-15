@@ -114,6 +114,33 @@ if(BUILD_CSOUND_BACKEND)
     endif()
 endif()
 
+# libjoy - Joy concatenative language library (from src/joy/)
+set(LIBJOY_SOURCES
+    src/joy/joy_runtime.c
+    src/joy/joy_parser.c
+    src/joy/joy_primitives.c
+    src/joy/joy_midi_backend.c
+    src/joy/midi_primitives.c
+    src/joy/music_notation.c
+    src/joy/music_context.c
+    src/joy/music_theory.c
+)
+
+add_library(joy STATIC ${LIBJOY_SOURCES})
+add_library(joy::joy ALIAS joy)
+
+target_include_directories(joy
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/joy
+)
+
+target_link_libraries(joy PUBLIC libremidi)
+
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(joy PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 # libloki - Editor library (from src/loki/)
 add_library(libloki ${LOKI_LIBRARY_TYPE}
     src/loki/core.c
@@ -130,6 +157,7 @@ add_library(libloki ${LOKI_LIBRARY_TYPE}
     src/loki/undo.c
     src/loki/buffers.c
     src/loki/alda.c
+    src/loki/joy.c
     src/loki/link.c
     src/loki/midi_export.cpp
 )
@@ -153,6 +181,7 @@ target_link_libraries(libloki
         Threads::Threads
         ${CMAKE_DL_LIBS}
         alda
+        joy
         abl_link
         midifile
 )
@@ -206,3 +235,4 @@ target_include_directories(test_framework PUBLIC
 # Test subdirectories
 add_subdirectory(tests/loki)
 add_subdirectory(tests/alda)
+add_subdirectory(tests/joy)
