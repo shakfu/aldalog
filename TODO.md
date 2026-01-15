@@ -4,21 +4,22 @@
 
 ### Testing Gaps
 
-- [ ] Add Alda parser tests
+- [x] Add Alda parser tests
   - Parser handles 27 AST node types
   - Each node type should have dedicated tests
-  - Currently only `tests/alda/test_shared_suite.c` exists
+  - `tests/alda/test_parser.c` - 71 tests covering all node types
 
 - [x] Add Alda interpreter tests
   - Test MIDI event generation (tempo, volume, polyphony, markers, variables)
   - This is the core value proposition - needs coverage
 
-- [ ] Add audio backend tests
+- [x] Add audio backend tests
   - Smoke tests for MIDI output, TinySoundFont, Csound
-  - Would catch regressions in playback
+  - `tests/alda/test_backends.c` - 20 smoke tests
 
-- [ ] Add integration tests
+- [x] Add integration tests
   - End-to-end: parse Alda code and verify MIDI output
+  - `tests/alda/test_integration.c` - 14 integration tests
 
 ### Code Quality
 
