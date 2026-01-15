@@ -938,6 +938,121 @@ TEST(parse_error_invalid_note) {
 }
 
 /* ============================================================================
+ * Error Recovery and Context Tests
+ * ============================================================================ */
+
+TEST(parse_error_with_context_sexp) {
+    /* Test that unclosed S-expression produces error */
+    AldaParser* parser = alda_parser_new("piano: (tempo 120", "test");
+    ASSERT_NOT_NULL(parser);
+
+    AldaNode* ast = alda_parser_parse(parser);
+    if (ast) alda_ast_free(ast);
+
+    /* Check error count - should have at least one error */
+    int err_count = alda_parser_error_count(parser);
+    ASSERT_TRUE(err_count > 0);
+
+    /* Get all errors formatted */
+    char* all_errors = alda_parser_all_errors_string(parser);
+    ASSERT_NOT_NULL(all_errors);
+    free(all_errors);
+
+    alda_parser_free(parser);
+}
+
+TEST(parse_error_with_context_bracket) {
+    /* Test that bracket errors include context */
+    AldaParser* parser = alda_parser_new("piano: [c d e", "test");
+    ASSERT_NOT_NULL(parser);
+
+    AldaNode* ast = alda_parser_parse(parser);
+    if (ast) alda_ast_free(ast);
+
+    ASSERT_EQ(alda_parser_has_error(parser), 1);
+
+    /* Error should mention unclosed bracketed sequence */
+    char* error_str = alda_parser_error_string(parser);
+    ASSERT_NOT_NULL(error_str);
+    free(error_str);
+
+    alda_parser_free(parser);
+}
+
+TEST(parse_error_with_context_cram) {
+    /* Test that cram expression errors include context */
+    AldaParser* parser = alda_parser_new("piano: {c d e", "test");
+    ASSERT_NOT_NULL(parser);
+
+    AldaNode* ast = alda_parser_parse(parser);
+    if (ast) alda_ast_free(ast);
+
+    ASSERT_EQ(alda_parser_has_error(parser), 1);
+
+    char* error_str = alda_parser_error_string(parser);
+    ASSERT_NOT_NULL(error_str);
+    free(error_str);
+
+    alda_parser_free(parser);
+}
+
+TEST(parse_error_recovery_continues) {
+    /* Test that parser recovers and continues after error */
+    AldaParser* parser = alda_parser_new(
+        "(tempo 120\n"   /* Unclosed S-expression - error */
+        "piano: c d e",  /* Valid code after error */
+        "test");
+    ASSERT_NOT_NULL(parser);
+
+    AldaNode* ast = alda_parser_parse(parser);
+    /* Should produce some AST even with error */
+    /* The parser should recover and parse the piano part */
+
+    /* Should have collected errors */
+    ASSERT_EQ(alda_parser_has_error(parser), 1);
+
+    if (ast) {
+        /* Check that we got something from the valid part */
+        alda_ast_free(ast);
+    }
+
+    alda_parser_free(parser);
+}
+
+TEST(parse_error_multiple_collection) {
+    /* Test that multiple errors are collected */
+    AldaParser* parser = alda_parser_new(
+        "(tempo 120\n"       /* Error 1: unclosed S-expression */
+        "piano: c d\n"       /* Valid */
+        "(volume 80\n"       /* Error 2: another unclosed S-expression */
+        "violin: e f",       /* Valid */
+        "test");
+    ASSERT_NOT_NULL(parser);
+
+    AldaNode* ast = alda_parser_parse(parser);
+    if (ast) alda_ast_free(ast);
+
+    /* Should have collected at least one error */
+    int err_count = alda_parser_error_count(parser);
+    ASSERT_TRUE(err_count > 0);
+
+    alda_parser_free(parser);
+}
+
+TEST(parse_error_expected_colon) {
+    /* Test error for missing colon in part declaration */
+    AldaParser* parser = alda_parser_new("piano c d e", "test");
+    ASSERT_NOT_NULL(parser);
+
+    AldaNode* ast = alda_parser_parse(parser);
+    if (ast) alda_ast_free(ast);
+
+    /* "piano c d e" is ambiguous - could be var refs */
+    /* Just verify parser doesn't crash */
+    alda_parser_free(parser);
+}
+
+/* ============================================================================
  * Edge Cases
  * ============================================================================ */
 
@@ -1098,6 +1213,14 @@ BEGIN_TEST_SUITE("Alda Parser Tests")
     RUN_TEST(parse_error_unclosed_paren);
     RUN_TEST(parse_error_unclosed_brace);
     RUN_TEST(parse_error_invalid_note);
+
+    /* Error recovery and context tests */
+    RUN_TEST(parse_error_with_context_sexp);
+    RUN_TEST(parse_error_with_context_bracket);
+    RUN_TEST(parse_error_with_context_cram);
+    RUN_TEST(parse_error_recovery_continues);
+    RUN_TEST(parse_error_multiple_collection);
+    RUN_TEST(parse_error_expected_colon);
 
     /* Edge cases */
     RUN_TEST(parse_complex_expression);

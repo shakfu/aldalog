@@ -23,9 +23,12 @@
 
 ### Code Quality
 
-- [ ] Improve parser error recovery
-  - More robust error recovery would improve REPL experience
-  - Better error messages with context
+- [x] Improve parser error recovery
+  - Added synchronization points for error recovery (newlines, delimiters, part declarations)
+  - Enhanced error messages with context hints (e.g., "in S-expression", "in cram expression")
+  - Added expected/found information to error messages
+  - Implemented multiple error collection (up to 10 errors)
+  - New APIs: `alda_parser_error_count()`, `alda_parser_all_errors_string()`
 
 ---
 

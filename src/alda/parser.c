@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdio.h>
 
 struct AldaParser {
     const char* source;
@@ -15,7 +16,9 @@ struct AldaParser {
     AldaToken* tokens;
     size_t token_count;
     size_t current;
-    AldaError* error;
+    AldaError* error;           /* First error (for compatibility) */
+    AldaErrorList error_list;   /* All collected errors */
+    const char* parse_context;  /* Current parsing context for error messages */
 };
 
 /* Helper functions */
@@ -61,11 +64,141 @@ static void skip_newlines(AldaParser* p) {
     }
 }
 
+static const char* token_type_name(AldaTokenType type) {
+    switch (type) {
+        case ALDA_TOK_NOTE_LETTER: return "note letter";
+        case ALDA_TOK_REST_LETTER: return "rest";
+        case ALDA_TOK_NOTE_LENGTH: return "note length";
+        case ALDA_TOK_NOTE_LENGTH_MS: return "milliseconds duration";
+        case ALDA_TOK_NOTE_LENGTH_S: return "seconds duration";
+        case ALDA_TOK_LEFT_PAREN: return "'('";
+        case ALDA_TOK_RIGHT_PAREN: return "')'";
+        case ALDA_TOK_BRACKET_OPEN: return "'['";
+        case ALDA_TOK_BRACKET_CLOSE: return "']'";
+        case ALDA_TOK_CRAM_OPEN: return "'{'";
+        case ALDA_TOK_CRAM_CLOSE: return "'}'";
+        case ALDA_TOK_COLON: return "':'";
+        case ALDA_TOK_EQUALS: return "'='";
+        case ALDA_TOK_BARLINE: return "barline";
+        case ALDA_TOK_NAME: return "identifier";
+        case ALDA_TOK_SYMBOL: return "symbol";
+        case ALDA_TOK_NUMBER: return "number";
+        case ALDA_TOK_STRING: return "string";
+        case ALDA_TOK_NEWLINE: return "newline";
+        case ALDA_TOK_EOF: return "end of input";
+        default: return "token";
+    }
+}
+
 static void set_error(AldaParser* p, const char* msg) {
-    if (p->error) return; /* Keep first error */
     AldaToken* tok = peek(p);
     AldaSourcePos pos = tok ? tok->pos : alda_pos_new(1, 1, p->filename);
-    p->error = alda_error_new(ALDA_ERR_SYNTAX, msg, pos, p->source);
+
+    /* Build "found" description from current token */
+    char found_buf[64];
+    if (tok && tok->type != ALDA_TOK_EOF) {
+        snprintf(found_buf, sizeof(found_buf), "%s", token_type_name(tok->type));
+    } else {
+        snprintf(found_buf, sizeof(found_buf), "end of input");
+    }
+
+    AldaError* err = alda_error_new_detailed(
+        ALDA_ERR_SYNTAX, msg, pos, p->source,
+        p->parse_context,  /* context */
+        NULL,              /* expected - set by caller if needed */
+        found_buf          /* found */
+    );
+
+    /* Add to error list */
+    if (err && !alda_error_list_full(&p->error_list)) {
+        alda_error_list_add(&p->error_list, err);
+    }
+
+    /* Keep first error for backward compatibility */
+    if (!p->error) {
+        p->error = alda_error_new_detailed(
+            ALDA_ERR_SYNTAX, msg, pos, p->source,
+            p->parse_context, NULL, found_buf
+        );
+    }
+}
+
+static void set_error_expected(AldaParser* p, const char* msg, const char* expected) {
+    AldaToken* tok = peek(p);
+    AldaSourcePos pos = tok ? tok->pos : alda_pos_new(1, 1, p->filename);
+
+    /* Build "found" description */
+    char found_buf[64];
+    if (tok && tok->type != ALDA_TOK_EOF) {
+        snprintf(found_buf, sizeof(found_buf), "%s", token_type_name(tok->type));
+    } else {
+        snprintf(found_buf, sizeof(found_buf), "end of input");
+    }
+
+    AldaError* err = alda_error_new_detailed(
+        ALDA_ERR_SYNTAX, msg, pos, p->source,
+        p->parse_context, expected, found_buf
+    );
+
+    if (err && !alda_error_list_full(&p->error_list)) {
+        alda_error_list_add(&p->error_list, err);
+    }
+
+    if (!p->error) {
+        p->error = alda_error_new_detailed(
+            ALDA_ERR_SYNTAX, msg, pos, p->source,
+            p->parse_context, expected, found_buf
+        );
+    }
+}
+
+/**
+ * @brief Synchronize parser state after an error.
+ *
+ * Advances tokens until we reach a synchronization point where parsing
+ * can safely resume. Recovery points include:
+ * - Newlines (statement boundaries)
+ * - Closing delimiters (for nested contexts)
+ * - Part declarations (top-level structure)
+ * - Variable definitions (top-level structure)
+ */
+static void synchronize(AldaParser* p) {
+    advance(p);
+
+    while (!is_at_end(p)) {
+        /* Stop at newlines - natural statement boundaries */
+        if (check(p, ALDA_TOK_NEWLINE)) {
+            advance(p);
+            return;
+        }
+
+        /* Stop at structural delimiters */
+        AldaToken* tok = peek(p);
+        if (!tok) return;
+
+        switch (tok->type) {
+            /* Closing delimiters - let caller handle */
+            case ALDA_TOK_RIGHT_PAREN:
+            case ALDA_TOK_BRACKET_CLOSE:
+            case ALDA_TOK_CRAM_CLOSE:
+                return;
+
+            /* Part declaration markers */
+            case ALDA_TOK_NAME: {
+                AldaToken* next = peek_next(p);
+                if (next && (next->type == ALDA_TOK_COLON ||
+                             next->type == ALDA_TOK_EQUALS)) {
+                    return;
+                }
+                break;
+            }
+
+            default:
+                break;
+        }
+
+        advance(p);
+    }
 }
 
 static char* strdup_safe(const char* s) {
@@ -241,6 +374,10 @@ static AldaNode* parse_sexp(AldaParser* p) {
     AldaSourcePos pos = tok->pos;
     AldaNode* elements = NULL;
 
+    /* Save and set context */
+    const char* prev_context = p->parse_context;
+    p->parse_context = "in S-expression";
+
     skip_newlines(p);
 
     while (!is_at_end(p) && !check(p, ALDA_TOK_RIGHT_PAREN)) {
@@ -254,7 +391,13 @@ static AldaNode* parse_sexp(AldaParser* p) {
             if (check(p, ALDA_TOK_LEFT_PAREN)) {
                 elem = parse_sexp(p);
             } else {
-                set_error(p, "Expected '(' after quote");
+                set_error_expected(p, "Expected '(' after quote", "'('");
+                /* Try to recover - skip to closing paren or newline */
+                while (!is_at_end(p) &&
+                       !check(p, ALDA_TOK_RIGHT_PAREN) &&
+                       !check(p, ALDA_TOK_NEWLINE)) {
+                    advance(p);
+                }
                 break;
             }
         } else if (check(p, ALDA_TOK_SYMBOL)) {
@@ -280,8 +423,11 @@ static AldaNode* parse_sexp(AldaParser* p) {
             advance(p);
             continue;
         } else {
-            set_error(p, "Unexpected token in S-expression");
-            break;
+            set_error_expected(p, "Unexpected token in S-expression",
+                              "symbol, number, string, or '('");
+            /* Skip the unexpected token and try to continue */
+            advance(p);
+            continue;
         }
 
         if (elem) {
@@ -291,8 +437,11 @@ static AldaNode* parse_sexp(AldaParser* p) {
     }
 
     if (!match(p, ALDA_TOK_RIGHT_PAREN)) {
-        set_error(p, "Expected ')' to close S-expression");
+        set_error_expected(p, "Unclosed S-expression", "')'");
     }
+
+    /* Restore context */
+    p->parse_context = prev_context;
 
     return alda_node_lisp_list(elements, pos);
 }
@@ -301,10 +450,14 @@ static AldaNode* parse_cram(AldaParser* p) {
     AldaToken* tok = advance(p); /* consume { */
     AldaSourcePos pos = tok->pos;
 
+    /* Save and set context */
+    const char* prev_context = p->parse_context;
+    p->parse_context = "in cram expression";
+
     AldaNode* events = parse_event_sequence(p, ALDA_TOK_CRAM_CLOSE);
 
     if (!match(p, ALDA_TOK_CRAM_CLOSE)) {
-        set_error(p, "Expected '}' to close cram expression");
+        set_error_expected(p, "Unclosed cram expression", "'}'");
     }
 
     AldaNode* duration = NULL;
@@ -314,6 +467,9 @@ static AldaNode* parse_cram(AldaParser* p) {
         duration = parse_duration(p);
     }
 
+    /* Restore context */
+    p->parse_context = prev_context;
+
     return alda_node_cram(events, duration, pos);
 }
 
@@ -321,11 +477,18 @@ static AldaNode* parse_bracket_seq(AldaParser* p) {
     AldaToken* tok = advance(p); /* consume [ */
     AldaSourcePos pos = tok->pos;
 
+    /* Save and set context */
+    const char* prev_context = p->parse_context;
+    p->parse_context = "in bracketed sequence";
+
     AldaNode* events = parse_event_sequence(p, ALDA_TOK_BRACKET_CLOSE);
 
     if (!match(p, ALDA_TOK_BRACKET_CLOSE)) {
-        set_error(p, "Expected ']' to close bracketed sequence");
+        set_error_expected(p, "Unclosed bracketed sequence", "']'");
     }
+
+    /* Restore context */
+    p->parse_context = prev_context;
 
     return alda_node_bracket_seq(events, pos);
 }
@@ -630,7 +793,7 @@ static AldaNode* parse_part_declaration(AldaParser* p) {
 
     /* Expect colon */
     if (!match(p, ALDA_TOK_COLON)) {
-        set_error(p, "Expected ':' after part declaration");
+        set_error_expected(p, "Expected ':' after part declaration", "':'");
     }
 
     return alda_node_part_decl(names, name_count, alias, pos);
@@ -672,8 +835,12 @@ static int is_var_definition(AldaParser* p) {
 
 static AldaNode* parse_var_definition(AldaParser* p) {
     /* Parse: NAME = events */
+    const char* prev_context = p->parse_context;
+    p->parse_context = "in variable definition";
+
     if (!check(p, ALDA_TOK_NAME)) {
-        set_error(p, "Expected variable name");
+        set_error_expected(p, "Expected variable name", "identifier");
+        p->parse_context = prev_context;
         return NULL;
     }
 
@@ -682,8 +849,9 @@ static AldaNode* parse_var_definition(AldaParser* p) {
     char* name = strdup_safe(name_tok->lexeme);
 
     if (!match(p, ALDA_TOK_EQUALS)) {
-        set_error(p, "Expected '=' after variable name");
+        set_error_expected(p, "Expected '=' after variable name", "'='");
         free(name);
+        p->parse_context = prev_context;
         return NULL;
     }
 
@@ -699,6 +867,7 @@ static AldaNode* parse_var_definition(AldaParser* p) {
         events = parse_event_sequence(p, ALDA_TOK_NEWLINE);
     }
 
+    p->parse_context = prev_context;
     return alda_node_var_def(name, events, pos);
 }
 
@@ -707,7 +876,8 @@ static AldaNode* parse_top_level(AldaParser* p) {
     AldaNode* root = alda_node_root(pos);
     if (!root) return NULL;
 
-    while (!is_at_end(p) && !p->error) {
+    /* Continue parsing even after errors (collect multiple errors) */
+    while (!is_at_end(p) && !alda_error_list_full(&p->error_list)) {
         skip_newlines(p);
         if (is_at_end(p)) break;
 
@@ -716,6 +886,9 @@ static AldaNode* parse_top_level(AldaParser* p) {
             AldaNode* var_def = parse_var_definition(p);
             if (var_def) {
                 alda_node_append(&root->data.root.children, var_def);
+            } else {
+                /* Recovery: skip to next statement */
+                synchronize(p);
             }
         } else if (is_part_declaration(p)) {
             /* Parse part declaration */
@@ -742,10 +915,9 @@ static AldaNode* parse_top_level(AldaParser* p) {
                 }
             } else if (!is_at_end(p)) {
                 /* No events could be parsed and we're not at EOF.
-                 * This means we have an unexpected token - report error
-                 * and skip it to avoid infinite loop. */
+                 * Report error and use synchronize for recovery. */
                 set_error(p, "Unexpected token");
-                advance(p);
+                synchronize(p);
             }
             /* Continue loop - there may be part declarations following */
         }
@@ -766,6 +938,8 @@ AldaParser* alda_parser_new(const char* source, const char* filename) {
     p->token_count = 0;
     p->current = 0;
     p->error = NULL;
+    p->parse_context = NULL;
+    alda_error_list_init(&p->error_list, 10);  /* Collect up to 10 errors */
 
     return p;
 }
@@ -774,6 +948,7 @@ void alda_parser_free(AldaParser* parser) {
     if (parser) {
         alda_tokens_free(parser->tokens, parser->token_count);
         alda_error_free(parser->error);
+        alda_error_list_free(&parser->error_list);
         free(parser);
     }
 }
@@ -816,6 +991,21 @@ const AldaError* alda_parser_error(AldaParser* parser) {
 char* alda_parser_error_string(AldaParser* parser) {
     if (!parser->error) return NULL;
     return alda_error_format(parser->error);
+}
+
+int alda_parser_error_count(AldaParser* parser) {
+    return parser->error_list.count;
+}
+
+char* alda_parser_all_errors_string(AldaParser* parser) {
+    if (parser->error_list.count == 0) {
+        /* Fall back to single error if no list */
+        if (parser->error) {
+            return alda_error_format(parser->error);
+        }
+        return NULL;
+    }
+    return alda_error_list_format(&parser->error_list);
 }
 
 AldaNode* alda_parse(const char* source, const char* filename, char** error) {
