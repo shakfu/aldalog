@@ -9,6 +9,7 @@
 #include "loki/internal.h"
 #include "loki/syntax.h"
 #include "loki/lua.h"
+#include "loki/repl_launcher.h"
 #include "shared/repl_commands.h"
 #include "shared/context.h"
 
@@ -628,48 +629,11 @@ static void tr7_repl_loop(editor_ctx_t *syntax_ctx) {
 }
 
 /* ============================================================================
- * TR7 REPL Main Entry Point
+ * Shared REPL Launcher Callbacks
  * ============================================================================ */
 
-int tr7_repl_main(int argc, char **argv) {
-    int verbose = 0;
-    int list_ports = 0;
-    int port_index = -1;
-    const char *virtual_name = NULL;
-    const char *input_file = NULL;
-    const char *soundfont_path = NULL;
-
-    /* Simple argument parsing */
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            print_tr7_repl_usage("psnd");
-            return 0;
-        } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
-            verbose = 1;
-        } else if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--list") == 0) {
-            list_ports = 1;
-        } else if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) &&
-                   i + 1 < argc) {
-            port_index = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--virtual") == 0 && i + 1 < argc) {
-            virtual_name = argv[++i];
-        } else if ((strcmp(argv[i], "-sf") == 0 || strcmp(argv[i], "--soundfont") == 0) &&
-                   i + 1 < argc) {
-            soundfont_path = argv[++i];
-        } else if (argv[i][0] != '-' && input_file == NULL) {
-            input_file = argv[i];
-        }
-    }
-
-    /* Initialize TR7 engine */
-    g_tr7_repl_engine = tr7_engine_create(0);
-    if (!g_tr7_repl_engine) {
-        fprintf(stderr, "Error: Failed to create TR7 engine\n");
-        return 1;
-    }
-
-    /* Set TR7 search paths to .psnd/lib/scm in current working directory */
-    /* Note: tr7_set_string stores pointer, doesn't copy - use static storage */
+/* Helper to set up TR7 library paths */
+static void tr7_setup_lib_paths(void) {
     static char tr7_lib_path[1100];
     char cwd[1024];
     if (getcwd(cwd, sizeof(cwd))) {
@@ -678,70 +642,88 @@ int tr7_repl_main(int argc, char **argv) {
         tr7_set_string(g_tr7_repl_engine, Tr7_StrID_Library_Path, tr7_lib_path);
         tr7_set_string(g_tr7_repl_engine, Tr7_StrID_Include_Path, tr7_lib_path);
     }
+}
 
-    /* Import standard Scheme libraries */
+/* Helper to import standard Scheme libraries */
+static void tr7_import_std_libs(void) {
     tr7_import_lib(g_tr7_repl_engine, "scheme/base");
     tr7_import_lib(g_tr7_repl_engine, "scheme/read");
     tr7_import_lib(g_tr7_repl_engine, "scheme/write");
     tr7_import_lib(g_tr7_repl_engine, "scheme/file");
     tr7_import_lib(g_tr7_repl_engine, "scheme/load");
     tr7_import_lib(g_tr7_repl_engine, "scheme/eval");
+}
+
+/* List MIDI ports */
+static void tr7_cb_list_ports(void) {
+    SharedContext tmp;
+    shared_context_init(&tmp);
+    shared_midi_list_ports(&tmp);
+    shared_context_cleanup(&tmp);
+}
+
+/* Initialize TR7 context and MIDI/audio */
+static void *tr7_cb_init(const SharedReplArgs *args) {
+    /* Initialize TR7 engine */
+    g_tr7_repl_engine = tr7_engine_create(0);
+    if (!g_tr7_repl_engine) {
+        fprintf(stderr, "Error: Failed to create TR7 engine\n");
+        return NULL;
+    }
+
+    /* Set library paths and import standard libraries */
+    tr7_setup_lib_paths();
+    tr7_import_std_libs();
 
     /* Initialize shared context for MIDI/audio */
     g_tr7_repl_shared = calloc(1, sizeof(SharedContext));
     if (!g_tr7_repl_shared) {
         fprintf(stderr, "Error: Failed to create shared context\n");
         tr7_engine_destroy(g_tr7_repl_engine);
-        return 1;
+        g_tr7_repl_engine = NULL;
+        return NULL;
     }
     shared_context_init(g_tr7_repl_shared);
 
     /* Register music primitives */
     tr7_repl_register_music_funcs(g_tr7_repl_engine);
 
-    /* Handle --list */
-    if (list_ports) {
-        shared_midi_list_ports(g_tr7_repl_shared);
-        shared_context_cleanup(g_tr7_repl_shared);
-        free(g_tr7_repl_shared);
-        tr7_engine_destroy(g_tr7_repl_engine);
-        return 0;
-    }
-
     /* Setup output */
-    if (soundfont_path) {
+    if (args->soundfont_path) {
         /* Use built-in synth */
-        if (shared_tsf_load_soundfont(soundfont_path) != 0) {
-            fprintf(stderr, "Error: Failed to load soundfont: %s\n", soundfont_path);
+        if (shared_tsf_load_soundfont(args->soundfont_path) != 0) {
+            fprintf(stderr, "Error: Failed to load soundfont: %s\n", args->soundfont_path);
             shared_context_cleanup(g_tr7_repl_shared);
             free(g_tr7_repl_shared);
             tr7_engine_destroy(g_tr7_repl_engine);
-            return 1;
+            g_tr7_repl_shared = NULL;
+            g_tr7_repl_engine = NULL;
+            return NULL;
         }
         g_tr7_repl_shared->tsf_enabled = 1;
-        if (verbose) {
-            printf("Using built-in synth: %s\n", soundfont_path);
+        if (args->verbose) {
+            printf("Using built-in synth: %s\n", args->soundfont_path);
         }
     } else {
         /* Setup MIDI output */
         int midi_opened = 0;
 
-        if (virtual_name) {
-            if (shared_midi_open_virtual(g_tr7_repl_shared, virtual_name) == 0) {
+        if (args->virtual_name) {
+            if (shared_midi_open_virtual(g_tr7_repl_shared, args->virtual_name) == 0) {
                 midi_opened = 1;
-                if (verbose) {
-                    printf("Created virtual MIDI port: %s\n", virtual_name);
+                if (args->verbose) {
+                    printf("Created virtual MIDI port: %s\n", args->virtual_name);
                 }
             }
-        } else if (port_index >= 0) {
-            if (shared_midi_open_port(g_tr7_repl_shared, port_index) == 0) {
+        } else if (args->port_index >= 0) {
+            if (shared_midi_open_port(g_tr7_repl_shared, args->port_index) == 0) {
                 midi_opened = 1;
             }
         } else {
             /* Try to open a virtual port by default */
             if (shared_midi_open_virtual(g_tr7_repl_shared, "TR7MIDI") == 0) {
                 midi_opened = 1;
-                if (verbose) {
+                if (args->verbose) {
                     printf("Created virtual MIDI output: TR7MIDI\n");
                 }
             }
@@ -753,70 +735,91 @@ int tr7_repl_main(int argc, char **argv) {
         }
     }
 
-    int result = 0;
+    /* Return non-NULL to indicate success (we use g_tr7_repl_engine as context) */
+    return g_tr7_repl_engine;
+}
 
-    if (input_file) {
-        /* File mode - execute Scheme file */
-        if (verbose) {
-            printf("Executing: %s\n", input_file);
-        }
-        FILE *f = fopen(input_file, "r");
-        if (!f) {
-            fprintf(stderr, "Error: Cannot open file: %s\n", input_file);
-            result = 1;
-        } else {
-            int status = tr7_run_file(g_tr7_repl_engine, f, input_file);
-            fclose(f);
-            if (status != 0) {
-                tr7_t val = tr7_get_last_value(g_tr7_repl_engine);
-                if (tr7_is_error(val)) {
-                    tr7_t msg = tr7_error_message(val);
-                    if (TR7_IS_STRING(msg)) {
-                        fprintf(stderr, "Error: %s\n", tr7_string_buffer(msg));
-                    } else {
-                        fprintf(stderr, "Error: Failed to execute file\n");
-                    }
-                }
-                result = 1;
-            }
-        }
-    } else {
-        /* REPL mode - initialize syntax highlighting */
-        editor_ctx_t syntax_ctx;
-        editor_ctx_init(&syntax_ctx);
-        syntax_init_default_colors(&syntax_ctx);
-        syntax_select_for_filename(&syntax_ctx, "input.scm");
+/* Cleanup TR7 context and MIDI/audio */
+static void tr7_cb_cleanup(void *lang_ctx) {
+    (void)lang_ctx;
 
-        /* Load Lua and themes for consistent highlighting */
-        struct loki_lua_opts lua_opts = {
-            .bind_editor = 1,
-            .load_config = 1,
-            .reporter = NULL
-        };
-        syntax_ctx.L = loki_lua_bootstrap(&syntax_ctx, &lua_opts);
-
-        tr7_repl_loop(&syntax_ctx);
-
-        /* Cleanup Lua */
-        if (syntax_ctx.L) {
-            lua_close(syntax_ctx.L);
-        }
-    }
-
-    /* Wait for audio buffer to drain before cleanup */
-    if (g_tr7_repl_shared->tsf_enabled) {
+    /* Wait for audio buffer to drain */
+    if (g_tr7_repl_shared && g_tr7_repl_shared->tsf_enabled) {
         usleep(300000);  /* 300ms for audio tail */
     }
 
     /* Cleanup */
-    shared_send_panic(g_tr7_repl_shared);
-    shared_context_cleanup(g_tr7_repl_shared);
-    free(g_tr7_repl_shared);
-    g_tr7_repl_shared = NULL;
-    tr7_engine_destroy(g_tr7_repl_engine);
-    g_tr7_repl_engine = NULL;
+    if (g_tr7_repl_shared) {
+        shared_send_panic(g_tr7_repl_shared);
+        shared_context_cleanup(g_tr7_repl_shared);
+        free(g_tr7_repl_shared);
+        g_tr7_repl_shared = NULL;
+    }
+    if (g_tr7_repl_engine) {
+        tr7_engine_destroy(g_tr7_repl_engine);
+        g_tr7_repl_engine = NULL;
+    }
+}
 
-    return result;
+/* Execute a Scheme file */
+static int tr7_cb_exec_file(void *lang_ctx, const char *path, int verbose) {
+    (void)lang_ctx;
+    (void)verbose;
+
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        fprintf(stderr, "Error: Cannot open file: %s\n", path);
+        return 1;
+    }
+
+    int status = tr7_run_file(g_tr7_repl_engine, f, path);
+    fclose(f);
+
+    if (status == 0) {
+        /* tr7_run_file returns 0 on load failure */
+        fprintf(stderr, "Error: Failed to load file\n");
+        return 1;
+    }
+
+    /* Execution happened - check if result was an error */
+    tr7_t val = tr7_get_last_value(g_tr7_repl_engine);
+    if (tr7_is_error(val)) {
+        tr7_t msg = tr7_error_message(val);
+        if (TR7_IS_STRING(msg)) {
+            fprintf(stderr, "Error: %s\n", tr7_string_buffer(msg));
+        } else {
+            fprintf(stderr, "Error: Failed to execute file\n");
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+/* Run the TR7 REPL loop */
+static void tr7_cb_repl_loop(void *lang_ctx, editor_ctx_t *syntax_ctx) {
+    (void)lang_ctx;
+    tr7_repl_loop(syntax_ctx);
+}
+
+/* TR7 shared REPL callbacks */
+static const SharedReplCallbacks tr7_repl_callbacks = {
+    .name = "tr7",
+    .file_ext = ".scm",
+    .print_usage = print_tr7_repl_usage,
+    .list_ports = tr7_cb_list_ports,
+    .init = tr7_cb_init,
+    .cleanup = tr7_cb_cleanup,
+    .exec_file = tr7_cb_exec_file,
+    .repl_loop = tr7_cb_repl_loop,
+};
+
+/* ============================================================================
+ * TR7 REPL Main Entry Point
+ * ============================================================================ */
+
+int tr7_repl_main(int argc, char **argv) {
+    return shared_lang_repl_main(&tr7_repl_callbacks, argc, argv);
 }
 
 /* ============================================================================
@@ -824,131 +827,5 @@ int tr7_repl_main(int argc, char **argv) {
  * ============================================================================ */
 
 int tr7_play_main(int argc, char **argv) {
-    int verbose = 0;
-    const char *input_file = NULL;
-    const char *soundfont_path = NULL;
-
-    /* Argument parsing - start at 0 since argv[0] may be the filename */
-    for (int i = 0; i < argc; i++) {
-        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
-            verbose = 1;
-        } else if ((strcmp(argv[i], "-sf") == 0 || strcmp(argv[i], "--soundfont") == 0) &&
-                   i + 1 < argc) {
-            soundfont_path = argv[++i];
-        } else if (argv[i][0] != '-' && input_file == NULL) {
-            input_file = argv[i];
-        }
-    }
-
-    if (!input_file) {
-        fprintf(stderr, "Usage: psnd play [-v] [-sf soundfont.sf2] <file.scm>\n");
-        return 1;
-    }
-
-    /* Initialize TR7 engine */
-    g_tr7_repl_engine = tr7_engine_create(0);
-    if (!g_tr7_repl_engine) {
-        fprintf(stderr, "Error: Failed to create TR7 engine\n");
-        return 1;
-    }
-
-    /* Set TR7 search paths to .psnd/lib/scm in current working directory */
-    static char tr7_lib_path[1100];
-    char cwd[1024];
-    if (getcwd(cwd, sizeof(cwd))) {
-        snprintf(tr7_lib_path, sizeof(tr7_lib_path), "%s/.psnd/lib/scm", cwd);
-        tr7_set_string(g_tr7_repl_engine, Tr7_StrID_Path, tr7_lib_path);
-        tr7_set_string(g_tr7_repl_engine, Tr7_StrID_Library_Path, tr7_lib_path);
-        tr7_set_string(g_tr7_repl_engine, Tr7_StrID_Include_Path, tr7_lib_path);
-    }
-
-    /* Import standard Scheme libraries */
-    tr7_import_lib(g_tr7_repl_engine, "scheme/base");
-    tr7_import_lib(g_tr7_repl_engine, "scheme/read");
-    tr7_import_lib(g_tr7_repl_engine, "scheme/write");
-    tr7_import_lib(g_tr7_repl_engine, "scheme/file");
-    tr7_import_lib(g_tr7_repl_engine, "scheme/load");
-    tr7_import_lib(g_tr7_repl_engine, "scheme/eval");
-
-    /* Initialize shared context for MIDI/audio */
-    g_tr7_repl_shared = calloc(1, sizeof(SharedContext));
-    if (!g_tr7_repl_shared) {
-        fprintf(stderr, "Error: Failed to create shared context\n");
-        tr7_engine_destroy(g_tr7_repl_engine);
-        return 1;
-    }
-    shared_context_init(g_tr7_repl_shared);
-
-    /* Register music primitives */
-    tr7_repl_register_music_funcs(g_tr7_repl_engine);
-
-    /* Setup output */
-    if (soundfont_path) {
-        /* Use built-in synth */
-        if (shared_tsf_load_soundfont(soundfont_path) != 0) {
-            fprintf(stderr, "Error: Failed to load soundfont: %s\n", soundfont_path);
-            shared_context_cleanup(g_tr7_repl_shared);
-            free(g_tr7_repl_shared);
-            tr7_engine_destroy(g_tr7_repl_engine);
-            return 1;
-        }
-        g_tr7_repl_shared->tsf_enabled = 1;
-        if (verbose) {
-            printf("Using built-in synth: %s\n", soundfont_path);
-        }
-    } else {
-        /* Try to open a virtual MIDI port */
-        if (shared_midi_open_virtual(g_tr7_repl_shared, "TR7MIDI") != 0) {
-            fprintf(stderr, "Warning: No MIDI output available\n");
-            fprintf(stderr, "Hint: Use -sf <soundfont.sf2> for built-in synth\n");
-        } else if (verbose) {
-            printf("Created virtual MIDI output: TR7MIDI\n");
-        }
-    }
-
-    /* Execute file */
-    int result = 0;
-    if (verbose) {
-        printf("Executing: %s\n", input_file);
-    }
-    FILE *f = fopen(input_file, "r");
-    if (!f) {
-        fprintf(stderr, "Error: Cannot open file: %s\n", input_file);
-        result = 1;
-    } else {
-        int status = tr7_run_file(g_tr7_repl_engine, f, input_file);
-        fclose(f);
-        if (status == 0) {
-            /* tr7_run_file returns 0 on load failure */
-            fprintf(stderr, "Error: Failed to load file\n");
-            result = 1;
-        } else {
-            /* Execution happened - check if result was an error */
-            tr7_t val = tr7_get_last_value(g_tr7_repl_engine);
-            if (tr7_is_error(val)) {
-                tr7_t msg = tr7_error_message(val);
-                if (TR7_IS_STRING(msg)) {
-                    fprintf(stderr, "Error: %s\n", tr7_string_buffer(msg));
-                } else {
-                    fprintf(stderr, "Error: Failed to execute file\n");
-                }
-                result = 1;
-            }
-        }
-    }
-
-    /* Wait for audio buffer to drain before cleanup */
-    if (g_tr7_repl_shared->tsf_enabled) {
-        usleep(300000);  /* 300ms for audio tail */
-    }
-
-    /* Cleanup */
-    shared_send_panic(g_tr7_repl_shared);
-    shared_context_cleanup(g_tr7_repl_shared);
-    free(g_tr7_repl_shared);
-    g_tr7_repl_shared = NULL;
-    tr7_engine_destroy(g_tr7_repl_engine);
-    g_tr7_repl_engine = NULL;
-
-    return result;
+    return shared_lang_play_main(&tr7_repl_callbacks, argc, argv);
 }

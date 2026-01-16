@@ -75,11 +75,13 @@
 
 ### Refactoring
 
-- [ ] Extract shared REPL launcher for language modules
-  - Joy and TR7 duplicate CLI parsing, MIDI/synth setup, Lua bootstrapping, REPL loop
-  - Compare `src/lang/joy/repl.c:209-352` with `src/lang/tr7/repl.c:634-720`
-  - Divergence already visible: Joy hard-codes virtual port name, TR7 does not
-  - Fix: Create `shared_lang_repl_main(struct repl_config*)` so new languages don't duplicate code
+- [x] Extract shared REPL launcher for language modules (DONE)
+  - Created `src/loki/repl_launcher.c/h` with `SharedReplCallbacks` and `SharedReplArgs`
+  - Languages provide callbacks for: print_usage, list_ports, init, cleanup, exec_file, repl_loop
+  - Shared launcher handles: CLI parsing, syntax highlighting setup, common flow control
+  - Joy updated to use `shared_lang_repl_main()` and `shared_lang_play_main()`
+  - TR7 updated to use the same shared launcher pattern
+  - Reduced ~350 lines of duplicate code between Joy and TR7
 
 ### Editor Features
 

@@ -19,6 +19,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Changed
 
+- **Consolidated Dispatch Systems**: Both CLI (`lang_dispatch`) and editor (`loki_lang_bridge`) now use explicit initialization
+  - Removed `__attribute__((constructor))` from all `register.c` files (Alda, Joy, TR7)
+  - Added `loki_lang_init()` in `src/loki/lang_bridge.c` that calls per-language init functions
+  - Each language exports `*_loki_lang_init()` (alda, joy, tr7)
+  - `loki_editor_main()` calls `loki_lang_init()` before any language operations
+  - CMake passes `LANG_ALDA`, `LANG_JOY`, `LANG_TR7` defines for conditional compilation
+  - Both dispatch systems now portable to MSVC (no GCC/Clang-specific attributes)
+
+- **Shared REPL Launcher**: Extracted common REPL startup logic into reusable module
+  - New `src/loki/repl_launcher.c/h` with `SharedReplCallbacks` and `SharedReplArgs`
+  - Languages provide callbacks for: print_usage, list_ports, init, cleanup, exec_file, repl_loop
+  - Shared launcher handles: CLI parsing (`-h`, `-v`, `-l`, `-p`, `--virtual`, `-sf`), syntax highlighting setup, common flow control
+  - Joy refactored to use `shared_lang_repl_main()` and `shared_lang_play_main()`
+  - TR7 refactored to use the same shared launcher pattern
+  - Reduced ~350 lines of duplicate code between Joy and TR7
+
 - **Shared Csound Backend**: Moved Csound synthesis to shared layer
   - Real implementation now in `src/shared/audio/csound_backend.c`
   - `src/alda/csound_backend.c` provides thin wrappers calling `shared_csound_*` functions

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
 .PHONY: all build configure library alda editor repl clean test show-config \
-		csound configure-csound
+		csound configure-csound rebuild
 
 BUILD_DIR ?= build
 CMAKE ?= cmake
@@ -15,6 +15,10 @@ configure-csound:
 
 build: configure
 	@$(CMAKE) --build $(BUILD_DIR) --config Release
+
+rebuild: clean configure-csound test
+	@$(CMAKE) --build $(BUILD_DIR) --config Release
+	@$(CMAKE) -E chdir $(BUILD_DIR) ctest --output-on-failure
 
 # Build with Csound synthesis backend
 csound: configure-csound
