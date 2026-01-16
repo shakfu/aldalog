@@ -33,6 +33,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Go-to-line Command**: Jump to specific line numbers in the editor
+  - `:123` - Jump to line 123
+  - `:goto 123` - Same using explicit command name
+  - Auto-scrolls viewport to show target line
+  - Implemented in `src/loki/command.c`
+
+- **Search and Replace Command**: Vim-style substitution on current line
+  - `:s/old/new/` - Replace first occurrence on current line
+  - `:s/old/new/g` - Replace all occurrences on current line (global flag)
+  - Supports escaped characters (`\/` for literal `/`)
+  - Reports number of substitutions made
+  - Implemented in `src/loki/command.c`
+
 - **Shared REPL Commands**: New unified commands available in both Alda and Joy REPLs
   - `:q` `:quit` `:exit` - Exit REPL
   - `:h` `:help` `:?` - Show help

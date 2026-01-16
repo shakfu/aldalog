@@ -26,6 +26,10 @@ static int command_history_count = 0;
 static command_def_t dynamic_commands[MAX_DYNAMIC_COMMANDS];
 static int dynamic_command_count = 0;
 
+/* Forward declarations for new commands */
+static int cmd_goto(editor_ctx_t *ctx, const char *args);
+static int cmd_substitute(editor_ctx_t *ctx, const char *args);
+
 /* Built-in command table */
 static command_def_t builtin_commands[] = {
     {"w",      cmd_write,       "Write (save) file",              0, 1},
@@ -41,6 +45,7 @@ static command_def_t builtin_commands[] = {
     {"set",    cmd_set,         "Set option (wrap, etc)",         0, 2},
     {"e",      cmd_edit,        "Edit file",                      1, 1},
     {"edit",   cmd_edit,        "Edit file",                      1, 1},
+    {"goto",   cmd_goto,        "Go to line number",              1, 1},
     {"link",   cmd_link,        "Toggle Ableton Link sync",       0, 1},
     {"export", cmd_export,      "Export to MIDI file",            1, 1},
     {"csd",    cmd_csd,         "Toggle Csound synthesis",        0, 1},
@@ -169,6 +174,24 @@ static command_def_t* find_command(const char *name) {
     return NULL;
 }
 
+/* Helper: check if string is all digits */
+static int is_all_digits(const char *s) {
+    if (!s || !*s) return 0;
+    while (*s) {
+        if (!isdigit((unsigned char)*s)) return 0;
+        s++;
+    }
+    return 1;
+}
+
+/* Helper: check if command is a substitute pattern */
+static int is_substitute_pattern(const char *cmd) {
+    /* Match s/.../.../[g] pattern */
+    if (!cmd) return 0;
+    if (cmd[0] != 's' || cmd[1] != '/') return 0;
+    return 1;
+}
+
 /* ======================== Command Execution ======================== */
 
 int command_execute(editor_ctx_t *ctx, const char *cmdline) {
@@ -182,6 +205,29 @@ int command_execute(editor_ctx_t *ctx, const char *cmdline) {
 
     /* Add to history */
     command_history_add(cmdline + 1);  /* Skip ':' prefix */
+
+    /* Special case: numeric command like :123 -> go to line 123 */
+    if (is_all_digits(cmd_name)) {
+        int result = cmd_goto(ctx, cmd_name);
+        free(cmd_name);
+        free(args);
+        return result;
+    }
+
+    /* Special case: substitute pattern like :s/old/new/[g] */
+    if (is_substitute_pattern(cmd_name)) {
+        /* Reconstruct the full pattern (cmd_name + args) */
+        char pattern[512];
+        if (args && args[0]) {
+            snprintf(pattern, sizeof(pattern), "%s %s", cmd_name, args);
+        } else {
+            snprintf(pattern, sizeof(pattern), "%s", cmd_name);
+        }
+        int result = cmd_substitute(ctx, pattern);
+        free(cmd_name);
+        free(args);
+        return result;
+    }
 
     /* Find command handler */
     command_def_t *cmd = find_command(cmd_name);
@@ -590,6 +636,164 @@ int cmd_csd(editor_ctx_t *ctx, const char *args) {
         editor_set_status_msg(ctx, "Csound disabled, using TinySoundFont");
         return 1;
     }
+}
+
+/* ======================== Go-to-line Command ======================== */
+
+int cmd_goto(editor_ctx_t *ctx, const char *args) {
+    if (!args || !args[0]) {
+        editor_set_status_msg(ctx, "Usage: :<line> or :goto <line>");
+        return 0;
+    }
+
+    /* Parse line number */
+    int line = atoi(args);
+    if (line < 1) {
+        editor_set_status_msg(ctx, "Invalid line number: %s", args);
+        return 0;
+    }
+
+    /* Clamp to valid range (1-indexed for user, 0-indexed internally) */
+    if (line > ctx->numrows) {
+        line = ctx->numrows;
+    }
+
+    /* Move cursor to the line (convert to 0-indexed) */
+    ctx->cy = line - 1;
+    ctx->cx = 0;
+
+    /* Adjust scroll to show the target line */
+    if (ctx->cy < ctx->rowoff) {
+        ctx->rowoff = ctx->cy;
+    } else if (ctx->cy >= ctx->rowoff + ctx->screenrows - 2) {
+        ctx->rowoff = ctx->cy - ctx->screenrows / 2;
+        if (ctx->rowoff < 0) ctx->rowoff = 0;
+    }
+
+    editor_set_status_msg(ctx, "Line %d", line);
+    return 1;
+}
+
+/* ======================== Search and Replace Command ======================== */
+
+int cmd_substitute(editor_ctx_t *ctx, const char *pattern) {
+    if (!pattern || pattern[0] != 's' || pattern[1] != '/') {
+        editor_set_status_msg(ctx, "Usage: :s/old/new/[g]");
+        return 0;
+    }
+
+    /* Parse s/old/new/[g] pattern */
+    const char *p = pattern + 2;  /* Skip "s/" */
+
+    /* Find the "old" string (up to next unescaped /) */
+    char old_str[256] = {0};
+    int old_len = 0;
+    while (*p && *p != '/' && old_len < 255) {
+        if (*p == '\\' && *(p + 1)) {
+            /* Escaped character */
+            p++;
+            old_str[old_len++] = *p++;
+        } else {
+            old_str[old_len++] = *p++;
+        }
+    }
+    old_str[old_len] = '\0';
+
+    if (*p != '/') {
+        editor_set_status_msg(ctx, "Invalid substitute pattern");
+        return 0;
+    }
+    p++;  /* Skip middle '/' */
+
+    /* Find the "new" string (up to next unescaped / or end) */
+    char new_str[256] = {0};
+    int new_len = 0;
+    while (*p && *p != '/' && new_len < 255) {
+        if (*p == '\\' && *(p + 1)) {
+            /* Escaped character */
+            p++;
+            new_str[new_len++] = *p++;
+        } else {
+            new_str[new_len++] = *p++;
+        }
+    }
+    new_str[new_len] = '\0';
+
+    /* Check for global flag */
+    int global = 0;
+    if (*p == '/') {
+        p++;
+        while (*p) {
+            if (*p == 'g') global = 1;
+            p++;
+        }
+    }
+
+    if (old_len == 0) {
+        editor_set_status_msg(ctx, "Empty search pattern");
+        return 0;
+    }
+
+    /* Perform substitution on current line */
+    if (ctx->cy >= ctx->numrows) {
+        editor_set_status_msg(ctx, "No line to substitute");
+        return 0;
+    }
+
+    t_erow *row = &ctx->row[ctx->cy];
+    char *line = row->chars;
+    int line_len = row->size;
+
+    /* Build new line with substitutions */
+    char new_line[4096] = {0};
+    int new_line_len = 0;
+    int count = 0;
+    int i = 0;
+
+    while (i < line_len && new_line_len < 4090) {
+        /* Check for match at current position */
+        if (i + old_len <= line_len && strncmp(line + i, old_str, old_len) == 0) {
+            /* Found a match - substitute */
+            if (new_line_len + new_len < 4090) {
+                memcpy(new_line + new_line_len, new_str, new_len);
+                new_line_len += new_len;
+                i += old_len;
+                count++;
+                if (!global) {
+                    /* Copy rest of line after first substitution */
+                    int remaining = line_len - i;
+                    if (new_line_len + remaining < 4096) {
+                        memcpy(new_line + new_line_len, line + i, remaining);
+                        new_line_len += remaining;
+                    }
+                    break;
+                }
+            } else {
+                break;  /* Output buffer full */
+            }
+        } else {
+            /* No match - copy character */
+            new_line[new_line_len++] = line[i++];
+        }
+    }
+    new_line[new_line_len] = '\0';
+
+    if (count == 0) {
+        editor_set_status_msg(ctx, "Pattern not found: %s", old_str);
+        return 0;
+    }
+
+    /* Update the row */
+    free(row->chars);
+    row->chars = strdup(new_line);
+    row->size = new_line_len;
+
+    /* Update render */
+    editor_update_row(ctx, row);
+
+    ctx->dirty++;
+    editor_set_status_msg(ctx, "%d substitution%s", count, count > 1 ? "s" : "");
+    return 1;
 }
 
 /* ======================== Dynamic Command Registration (for Lua) ======================== */

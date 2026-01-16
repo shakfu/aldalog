@@ -130,6 +130,24 @@ Keybindings:
 | `i` | Enter INSERT mode |
 | `ESC` | Return to NORMAL mode |
 
+Ex Commands (press `:` in NORMAL mode):
+
+| Command | Action |
+|---------|--------|
+| `:w` | Save file |
+| `:q` | Quit (warns if unsaved) |
+| `:wq` | Save and quit |
+| `:q!` | Quit without saving |
+| `:e FILE` | Open file |
+| `:123` | Go to line 123 |
+| `:goto 123` | Go to line 123 |
+| `:s/old/new/` | Replace first occurrence on line |
+| `:s/old/new/g` | Replace all occurrences on line |
+| `:help` | Show help |
+| `:link` | Toggle Ableton Link |
+| `:csd` | Toggle Csound synthesis |
+| `:export FILE` | Export to MIDI file |
+
 ### Play Mode
 
 ```bash

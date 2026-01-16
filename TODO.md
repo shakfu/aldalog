@@ -62,18 +62,28 @@
   - `psnd joy` starts Joy REPL
   - Removed implicit REPL fallback
 
-- [ ] Go-to-line command
+- [x] Go-to-line command
   - Add `:123` or `:goto 123` command
-  - Simple addition to command mode
+  - Implemented in `src/loki/command.c` with `cmd_goto()`
+  - Supports `:goto 123`, `:123`, auto-scrolls to show target line
 
-- [ ] Search and replace
-  - Extend search with `:s/old/new/` command
+- [x] Search and replace
+  - Implemented `:s/old/new/` and `:s/old/new/g` commands
+  - Added `cmd_substitute()` in `src/loki/command.c`
+  - Supports escaped characters (`\/`), global flag (`g`)
 
 - [ ] Playback visualization
   - Highlight currently playing region
   - Show playback progress in status bar
 
 ### Architecture
+
+- [ ] Modular language selection via CMake options
+  - Add `BUILD_ALDA_LANGUAGE` and `BUILD_JOY_LANGUAGE` options (default ON)
+  - Conditional library builds and linking in CMakeLists.txt
+  - Preprocessor guards in `repl.c` and `main.c` for language-specific code
+  - Conditional Lua bindings in `src/loki/alda.c` and `src/loki/joy.c`
+  - Enables building minimal binaries with only desired languages
 
 - [x] Move Alda state to context
   - Refactored `g_alda_state` in `loki_alda.c` to be per-context
