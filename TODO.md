@@ -51,6 +51,22 @@
 
 ### Editor Features
 
+- [ ] Consistent repl api for each language
+
+  - Use `:<cmd> [<arg> ...]` syntax
+
+- [ ] Normalize the cli api for each language
+
+  ```sh
+  # change
+  psnd                     Start Alda REPL
+  psnd -sf gm.sf2          Alda REPL with built-in synth
+  
+  # to
+  psnd alda                Start Alda REPL
+  psnd alda -sf gm.sf2     Alda REPL with built-in synth
+  ```
+
 - [ ] Go-to-line command
   - Add `:123` or `:goto 123` command
   - Simple addition to command mode
