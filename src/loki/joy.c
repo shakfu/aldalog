@@ -11,6 +11,7 @@
 
 #include "joy.h"
 #include "internal.h"
+#include "lang_bridge.h"
 
 /* Joy library headers */
 #include "joy_runtime.h"
@@ -99,6 +100,11 @@ int loki_joy_init(editor_ctx_t *ctx) {
         free(state);
         ctx->joy_state = NULL;
         return -1;
+    }
+
+    /* Open virtual MIDI port for Joy output */
+    if (joy_midi_open_virtual("psnd-joy") != 0) {
+        /* Non-fatal - can still use real ports */
     }
 
     state->initialized = 1;
@@ -335,4 +341,38 @@ const char *loki_joy_get_error(editor_ctx_t *ctx) {
     if (!state) return NULL;
 
     return state->last_error[0] ? state->last_error : NULL;
+}
+
+/* ======================= Language Bridge Registration ======================= */
+
+/* Language operations for Joy */
+static const LokiLangOps joy_lang_ops = {
+    .name = "joy",
+    .extensions = {".joy", NULL},
+
+    /* Lifecycle */
+    .init = loki_joy_init,
+    .cleanup = loki_joy_cleanup,
+    .is_initialized = loki_joy_is_initialized,
+
+    /* Main loop - Joy doesn't need async callbacks */
+    .check_callbacks = NULL,
+
+    /* Playback */
+    .eval = loki_joy_eval,
+    .stop = loki_joy_stop,
+    .is_playing = NULL,  /* Joy is synchronous */
+
+    /* Export - Joy doesn't support MIDI export yet */
+    .has_events = NULL,
+    .populate_shared_buffer = NULL,
+
+    /* Error */
+    .get_error = loki_joy_get_error,
+};
+
+/* Register Joy with the language bridge at startup */
+__attribute__((constructor))
+static void joy_register_language(void) {
+    loki_lang_register(&joy_lang_ops);
 }

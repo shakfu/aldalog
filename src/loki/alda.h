@@ -322,6 +322,25 @@ const AldaScheduledEvent* loki_alda_get_events(editor_ctx_t *ctx, int *count);
  */
 int loki_alda_get_channel_count(editor_ctx_t *ctx);
 
+/**
+ * Check if Alda has exportable events.
+ *
+ * @param ctx Editor context
+ * @return 1 if events available, 0 otherwise
+ */
+int loki_alda_has_events(editor_ctx_t *ctx);
+
+/**
+ * Populate the shared MIDI event buffer with Alda events.
+ * Converts AldaScheduledEvent array to SharedMidiEvent format.
+ * Call this before loki_midi_export_shared() to export Alda content.
+ * Does nothing if Alda is not initialized or has no events.
+ *
+ * @param ctx Editor context
+ * @return 0 on success, -1 if no events available
+ */
+int loki_alda_populate_shared_buffer(editor_ctx_t *ctx);
+
 /* ======================= Utility Functions ======================= */
 
 /**

@@ -28,8 +28,9 @@
 #include "terminal.h"
 #include "buffers.h"
 #include "syntax.h"
+#include "lang_bridge.h"
 #ifdef LANG_ALDA
-#include "alda.h"
+#include "alda.h"  /* For Alda-specific backend config (soundfont, csound) */
 #endif
 #include "loki/link.h"
 
@@ -360,51 +361,61 @@ int loki_editor_main(int argc, char **argv) {
         exit(1);
     }
 
-#ifdef LANG_ALDA
-    /* Auto-initialize Alda for .alda files (must be after buffers_init) */
+    /* Auto-initialize language for known file types (must be after buffers_init) */
     {
         editor_ctx_t *ctx = buffer_get_current();
-        size_t flen = strlen(filename);
-        if (ctx && flen >= 5 && strcmp(filename + flen - 5, ".alda") == 0) {
-            int ret = loki_alda_init(ctx, NULL);
+        if (ctx) {
+            int ret = loki_lang_init_for_file(ctx);
             if (ret == 0) {
-                ctx->alda_mode = 1;
+                const LokiLangOps *lang = loki_lang_for_file(ctx->filename);
+                if (lang) {
+#ifdef LANG_ALDA
+                    /* Alda-specific backend configuration */
+                    if (strcmp(lang->name, "alda") == 0) {
+                        ctx->alda_mode = 1;
 
-                /* Load soundfont if specified */
-                if (soundfont_path) {
-                    if (loki_alda_load_soundfont(ctx, soundfont_path) == 0) {
-                        loki_alda_set_synth_enabled(ctx, 1);
-                        editor_set_status_msg(ctx, "ALDA: Using TinySoundFont (%s)", soundfont_path);
-                    } else {
-                        editor_set_status_msg(ctx, "Failed to load soundfont: %s", soundfont_path);
-                    }
-                }
-                /* Load Csound .csd if specified (takes precedence over soundfont) */
-                else if (csound_path) {
-                    if (loki_alda_csound_is_available()) {
-                        if (loki_alda_csound_load_csd(ctx, csound_path) == 0) {
-                            if (loki_alda_csound_set_enabled(ctx, 1) == 0) {
-                                editor_set_status_msg(ctx, "ALDA: Using Csound (%s)", csound_path);
+                        /* Load soundfont if specified */
+                        if (soundfont_path) {
+                            if (loki_alda_load_soundfont(ctx, soundfont_path) == 0) {
+                                loki_alda_set_synth_enabled(ctx, 1);
+                                editor_set_status_msg(ctx, "ALDA: Using TinySoundFont (%s)", soundfont_path);
                             } else {
-                                editor_set_status_msg(ctx, "Failed to enable Csound");
+                                editor_set_status_msg(ctx, "Failed to load soundfont: %s", soundfont_path);
                             }
-                        } else {
-                            editor_set_status_msg(ctx, "Failed to load CSD: %s", csound_path);
                         }
-                    } else {
-                        editor_set_status_msg(ctx, "Csound not available (build with make csound)");
+                        /* Load Csound .csd if specified (takes precedence over soundfont) */
+                        else if (csound_path) {
+                            if (loki_alda_csound_is_available()) {
+                                if (loki_alda_csound_load_csd(ctx, csound_path) == 0) {
+                                    if (loki_alda_csound_set_enabled(ctx, 1) == 0) {
+                                        editor_set_status_msg(ctx, "ALDA: Using Csound (%s)", csound_path);
+                                    } else {
+                                        editor_set_status_msg(ctx, "Failed to enable Csound");
+                                    }
+                                } else {
+                                    editor_set_status_msg(ctx, "Failed to load CSD: %s", csound_path);
+                                }
+                            } else {
+                                editor_set_status_msg(ctx, "Csound not available (build with make csound)");
+                            }
+                        }
+                        else {
+                            editor_set_status_msg(ctx, "ALDA: Ctrl-E part, Ctrl-P file, Ctrl-G stop");
+                        }
+                    } else
+#endif /* LANG_ALDA */
+                    {
+                        /* Generic language init message */
+                        editor_set_status_msg(ctx, "%s: Ctrl-E eval, Ctrl-G stop", lang->name);
                     }
                 }
-                else {
-                    editor_set_status_msg(ctx, "ALDA: Ctrl-E part, Ctrl-P file, Ctrl-G stop");
-                }
-            } else {
-                const char *err = loki_alda_get_error(ctx);
-                editor_set_status_msg(ctx, "Alda init failed: %s", err ? err : "unknown error");
+            } else if (ret == -1) {
+                const char *err = loki_lang_get_error(ctx);
+                editor_set_status_msg(ctx, "Language init failed: %s", err ? err : "unknown error");
             }
+            /* ret == 1 means no language for this file type, which is fine */
         }
     }
-#endif /* LANG_ALDA */
 
     /* Enable terminal raw mode and start main loop */
     terminal_enable_raw_mode(&E, STDIN_FILENO);
@@ -426,12 +437,10 @@ int loki_editor_main(int argc, char **argv) {
             loki_link_check_callbacks(ctx, ctx->L);
         }
 
-#ifdef LANG_ALDA
-        /* Process any pending alda playback callbacks */
+        /* Process any pending language callbacks */
         if (ctx->L) {
-            loki_alda_check_callbacks(ctx, ctx->L);
+            loki_lang_check_callbacks(ctx, ctx->L);
         }
-#endif
 
         editor_refresh_screen(ctx);
         editor_process_keypress(ctx, STDIN_FILENO);
@@ -444,10 +453,8 @@ int loki_editor_main(int argc, char **argv) {
 void editor_cleanup_resources(editor_ctx_t *ctx) {
     if (!ctx) return;
 
-#ifdef LANG_ALDA
-    /* Clean up alda subsystem (stops all playback) */
-    loki_alda_cleanup(ctx);
-#endif
+    /* Clean up all language subsystems (stops all playback) */
+    loki_lang_cleanup_all(ctx);
 
     /* Clean up Lua REPL */
     lua_repl_free(&ctx->repl);

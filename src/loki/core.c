@@ -44,9 +44,7 @@ see LICENSE.
 #include "buffers.h"
 #include "syntax.h"
 #include "indent.h"
-#ifdef LANG_ALDA
-#include "alda.h"
-#endif
+#include "lang_bridge.h"
 #include "loki/link.h"
 
 void editor_set_status_msg(editor_ctx_t *ctx, const char *fmt, ...) {
@@ -707,12 +705,7 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
 
     /* Get mode indicator */
     const char *mode_str = "";
-#ifdef LANG_ALDA
-    int link_active = ctx->alda_mode &&
-        loki_link_is_initialized(ctx) && loki_link_is_enabled(ctx);
-#else
     int link_active = loki_link_is_initialized(ctx) && loki_link_is_enabled(ctx);
-#endif
 
     switch(ctx->mode) {
         case MODE_NORMAL: mode_str = link_active ? "LINK" : "NORMAL"; break;
@@ -721,22 +714,26 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
         case MODE_COMMAND: mode_str = "COMMAND"; break;
     }
 
-#ifdef LANG_ALDA
-    /* Show ALDA indicator if in alda mode */
-    const char *alda_str = ctx->alda_mode ? "ALDA " : "";
-#else
-    const char *alda_str = "";
-#endif
+    /* Show language indicator if a language is active for this file */
+    const LokiLangOps *lang = loki_lang_for_file(ctx->filename);
+    const char *lang_str = "";
+    char lang_buf[16] = "";
+    if (lang && lang->is_initialized && lang->is_initialized(ctx)) {
+        snprintf(lang_buf, sizeof(lang_buf), "%s ", lang->name);
+        /* Uppercase the language name */
+        for (int i = 0; lang_buf[i] && i < 15; i++) {
+            if (lang_buf[i] >= 'a' && lang_buf[i] <= 'z') {
+                lang_buf[i] -= 32;
+            }
+        }
+        lang_str = lang_buf;
+    }
 
     int len = snprintf(status, sizeof(status), " %s%s  %.20s - %d lines %s",
-        alda_str, mode_str, ctx->filename, ctx->numrows, ctx->dirty ? "(modified)" : "");
+        lang_str, mode_str, ctx->filename, ctx->numrows, ctx->dirty ? "(modified)" : "");
 
-#ifdef LANG_ALDA
-    /* Show playing indicator if Alda is active */
-    const char *playing = loki_alda_is_playing(ctx) ? "[PLAYING] " : "";
-#else
-    const char *playing = "";
-#endif
+    /* Show playing indicator if any language is playing */
+    const char *playing = loki_lang_is_playing(ctx) ? "[PLAYING] " : "";
     int rlen = snprintf(rstatus, sizeof(rstatus),
         "%s%d/%d", playing, ctx->rowoff+ctx->cy+1, ctx->numrows);
     if (len > ctx->screencols) len = ctx->screencols;

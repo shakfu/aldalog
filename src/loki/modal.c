@@ -37,12 +37,9 @@
 #include "terminal.h"
 #include "undo.h"
 #include "buffers.h"
+#include "lang_bridge.h"
 #ifdef LANG_ALDA
-#include "alda.h"
-#include "alda/csound_backend.h"
-#endif
-#ifdef LANG_JOY
-#include "joy.h"
+#include "alda/csound_backend.h"  /* For CSD file playback */
 #endif
 #include <stdlib.h>
 #include <string.h>
@@ -407,52 +404,20 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
                     break;
                 }
 
-#ifdef LANG_JOY
-                /* Handle .joy files with Joy interpreter */
-                if (is_joy_file(ctx->filename)) {
-                    if (!loki_joy_is_initialized(ctx)) {
-                        if (loki_joy_init(ctx) != 0) {
-                            editor_set_status_msg(ctx, "Joy init failed: %s",
-                                loki_joy_get_error(ctx) ? loki_joy_get_error(ctx) : "unknown");
-                            free(code);
-                            break;
-                        }
-                        /* Open virtual MIDI port */
-                        loki_joy_open_virtual(ctx, "psnd-joy");
+                /* Evaluate code with the appropriate language */
+                const LokiLangOps *lang = loki_lang_for_file(ctx->filename);
+                if (lang) {
+                    int ret = loki_lang_eval(ctx, code);
+                    if (ret == 0) {
+                        editor_set_status_msg(ctx, "%s: evaluated", lang->name);
+                    } else if (ret == -1) {
+                        const char *err = loki_lang_get_error(ctx);
+                        editor_set_status_msg(ctx, "%s error: %s", lang->name,
+                            err ? err : "eval failed");
                     }
-                    if (loki_joy_eval(ctx, code) == 0) {
-                        editor_set_status_msg(ctx, "Joy: evaluated");
-                    } else {
-                        editor_set_status_msg(ctx, "Joy error: %s",
-                            loki_joy_get_error(ctx) ? loki_joy_get_error(ctx) : "eval failed");
-                    }
-                    free(code);
-                    ctx->sel_active = 0;
-                    break;
-                }
-#endif
-
-#ifdef LANG_ALDA
-                /* Handle .alda files with Alda interpreter */
-                if (!loki_alda_is_initialized(ctx)) {
-                    /* Auto-init if not initialized */
-                    if (loki_alda_init(ctx, NULL) != 0) {
-                        editor_set_status_msg(ctx, "Alda init failed: %s",
-                            loki_alda_get_error(ctx) ? loki_alda_get_error(ctx) : "unknown");
-                        free(code);
-                        break;
-                    }
-                }
-                int slot = loki_alda_eval_async(ctx, code, NULL);
-                if (slot >= 0) {
-                    editor_set_status_msg(ctx, "Alda: playing part (slot %d)", slot);
                 } else {
-                    editor_set_status_msg(ctx, "Alda error: %s",
-                        loki_alda_get_error(ctx) ? loki_alda_get_error(ctx) : "eval failed");
+                    editor_set_status_msg(ctx, "No language support for this file type");
                 }
-#else
-                editor_set_status_msg(ctx, "No music language support compiled in");
-#endif
                 free(code);
                 /* Clear selection after eval */
                 ctx->sel_active = 0;
@@ -510,85 +475,39 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
                 }
                 *p = '\0';
 
-#ifdef LANG_JOY
-                /* Handle .joy files with Joy interpreter */
-                if (is_joy_file(ctx->filename)) {
-                    if (!loki_joy_is_initialized(ctx)) {
-                        if (loki_joy_init(ctx) != 0) {
-                            editor_set_status_msg(ctx, "Joy init failed: %s",
-                                loki_joy_get_error(ctx) ? loki_joy_get_error(ctx) : "unknown");
-                            free(code);
-                            break;
-                        }
-                        /* Open virtual MIDI port */
-                        loki_joy_open_virtual(ctx, "psnd-joy");
+                /* Evaluate full file with the appropriate language */
+                const LokiLangOps *lang = loki_lang_for_file(ctx->filename);
+                if (lang) {
+                    int ret = loki_lang_eval(ctx, code);
+                    if (ret == 0) {
+                        editor_set_status_msg(ctx, "%s: playing file", lang->name);
+                    } else if (ret == -1) {
+                        const char *err = loki_lang_get_error(ctx);
+                        editor_set_status_msg(ctx, "%s error: %s", lang->name,
+                            err ? err : "eval failed");
                     }
-                    if (loki_joy_eval(ctx, code) == 0) {
-                        editor_set_status_msg(ctx, "Joy: playing file");
-                    } else {
-                        editor_set_status_msg(ctx, "Joy error: %s",
-                            loki_joy_get_error(ctx) ? loki_joy_get_error(ctx) : "eval failed");
-                    }
-                    free(code);
-                    break;
-                }
-#endif
-
-#ifdef LANG_ALDA
-                /* Handle .alda files with Alda interpreter */
-                if (!loki_alda_is_initialized(ctx)) {
-                    if (loki_alda_init(ctx, NULL) != 0) {
-                        editor_set_status_msg(ctx, "Alda init failed: %s",
-                            loki_alda_get_error(ctx) ? loki_alda_get_error(ctx) : "unknown");
-                        free(code);
-                        break;
-                    }
-                }
-                int slot2 = loki_alda_eval_async(ctx, code, NULL);
-                if (slot2 >= 0) {
-                    editor_set_status_msg(ctx, "Playing file (slot %d)", slot2);
                 } else {
-                    editor_set_status_msg(ctx, "Alda error: %s",
-                        loki_alda_get_error(ctx) ? loki_alda_get_error(ctx) : "eval failed");
+                    editor_set_status_msg(ctx, "No language support for this file type");
                 }
-#else
-                editor_set_status_msg(ctx, "No music language support compiled in");
-#endif
                 free(code);
             }
             break;
         case CTRL_G:
             /* Stop playback */
             {
-                int stopped = 0;
 #ifdef LANG_ALDA
+                /* Handle CSD file stop separately (Csound backend) */
                 if (is_csd_file(ctx->filename)) {
-                    /* Stop Csound playback */
                     if (alda_csound_playback_active()) {
                         alda_csound_stop_playback();
                         editor_set_status_msg(ctx, "Stopped");
-                        stopped = 1;
+                        break;
                     }
                 }
 #endif
-#ifdef LANG_JOY
-                if (!stopped && is_joy_file(ctx->filename)) {
-                    /* Stop Joy playback */
-                    if (loki_joy_is_initialized(ctx)) {
-                        loki_joy_stop(ctx);
-                        editor_set_status_msg(ctx, "Stopped");
-                        stopped = 1;
-                    }
-                }
-#endif
-#ifdef LANG_ALDA
-                if (!stopped && loki_alda_is_initialized(ctx)) {
-                    /* Stop Alda playback */
-                    loki_alda_stop_all(ctx);
-                    editor_set_status_msg(ctx, "Stopped");
-                }
-#endif
-                (void)stopped; /* Suppress unused warning when no languages compiled */
+                /* Stop all language playback */
+                loki_lang_stop_all(ctx);
+                editor_set_status_msg(ctx, "Stopped");
             }
             break;
         case CTRL_Q:
@@ -730,26 +649,21 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
                 }
 
                 if (code && *code) {
-#ifdef LANG_ALDA
-                    if (!loki_alda_is_initialized(ctx)) {
-                        if (loki_alda_init(ctx, NULL) != 0) {
-                            editor_set_status_msg(ctx, "Alda init failed: %s",
-                                loki_alda_get_error(ctx) ? loki_alda_get_error(ctx) : "unknown");
-                            free(code);
-                            break;
+                    /* Evaluate code with the appropriate language */
+                    const LokiLangOps *lang = loki_lang_for_file(ctx->filename);
+                    if (lang) {
+                        int ret = loki_lang_eval(ctx, code);
+                        if (ret == 0) {
+                            editor_set_status_msg(ctx, "%s: %s", lang->name,
+                                play_file ? "playing file" : "evaluated");
+                        } else if (ret == -1) {
+                            const char *err = loki_lang_get_error(ctx);
+                            editor_set_status_msg(ctx, "%s error: %s", lang->name,
+                                err ? err : "eval failed");
                         }
-                    }
-                    int slot3 = loki_alda_eval_async(ctx, code, NULL);
-                    if (slot3 >= 0) {
-                        editor_set_status_msg(ctx, "%s (slot %d)",
-                            play_file ? "Playing file" : "Playing part", slot3);
                     } else {
-                        editor_set_status_msg(ctx, "Alda error: %s",
-                            loki_alda_get_error(ctx) ? loki_alda_get_error(ctx) : "eval failed");
+                        editor_set_status_msg(ctx, "No language support for this file type");
                     }
-#else
-                    editor_set_status_msg(ctx, "No music language support compiled in");
-#endif
                 } else {
                     editor_set_status_msg(ctx, "No code to evaluate");
                 }
@@ -760,35 +674,19 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
         case CTRL_G:
             /* Stop playback */
             {
-                int stopped2 = 0;
 #ifdef LANG_ALDA
+                /* Handle CSD file stop separately (Csound backend) */
                 if (is_csd_file(ctx->filename)) {
-                    /* Stop Csound playback */
                     if (alda_csound_playback_active()) {
                         alda_csound_stop_playback();
                         editor_set_status_msg(ctx, "Stopped");
-                        stopped2 = 1;
+                        break;
                     }
                 }
 #endif
-#ifdef LANG_JOY
-                if (!stopped2 && is_joy_file(ctx->filename)) {
-                    /* Stop Joy playback */
-                    if (loki_joy_is_initialized(ctx)) {
-                        loki_joy_stop(ctx);
-                        editor_set_status_msg(ctx, "Stopped");
-                        stopped2 = 1;
-                    }
-                }
-#endif
-#ifdef LANG_ALDA
-                if (!stopped2 && loki_alda_is_initialized(ctx)) {
-                    /* Stop Alda playback */
-                    loki_alda_stop_all(ctx);
-                    editor_set_status_msg(ctx, "Stopped");
-                }
-#endif
-                (void)stopped2;
+                /* Stop all language playback */
+                loki_lang_stop_all(ctx);
+                editor_set_status_msg(ctx, "Stopped");
             }
             break;
 

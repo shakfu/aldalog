@@ -6,7 +6,7 @@
 
 extern "C" {
 #include "loki/midi_export.h"
-#include "midi/events.h"
+#include "shared/midi/events.h"
 }
 
 /* midifile library */

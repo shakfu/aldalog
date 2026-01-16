@@ -13,6 +13,7 @@
 #include "alda.h"
 #include "internal.h"
 #include "loki/link.h"
+#include "lang_bridge.h"
 
 /* Alda library headers */
 #include <alda/alda.h>
@@ -20,6 +21,9 @@
 
 /* Shared audio backend (for shared_csound_is_available) */
 #include "shared/audio/audio.h"
+
+/* Shared MIDI events buffer (for export) */
+#include "shared/midi/events.h"
 
 /* Lua headers for callbacks */
 #include "lua.h"
@@ -445,6 +449,76 @@ int loki_alda_get_channel_count(editor_ctx_t *ctx) {
     return count;
 }
 
+int loki_alda_has_events(editor_ctx_t *ctx) {
+    if (!loki_alda_is_initialized(ctx)) {
+        return 0;
+    }
+    int event_count = 0;
+    loki_alda_get_events(ctx, &event_count);
+    return event_count > 0;
+}
+
+int loki_alda_populate_shared_buffer(editor_ctx_t *ctx) {
+    if (!loki_alda_has_events(ctx)) {
+        return -1;
+    }
+
+    int event_count = 0;
+    const AldaScheduledEvent *events = loki_alda_get_events(ctx, &event_count);
+
+    if (!events || event_count == 0) {
+        return -1;
+    }
+
+    /* Initialize shared buffer with Alda's ticks per quarter */
+    if (shared_midi_events_init(ALDA_TICKS_PER_QUARTER) != 0) {
+        return -1;
+    }
+
+    shared_midi_events_clear();
+
+    /* Add initial tempo */
+    int tempo = loki_alda_get_tempo(ctx);
+    shared_midi_events_tempo(0, tempo);
+
+    /* Convert each Alda event to shared format */
+    for (int i = 0; i < event_count; i++) {
+        const AldaScheduledEvent *evt = &events[i];
+
+        switch (evt->type) {
+            case ALDA_EVT_NOTE_ON:
+                shared_midi_events_note_on(evt->tick, evt->channel,
+                                           evt->data1, evt->data2);
+                break;
+
+            case ALDA_EVT_NOTE_OFF:
+                shared_midi_events_note_off(evt->tick, evt->channel, evt->data1);
+                break;
+
+            case ALDA_EVT_PROGRAM:
+                shared_midi_events_program(evt->tick, evt->channel, evt->data1);
+                break;
+
+            case ALDA_EVT_CC:
+                shared_midi_events_cc(evt->tick, evt->channel,
+                                      evt->data1, evt->data2);
+                break;
+
+            case ALDA_EVT_PAN:
+                /* Pan is CC #10 */
+                shared_midi_events_cc(evt->tick, evt->channel, 10, evt->data1);
+                break;
+
+            case ALDA_EVT_TEMPO:
+                shared_midi_events_tempo(evt->tick, evt->data1);
+                break;
+        }
+    }
+
+    shared_midi_events_sort();
+    return 0;
+}
+
 int loki_alda_set_synth_enabled(editor_ctx_t *ctx, int enable) {
     LokiAldaState *state = get_alda_state(ctx);
     if (!state || !state->initialized) return -1;
@@ -716,4 +790,53 @@ const char *loki_alda_get_error(editor_ctx_t *ctx) {
     LokiAldaState *state = get_alda_state(ctx);
     if (!state) return NULL;
     return state->last_error[0] ? state->last_error : NULL;
+}
+
+/* ======================= Language Bridge Registration ======================= */
+
+/* Wrapper for init (bridge interface doesn't take port_name) */
+static int alda_bridge_init(editor_ctx_t *ctx) {
+    return loki_alda_init(ctx, NULL);
+}
+
+/* Wrapper for eval (bridge uses sync eval) */
+static int alda_bridge_eval(editor_ctx_t *ctx, const char *code) {
+    return loki_alda_eval_sync(ctx, code);
+}
+
+/* Wrapper for stop (bridge doesn't take slot_id) */
+static void alda_bridge_stop(editor_ctx_t *ctx) {
+    loki_alda_stop_all(ctx);
+}
+
+/* Language operations for Alda */
+static const LokiLangOps alda_lang_ops = {
+    .name = "alda",
+    .extensions = {".alda", NULL},
+
+    /* Lifecycle */
+    .init = alda_bridge_init,
+    .cleanup = loki_alda_cleanup,
+    .is_initialized = loki_alda_is_initialized,
+
+    /* Main loop */
+    .check_callbacks = loki_alda_check_callbacks,
+
+    /* Playback */
+    .eval = alda_bridge_eval,
+    .stop = alda_bridge_stop,
+    .is_playing = loki_alda_is_playing,
+
+    /* Export */
+    .has_events = loki_alda_has_events,
+    .populate_shared_buffer = loki_alda_populate_shared_buffer,
+
+    /* Error */
+    .get_error = loki_alda_get_error,
+};
+
+/* Register Alda with the language bridge at startup */
+__attribute__((constructor))
+static void alda_register_language(void) {
+    loki_lang_register(&alda_lang_ops);
 }

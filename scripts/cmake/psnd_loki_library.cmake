@@ -31,6 +31,7 @@ set(LOKI_CORE_SOURCES
     ${PSND_ROOT_DIR}/src/loki/csound.c
     ${PSND_ROOT_DIR}/src/loki/export.c
     ${PSND_ROOT_DIR}/src/loki/midi_export.cpp
+    ${PSND_ROOT_DIR}/src/loki/lang_bridge.c
 )
 
 # Language-specific sources
