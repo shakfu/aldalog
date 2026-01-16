@@ -25,8 +25,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "../internal.h"
-#include "../lang_bridge.h"
+#include "loki/internal.h"
+#include "loki/lang_bridge.h"
 #include "loki/lua.h"    /* For loki_lua_get_editor_context */
 #include "lauxlib.h"     /* For luaL_checkstring, etc. */
 

@@ -1,8 +1,24 @@
 include_guard(GLOBAL)
 
+# Common REPL infrastructure
+set(PSND_REPL_SOURCES
+    ${PSND_ROOT_DIR}/src/repl.c
+)
+
+# Language-specific REPL sources
+if(LANG_ALDA)
+    list(APPEND PSND_REPL_SOURCES ${PSND_ROOT_DIR}/src/lang/alda/repl.c)
+endif()
+if(LANG_JOY)
+    list(APPEND PSND_REPL_SOURCES ${PSND_ROOT_DIR}/src/lang/joy/repl.c)
+endif()
+if(LANG_TR7)
+    list(APPEND PSND_REPL_SOURCES ${PSND_ROOT_DIR}/src/lang/tr7/repl.c)
+endif()
+
 add_executable(psnd_bin
     ${PSND_ROOT_DIR}/src/main.c
-    ${PSND_ROOT_DIR}/src/repl.c
+    ${PSND_REPL_SOURCES}
 )
 set_target_properties(psnd_bin PROPERTIES OUTPUT_NAME "psnd")
 

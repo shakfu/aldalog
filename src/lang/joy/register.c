@@ -9,9 +9,9 @@
 #include <string.h>
 #include <setjmp.h>
 
-#include "joy.h"
-#include "../internal.h"
-#include "../lang_bridge.h"
+#include "register.h"
+#include "loki/internal.h"
+#include "loki/lang_bridge.h"
 #include "loki/lua.h"  /* For loki_lua_get_editor_context */
 #include "lauxlib.h"   /* For luaL_checkstring, luaL_checkinteger, etc. */
 

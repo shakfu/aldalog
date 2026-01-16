@@ -10,10 +10,10 @@
 #include <pthread.h>
 #include <time.h>
 
-#include "alda.h"
-#include "../internal.h"
+#include "register.h"
+#include "loki/internal.h"
 #include "loki/link.h"
-#include "../lang_bridge.h"
+#include "loki/lang_bridge.h"
 
 /* Alda library headers */
 #include <alda/alda.h>

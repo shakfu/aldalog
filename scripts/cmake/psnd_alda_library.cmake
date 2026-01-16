@@ -1,21 +1,24 @@
 include_guard(GLOBAL)
 
 set(LIBALDA_SOURCES
-    ${PSND_ROOT_DIR}/src/alda/tokens.c
-    ${PSND_ROOT_DIR}/src/alda/error.c
-    ${PSND_ROOT_DIR}/src/alda/scanner.c
-    ${PSND_ROOT_DIR}/src/alda/ast.c
-    ${PSND_ROOT_DIR}/src/alda/parser.c
-    ${PSND_ROOT_DIR}/src/alda/context.c
-    ${PSND_ROOT_DIR}/src/alda/instruments.c
-    ${PSND_ROOT_DIR}/src/alda/midi_backend.c
-    ${PSND_ROOT_DIR}/src/alda/tsf_backend_wrapper.c
-    ${PSND_ROOT_DIR}/src/alda/csound_backend.c
-    ${PSND_ROOT_DIR}/src/alda/scheduler.c
-    ${PSND_ROOT_DIR}/src/alda/interpreter.c
-    ${PSND_ROOT_DIR}/src/alda/attributes.c
-    ${PSND_ROOT_DIR}/src/alda/async.c
-    ${PSND_ROOT_DIR}/src/alda/scala.c
+    # Implementation files
+    ${PSND_ROOT_DIR}/src/lang/alda/impl/tokens.c
+    ${PSND_ROOT_DIR}/src/lang/alda/impl/error.c
+    ${PSND_ROOT_DIR}/src/lang/alda/impl/scanner.c
+    ${PSND_ROOT_DIR}/src/lang/alda/impl/ast.c
+    ${PSND_ROOT_DIR}/src/lang/alda/impl/parser.c
+    ${PSND_ROOT_DIR}/src/lang/alda/impl/context.c
+    ${PSND_ROOT_DIR}/src/lang/alda/impl/instruments.c
+    ${PSND_ROOT_DIR}/src/lang/alda/impl/interpreter.c
+    ${PSND_ROOT_DIR}/src/lang/alda/impl/attributes.c
+    ${PSND_ROOT_DIR}/src/lang/alda/impl/scala.c
+    # Backends
+    ${PSND_ROOT_DIR}/src/lang/alda/backends/midi_backend.c
+    ${PSND_ROOT_DIR}/src/lang/alda/backends/tsf_backend_wrapper.c
+    ${PSND_ROOT_DIR}/src/lang/alda/backends/csound_backend.c
+    # Scheduler
+    ${PSND_ROOT_DIR}/src/lang/alda/scheduler.c
+    ${PSND_ROOT_DIR}/src/lang/alda/async.c
 )
 
 add_library(alda STATIC ${LIBALDA_SOURCES})
@@ -24,6 +27,7 @@ add_library(alda::alda ALIAS alda)
 target_include_directories(alda
     PUBLIC
         ${PSND_ROOT_DIR}/include
+        ${PSND_ROOT_DIR}/src/lang/alda/include
     PRIVATE
         ${PSND_ROOT_DIR}/src/shared
         ${PSND_ROOT_DIR}/thirdparty/TinySoundFont

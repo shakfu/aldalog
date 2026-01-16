@@ -34,16 +34,16 @@ set(LOKI_CORE_SOURCES
     ${PSND_ROOT_DIR}/src/loki/lang_bridge.c
 )
 
-# Language-specific sources (in src/loki/lang/)
+# Language-specific register sources (in src/lang/*/register.c)
 set(LOKI_LANG_SOURCES)
 if(LANG_ALDA)
-    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/loki/lang/alda.c)
+    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/lang/alda/register.c)
 endif()
 if(LANG_JOY)
-    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/loki/lang/joy.c)
+    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/lang/joy/register.c)
 endif()
 if(LANG_TR7)
-    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/loki/lang/tr7.c)
+    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/lang/tr7/register.c)
 endif()
 
 add_library(libloki ${LOKI_LIBRARY_TYPE}
@@ -54,6 +54,10 @@ add_library(libloki ${LOKI_LIBRARY_TYPE}
 set(LOKI_PUBLIC_INCLUDES
     ${PSND_ROOT_DIR}/include
     ${PSND_ROOT_DIR}/src
+    ${PSND_ROOT_DIR}/src/lang/alda/include
+    ${PSND_ROOT_DIR}/src/lang/joy/impl
+    ${PSND_ROOT_DIR}/src/lang/joy/music
+    ${PSND_ROOT_DIR}/src/lang/joy/midi
     ${PSND_ROOT_DIR}/thirdparty/link-3.1.5/extensions/abl_link/include
     ${PSND_ROOT_DIR}/thirdparty/midifile/include
 )
