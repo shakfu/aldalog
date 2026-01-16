@@ -2,87 +2,12 @@
 
 ## High Priority
 
-### Joy Language Integration
-
-- [x] Add Ableton Link support to Joy
-  - Link implementation exists in `src/shared/link/link.c`
-  - Added `joy_link_*` wrapper functions in `joy_midi_backend.c`
-  - Added REPL commands: `link-enable`, `link-disable`, `link-tempo`, `link-status`
-  - Added Joy primitives: `link-enable`, `link-disable`, `link-tempo`, `link-beat`, `link-phase`, `link-peers`, `link-status`
-
-- [x] Add Csound support to Joy
-  - Linked Joy to Alda's Csound backend (`src/alda/csound_backend.c`)
-  - Added `joy_csound_*` wrapper functions in `joy_midi_backend.c`
-  - Added REPL commands: `cs-load`, `cs-enable`, `cs-disable`, `cs-status`, `cs-play`
-  - Added Joy primitives: `cs-load`, `cs-enable`, `cs-disable`, `cs-status`, `cs-play`
-  - Notes route through Csound when enabled (priority over TSF/MIDI)
-
-### Testing Gaps
-
-- [x] Add Alda parser tests
-  - Parser handles 27 AST node types
-  - Each node type should have dedicated tests
-  - `tests/alda/test_parser.c` - 71 tests covering all node types
-
-- [x] Add Alda interpreter tests
-  - Test MIDI event generation (tempo, volume, polyphony, markers, variables)
-  - This is the core value proposition - needs coverage
-
-- [x] Add audio backend tests
-  - Smoke tests for MIDI output, TinySoundFont, Csound
-  - `tests/alda/test_backends.c` - 20 smoke tests
-
-- [x] Add integration tests
-  - End-to-end: parse Alda code and verify MIDI output
-  - `tests/alda/test_integration.c` - 14 integration tests
-
-### Code Quality
-
-- [x] Improve parser error recovery
-  - Added synchronization points for error recovery (newlines, delimiters, part declarations)
-  - Enhanced error messages with context hints (e.g., "in S-expression", "in cram expression")
-  - Added expected/found information to error messages
-  - Implemented multiple error collection (up to 10 errors)
-  - New APIs: `alda_parser_error_count()`, `alda_parser_all_errors_string()`
-
----
-
-## Medium Priority
-
-### Editor Features
-
-- [x] Consistent repl api for each language
-  - Unified REPL command API in `src/shared/repl_commands.c`
-  - Both Alda and Joy use `:<cmd>` syntax (`:help`, `:quit`, `:sf`, `:link`, etc.)
-  - Language-specific commands: Alda (`:sequential`, `:concurrent`), Joy (`.`)
-
-- [x] Normalize the cli api for each language
-  - `psnd` (no args) shows help and exits with code 1
-  - `psnd alda` starts Alda REPL
-  - `psnd joy` starts Joy REPL
-  - Removed implicit REPL fallback
-
-- [x] Go-to-line command
-  - Add `:123` or `:goto 123` command
-  - Implemented in `src/loki/command.c` with `cmd_goto()`
-  - Supports `:goto 123`, `:123`, auto-scrolls to show target line
-
-- [x] Search and replace
-  - Implemented `:s/old/new/` and `:s/old/new/g` commands
-  - Added `cmd_substitute()` in `src/loki/command.c`
-  - Supports escaped characters (`\/`), global flag (`g`)
-
-- [ ] Playback visualization
-  - Highlight currently playing region
-  - Show playback progress in status bar
-
-### Architecture
+### Architecture (Shared Layer)
 
 - [ ] Move Csound backend to shared layer
   - Currently: Real implementation in `src/alda/csound_backend.c`, stubs in `src/shared/audio/csound_backend.c`
   - Move actual Csound implementation to `src/shared/audio/csound_backend.c`
-  - Update Alda to use `shared_csound_*` functions
-  - Update Joy to use `shared_csound_*` functions
+  - Update Alda and Joy to use `shared_csound_*` functions
   - Update `:csd` command to use shared API instead of `loki_alda_csound_*`
   - Enables Csound synthesis for all languages, not just Alda
 
@@ -90,77 +15,24 @@
   - Currently: `src/loki/midi_export.cpp` uses Alda's internal event model
   - Define a common `SharedMidiEvent` format in `src/shared/`
   - Languages populate shared event buffer during playback/evaluation
-  - `:export` command exports from shared event buffer
-  - Update `src/loki/command/export.c` to use shared API
+  - Update `:export` command to use shared API
   - Enables MIDI file export for all languages, not just Alda
 
 - [ ] Modular language selection via CMake options
   - Add `BUILD_ALDA_LANGUAGE` and `BUILD_JOY_LANGUAGE` options (default ON)
   - Conditional library builds and linking in CMakeLists.txt
   - Preprocessor guards in `repl.c` and `main.c` for language-specific code
-  - Conditional Lua bindings in `src/loki/alda.c` and `src/loki/joy.c`
   - Enables building minimal binaries with only desired languages
-
-- [x] Move Alda state to context
-  - Refactored `g_alda_state` in `loki_alda.c` to be per-context
-  - `LokiAldaState` is now allocated per `editor_ctx_t`
-  - Enables multiple independent Alda sessions
-
-- [x] Extract magic numbers to constants
-  - Added `LOKI_ALDA_TEMPO_MIN`, `LOKI_ALDA_TEMPO_MAX`, `LOKI_ALDA_TEMPO_DEFAULT` to `alda.h`
-  - Added `LOKI_ALDA_ERROR_BUFSIZE` to `alda.h`
-  - Alda interpreter limits already defined in `alda/context.h`: `ALDA_MAX_PARTS`, `ALDA_MAX_EVENTS`, `ALDA_MAX_MARKERS`, `ALDA_MAX_VARIABLES`
-
-### Microtuning
-
-- [x] Integrate Scala scales with Alda pitch calculation
-  - Added per-part scale fields to `AldaPartState`: `scale`, `scale_root_note`, `scale_root_freq`
-  - Modified Csound backend to send frequency (via `alda_csound_send_note_on_freq`)
-  - Pitch conversion happens at dispatch in `midi_backend.c` and `async.c`
-  - Lua API: `loki.alda.set_part_scale(part_name, [root_note], [root_freq])`
-  - Lua API: `loki.alda.clear_part_scale(part_name)` - return to 12-TET
-  - Per-part scale assignment enables different instruments in different tunings
-
-### Polyglot Platform
-
-- [x] Integrate first midi-langs DSL
-  - Implement first additional language from midi-langs project
-  - Proves polyglot architecture works
-
-- [x] Document extension API
-  - `docs/language-extension-api.md` - comprehensive guide
-  - Covers `loki.register_language()` API, lazy loading, examples
-  - Includes complete Alda language example
 
 ---
 
-## Low Priority
-
-### Platform Support
-
-- [ ] Windows support
-  - Editor uses POSIX headers: `termios.h`, `unistd.h`, `pthread.h`
-  - Options:
-    - Native Windows console API
-    - Web editor using CodeMirror / WebSockets
+## Medium Priority
 
 ### Editor Features
 
-- [ ] Split windows
-  - Already designed for in `editor_ctx_t`
-  - Requires screen rendering changes
-
-- [ ] Tree sitter integration
-  - Would improve syntax highlighting, code handling
-  - Significantly more complex than current system
-
-- [ ] LSP client integration
-  - Would provide IDE-like features
-  - High complexity undertaking
-
-- [ ] Git integration
-  - Gutter diff markers
-  - Stage/commit commands
+- [ ] Playback visualization
+  - Highlight currently playing region
+  - Show playback progress in status bar
 
 - [ ] MIDI port selection from editor
   - Currently only configurable via CLI
@@ -173,17 +45,49 @@
 ### Build System
 
 - [ ] Add AddressSanitizer build target
-  ```cmake
-  option(PSND_ENABLE_ASAN "Enable AddressSanitizer" OFF)
-  ```
+  - `option(PSND_ENABLE_ASAN "Enable AddressSanitizer" OFF)`
 
 - [ ] Add code coverage target
-  ```cmake
-  option(PSND_ENABLE_COVERAGE "Enable code coverage" OFF)
-  ```
+  - `option(PSND_ENABLE_COVERAGE "Enable code coverage" OFF)`
 
 - [ ] Add install target
   - Currently no `make install` support
+
+### Test Framework
+
+- [ ] Add `ASSERT_GT`, `ASSERT_LT` macros
+
+- [ ] Add test fixture support (setup/teardown)
+
+- [ ] Add memory leak detection hooks
+
+---
+
+## Low Priority
+
+### Platform Support
+
+- [ ] Windows support
+  - Editor uses POSIX headers: `termios.h`, `unistd.h`, `pthread.h`
+  - Options: Native Windows console API, or web editor using CodeMirror/WebSockets
+
+### Editor Features
+
+- [ ] Split windows
+  - Already designed for in `editor_ctx_t`
+  - Requires screen rendering changes
+
+- [ ] Tree-sitter integration
+  - Would improve syntax highlighting, code handling
+  - Significantly more complex than current system
+
+- [ ] LSP client integration
+  - Would provide IDE-like features
+  - High complexity undertaking
+
+- [ ] Git integration
+  - Gutter diff markers
+  - Stage/commit commands
 
 ### Documentation
 
@@ -194,18 +98,9 @@
   - Consider Doxygen for generated docs
 
 - [ ] Contributing guide
-  - Contribution guidelines for external contributors
 
 - [ ] Build troubleshooting
   - Platform-specific guidance
-
-### Test Framework
-
-- [ ] Add `ASSERT_GT`, `ASSERT_LT` macros
-
-- [ ] Add test fixture support (setup/teardown)
-
-- [ ] Add memory leak detection hooks
 
 ### Future Architecture
 
@@ -214,43 +109,3 @@
 
 - [ ] JACK backend
   - For pro audio workflows
-
----
-
-## Completed
-
-- [x] Unify REPL and editor syntax highlighting
-  - REPL now loads Lua themes from `.psnd/init.lua`
-  - Both use same `editor_ctx_t` colors array
-  - Refactored `repl.c` to thread context through rendering
-
-- [x] Fix line numbers display
-  - `loki.line_numbers(true)` in init.lua wasn't working
-  - Root cause: `buffers_init()` and `buffer_create()` didn't copy `line_numbers` field
-  - Fixed in `src/loki/buffers.c`
-
-- [x] Add Ableton Link support
-  - Tempo synchronization with DAWs and peers
-
-- [x] Add MIDI file export
-  - Export to Standard MIDI Files via midifile library
-
-- [x] Lua-based keybinding customization
-  - `loki.keymap()` and `loki.keyunmap()` APIs
-  - Supports all modes: normal, insert, visual, command
-
-- [x] Fix `loki.get_cursor()` returning wrong position
-  - Was returning screen position instead of file position
-  - Fixed to account for scroll offset
-
-- [x] Fix Lua API stale context with multiple buffers
-  - Now dynamically calls `buffer_get_current()`
-
-- [x] Visual mode delete
-  - Core vim functionality
-
-- [x] System clipboard integration
-  - OSC 52 escape sequences for terminal clipboard
-
-- [x] Add undo/redo tests
-  - `tests/loki/test_undo.c`
