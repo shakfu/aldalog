@@ -183,19 +183,24 @@ void shared_send_cc(SharedContext* ctx, int channel, int cc, int value) {
 void shared_send_panic(SharedContext* ctx) {
     if (!ctx) return;
 
-    /* Priority 1: Csound */
-    if (ctx->csound_enabled && shared_csound_is_enabled()) {
+    /*
+     * Unlike note events which route to a single backend by priority,
+     * panic must broadcast to ALL backends to ensure no stuck notes.
+     * A session may have sent notes to multiple backends (e.g., user
+     * switched backends mid-session, or backend was toggled).
+     */
+
+    /* Csound */
+    if (shared_csound_is_enabled()) {
         shared_csound_all_notes_off();
-        return;
     }
 
-    /* Priority 2: TSF */
-    if (ctx->tsf_enabled && shared_tsf_is_enabled()) {
+    /* TSF */
+    if (shared_tsf_is_enabled()) {
         shared_tsf_all_notes_off();
-        return;
     }
 
-    /* Priority 3: MIDI */
+    /* MIDI */
     if (ctx->midi_out) {
         shared_midi_all_notes_off(ctx);
     }

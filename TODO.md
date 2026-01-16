@@ -1,89 +1,44 @@
 # Psnd TODO
 
-## Critical - Functional Regressions
-
-### `psnd play` broken for Joy/TR7 (FIXED)
-
-- [x] Fix `psnd play <file>` for Joy (DONE)
-  - Added dedicated `joy_play_main` in `src/lang/joy/repl.c:373`
-  - Parses argv starting at index 0 (not 1)
-  - Updated dispatch to use `joy_play_main` instead of `joy_repl_main`
-- [x] Fix `psnd play <file>` for TR7 (DONE)
-  - Added dedicated `tr7_play_main` in `src/lang/tr7/repl.c:826`
-  - Same pattern: parses argv starting at index 0
-  - Updated dispatch to use `tr7_play_main` instead of `tr7_repl_main`
-
-### SharedContext cleanup leaks global state (FIXED)
-
-- [x] Fix `shared_context_cleanup()` to properly reset backend state (DONE)
-  - Now sends panic (all notes off) before cleanup
-  - Disables TSF if `ctx->tsf_enabled` was set
-  - Disables Csound if `ctx->csound_enabled` was set
-  - Disables Link if `ctx->link_enabled` was set
-  - Resets all enable flags to prevent stale state
-
----
-
 ## High Priority
 
-### Architecture (Shared Layer)
+### Architecture (Multi-Context Support)
 
-- [x] Move Csound backend to shared layer (DONE)
-  - Real implementation now in `src/shared/audio/csound_backend.c`
-  - `src/alda/csound_backend.c` contains thin wrappers calling `shared_csound_*`
-  - Joy uses shared backend via alda wrappers
-  - Csound synthesis available to all languages
+- [ ] Refactor Joy/TR7 to eliminate global SharedContext (`src/lang/joy/midi/joy_midi_backend.c:29`, `src/lang/tr7/repl.c`)
+  - Both modules use static globals (`g_shared`, `g_tr7_repl_shared`)
+  - Running two Joy/TR7 sessions simultaneously (multiple buffers in loki or separate REPLs) stomps the same context
+  - Cleanup routines (`joy_csound_cleanup()`) can shut down backend even if another language/editor context is active
+  - Fix: Each editor/REPL instance should own its own `SharedContext` (or a handle to ref-counted pool)
 
-- [x] Move MIDI export to shared layer (DONE)
-  - [x] `:export` command is language-agnostic (`src/loki/export.c`)
-  - [x] `SharedMidiEvent` format defined in `src/shared/midi/events.h`
-  - [x] Shared event buffer API (`shared_midi_events_*`)
-  - [x] Export reads from shared buffer (`loki_midi_export_shared`)
-  - Alda events converted to shared format at export time
-  - Joy uses immediate playback (could add recording in future)
-
-- [x] Modular language selection via CMake options
-  - Add `BUILD_ALDA_LANGUAGE` and `BUILD_JOY_LANGUAGE` options (default ON)
-  - Conditional library builds and linking in CMakeLists.txt
-  - Preprocessor guards in `repl.c` and `main.c` for language-specific code
-  - Enables building minimal binaries with only desired languages
-
-### Dispatch System Robustness
-
-- [x] Replace GCC/Clang-specific constructors with explicit init (DONE)
-  - Removed `__attribute__((constructor))` from all dispatch.c files
-  - Added `lang_dispatch_init()` in `src/lang_dispatch.c` that calls language-specific init functions
-  - Each language exports `*_dispatch_init()` (alda, joy, tr7)
-  - `main()` calls `lang_dispatch_init()` before any dispatch operations
-  - CMake passes `LANG_ALDA`, `LANG_JOY`, `LANG_TR7` defines for conditional compilation
-
-- [x] Fix silent failures when language registration limit is hit (DONE)
-  - `lang_dispatch_register()` now returns int (0 success, -1 error) and logs to stderr
-  - `loki_lang_register()` now logs to stderr on failure
-  - Both report the language name and the limit when registration fails
-
-- [x] Consolidate dispatch systems (DONE)
-  - Both `lang_dispatch` (CLI) and `loki_lang_bridge` (editor) now use explicit init pattern
-  - Added `loki_lang_init()` in `src/loki/lang_bridge.c` that calls per-language init functions
-  - Removed `__attribute__((constructor))` from all `register.c` files
-  - Each language exports `*_loki_lang_init()` (alda, joy, tr7)
-  - `loki_editor_main()` calls `loki_lang_init()` before any language operations
-  - CMake passes `LANG_ALDA`, `LANG_JOY`, `LANG_TR7` defines for conditional compilation
-  - Both systems now portable to MSVC (no more GCC/Clang-specific attributes)
+- [ ] Remove duplicate Alda MIDI observer (`src/lang/alda/backends/midi_backend.c:67-128`)
+  - `alda_midi_init_observer()` maintains BOTH shared observer AND legacy observer copy
+  - Doubles enumeration work, leaks memory if one path fails, complicates cleanup
+  - Comment on line 75 says "Also maintain legacy port list for backward compatibility"
+  - Fix: Once all code paths use `SharedContext`, remove legacy observer and rely solely on `shared_midi_*`
 
 ---
 
 ## Medium Priority
 
+### Feature Completeness
+
+- [ ] Implement `:cs-play` command or remove from help (`src/shared/repl_commands.c:301-312`)
+  - Help text advertises `:cs-play PATH` but handler prints "not yet implemented"
+  - Users enabling Csound backend hit dead-end workflow
+  - Fix: Wire command into `shared_csound_play_file()` or hide until supported
+
+- [ ] Wire Ableton Link callbacks (`src/shared/link/link.c`)
+  - Link is implemented as singleton, callers must poll `shared_link_check_callbacks` manually
+  - No REPL or editor currently calls this, so tempo/peer callbacks are effectively dead
+  - Fix: Add polling in REPL/editor main loops or use background thread
+
 ### Refactoring
 
-- [x] Extract shared REPL launcher for language modules (DONE)
-  - Created `src/loki/repl_launcher.c/h` with `SharedReplCallbacks` and `SharedReplArgs`
-  - Languages provide callbacks for: print_usage, list_ports, init, cleanup, exec_file, repl_loop
-  - Shared launcher handles: CLI parsing, syntax highlighting setup, common flow control
-  - Joy updated to use `shared_lang_repl_main()` and `shared_lang_play_main()`
-  - TR7 updated to use the same shared launcher pattern
-  - Reduced ~350 lines of duplicate code between Joy and TR7
+- [ ] Move to dynamic language registry (`src/lang_dispatch.h:12-14`)
+  - Currently limited to 8 languages, 4 commands/extensions each (compiled-in limits)
+  - New DSLs require recompilation and tuning macros
+  - Makes plugin-style language packs or user modules impossible
+  - Fix: Consider dynamically-sized registry backed by Lua extension system (see `docs/language-extension-api.md`)
 
 ### Editor Features
 
@@ -112,11 +67,15 @@
 
 ### Test Framework
 
-- [x] Add CLI dispatcher and `psnd play` integration tests (DONE)
-  - Added `tests/cli/test_play_command.c` with 15 integration tests
-  - Tests Joy, TR7/Scheme, and Alda play commands
-  - Tests error cases (missing file, no argument, unknown extension)
-  - Also fixed bug in `tr7_play_main` where success returned exit code 1
+- [ ] Refactor CLI tests to avoid shell spawning (`tests/cli/test_play_command.c:29-62`)
+  - Tests use `system("rm -rf ...")` for cleanup and `system()` to invoke psnd
+  - Couples tests to `/bin/sh`, ignores exit codes in some branches, vulnerable to whitespace in paths
+  - Fix: Use `fork`/`execve` directly for binary invocation, `mkdtemp`/`nftw` for temp directory cleanup
+
+- [ ] Add missing test coverage
+  - No tests for: editor bridge, Ableton Link callbacks, shared REPL command processor
+  - Test framework only exposes `ASSERT_EQ/NEQ/TRUE/FALSE` with integer formatting
+  - Pointer/string comparisons can silently truncate (`tests/test_framework.h`)
 
 - [ ] Add `ASSERT_GT`, `ASSERT_LT` macros
 
@@ -132,7 +91,6 @@
 
 - [ ] Windows support
   - Editor uses POSIX headers: `termios.h`, `unistd.h`, `pthread.h`
-  - Language registration uses `__attribute__((constructor))` (see High Priority dispatch fix)
   - Options: Native Windows console API, or web editor using CodeMirror/WebSockets
 
 ### Editor Features
@@ -177,3 +135,35 @@
 - [ ] Decouple from the loki editor and use a webserver (linky mongoose)
 
 - [ ] Provide a minimal language example
+
+---
+
+## Feature Opportunities
+
+### Preset Browser & Layering
+- [ ] Add preset browsing UI to editor/REPL
+  - TSF already exposes preset metadata via `shared_tsf_get_preset_name()`
+  - No UI for browsing, tagging, or layering presets
+  - Let musicians audition instruments and build splits/stacks without editing raw program numbers
+
+### Session Capture & Arrangement
+- [ ] Elevate shared MIDI event buffer to first-class timeline (`src/shared/midi/events.h`)
+  - Currently only feeds export
+  - Capture REPL improvisations into clips, arrange them, re-trigger live
+  - Similar to Ableton's Session View but text-driven
+
+### Controller & Automation Mapping
+- [ ] Map physical MIDI controllers or OSC sources to language variables
+  - Tempo, volume, macro parameters
+  - Makes Joy/TR7 live-coding sets more expressive
+  - Combine with existing Ableton Link transport hooks
+
+### Cross-Language Patch Sharing
+- [ ] Create lightweight messaging bus for Alda, Joy, TR7 to exchange motifs
+  - Example: Joy macro emits motif that Alda editor picks up and renders with full notation
+  - Showcases polyglot nature, keeps multiple buffers in sync
+
+### Real-Time Visualization
+- [ ] Expose playback state in loki status bar or via OSC/WebSocket
+  - Current measure, active voices, CPU load
+  - Visual confirmation when multiple asynchronous schedulers are active

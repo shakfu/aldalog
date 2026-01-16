@@ -76,6 +76,7 @@ typedef struct {
     int instruments_loaded;
     int enabled;
     int started;
+    int ref_count;      /* Reference count for enable/disable */
 
     /* Active notes for proper note-off handling */
     ActiveNote active_notes[CS_MAX_NOTES];
@@ -363,7 +364,11 @@ static void csound_audio_callback(ma_device* device, void* output, const void* i
 }
 
 /* ============================================================================
- * Enable/Disable
+ * Enable/Disable (ref-counted)
+ *
+ * Multiple contexts can enable Csound. The backend only actually starts when
+ * the first context enables it (ref_count 0->1) and only stops when the
+ * last context disables it (ref_count 1->0).
  *
  * Csound uses its own miniaudio device for audio output.
  * ============================================================================ */
@@ -379,9 +384,15 @@ int shared_csound_enable(void) {
         return -1;
     }
 
+    /* Increment reference count */
+    g_cs.ref_count++;
+
+    /* If already enabled, just return success */
     if (g_cs.enabled) {
-        return 0;  /* Already enabled */
+        return 0;
     }
+
+    /* First enabler - actually start the backend */
 
     cs_mutex_lock(&g_cs.mutex);
 
@@ -391,6 +402,7 @@ int shared_csound_enable(void) {
         if (result != 0) {
             cs_mutex_unlock(&g_cs.mutex);
             set_error("Failed to start Csound");
+            g_cs.ref_count--;
             return -1;
         }
 
@@ -418,6 +430,7 @@ int shared_csound_enable(void) {
         ma_result result = ma_device_init(NULL, &config, &g_cs.device);
         if (result != MA_SUCCESS) {
             set_error("Failed to initialize Csound audio device");
+            g_cs.ref_count--;
             return -1;
         }
 
@@ -428,6 +441,7 @@ int shared_csound_enable(void) {
     ma_result result = ma_device_start(&g_cs.device);
     if (result != MA_SUCCESS) {
         set_error("Failed to start Csound audio device");
+        g_cs.ref_count--;
         return -1;
     }
 
@@ -436,9 +450,23 @@ int shared_csound_enable(void) {
 }
 
 void shared_csound_disable(void) {
-    if (!g_cs.initialized || !g_cs.enabled) {
+    if (!g_cs.initialized || g_cs.ref_count <= 0) {
         return;
     }
+
+    /* Decrement reference count */
+    g_cs.ref_count--;
+
+    /* Only actually disable when last reference is released */
+    if (g_cs.ref_count > 0) {
+        return;
+    }
+
+    if (!g_cs.enabled) {
+        return;
+    }
+
+    /* Last disabler - actually stop the backend */
 
     /* Stop all notes */
     shared_csound_all_notes_off();

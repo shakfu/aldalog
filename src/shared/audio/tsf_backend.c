@@ -52,6 +52,7 @@ typedef struct {
     int device_initialized;
     int enabled;
     int initialized;
+    int ref_count;      /* Reference count for enable/disable */
     tsf_mutex_t mutex;
 } TsfBackend;
 
@@ -180,7 +181,11 @@ const char* shared_tsf_get_preset_name(int index) {
 }
 
 /* ============================================================================
- * Enable/Disable
+ * Enable/Disable (ref-counted)
+ *
+ * Multiple contexts can enable TSF. The backend only actually starts when
+ * the first context enables it (ref_count 0->1) and only stops when the
+ * last context disables it (ref_count 1->0).
  * ============================================================================ */
 
 int shared_tsf_enable(void) {
@@ -197,9 +202,15 @@ int shared_tsf_enable(void) {
         return -1;
     }
 
+    /* Increment reference count */
+    g_tsf.ref_count++;
+
+    /* If already enabled, just return success */
     if (g_tsf.enabled) {
-        return 0;  /* Already enabled */
+        return 0;
     }
+
+    /* First enabler - actually start the backend */
 
     /* Initialize audio device if needed */
     if (!g_tsf.device_initialized) {
@@ -214,6 +225,7 @@ int shared_tsf_enable(void) {
         ma_result result = ma_device_init(NULL, &config, &g_tsf.device);
         if (result != MA_SUCCESS) {
             fprintf(stderr, "TSF: Failed to initialize audio device: %d\n", result);
+            g_tsf.ref_count--;
             return -1;
         }
 
@@ -224,6 +236,7 @@ int shared_tsf_enable(void) {
     ma_result result = ma_device_start(&g_tsf.device);
     if (result != MA_SUCCESS) {
         fprintf(stderr, "TSF: Failed to start audio device: %d\n", result);
+        g_tsf.ref_count--;
         return -1;
     }
 
@@ -232,9 +245,23 @@ int shared_tsf_enable(void) {
 }
 
 void shared_tsf_disable(void) {
-    if (!g_tsf.initialized || !g_tsf.enabled) {
+    if (!g_tsf.initialized || g_tsf.ref_count <= 0) {
         return;
     }
+
+    /* Decrement reference count */
+    g_tsf.ref_count--;
+
+    /* Only actually disable when last reference is released */
+    if (g_tsf.ref_count > 0) {
+        return;
+    }
+
+    if (!g_tsf.enabled) {
+        return;
+    }
+
+    /* Last disabler - actually stop the backend */
 
     /* Stop all notes */
     shared_tsf_all_notes_off();

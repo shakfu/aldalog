@@ -132,6 +132,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Fixed
 
+- **Panic Leaves Stuck Notes on Secondary Backends**: Fixed `shared_send_panic()` only silencing the highest-priority backend
+  - Previously returned after first active backend (Csound > TSF > MIDI), leaving other backends ringing
+  - Now broadcasts "all notes off" to ALL enabled backends regardless of priority
+  - Prevents stuck notes when switching backends mid-session or during cleanup
+
+- **Context Cleanup Kills Audio for Other Sessions**: Added reference counting to backend singletons (TSF, Csound, Link)
+  - Previously, `shared_context_cleanup()` would unconditionally disable backends that the context had enabled
+  - Multiple contexts (REPL, editor, multiple buffers) share the same backend singletons
+  - Quitting one REPL would stop audio for all other active sessions
+  - Now enable/disable are ref-counted: backend only actually enables on first reference (0->1) and disables on last release (1->0)
+  - Files: `src/shared/audio/tsf_backend.c`, `src/shared/audio/csound_backend.c`, `src/shared/link/link.c`
+
 - **MIDI Export Multi-track Crash**: Fixed segfault when exporting multi-channel compositions
   - Track 0 (conductor) was empty when no tempo events existed in the shared buffer
   - Now always adds a default tempo (120 BPM) to ensure track 0 has content

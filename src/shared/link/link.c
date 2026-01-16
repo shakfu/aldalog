@@ -23,6 +23,7 @@ typedef struct {
     abl_link link;
     abl_link_session_state session_state;
     int initialized;
+    int ref_count;      /* Reference count for enable/disable */
     pthread_mutex_t mutex;
 
     /* Callback state (set by Link thread, polled by main thread) */
@@ -149,13 +150,34 @@ int shared_link_is_initialized(void) {
 }
 
 /* ============================================================================
- * Enable/Disable
+ * Enable/Disable (ref-counted)
+ *
+ * Multiple contexts can enable Link. The backend only actually starts when
+ * the first context enables it (ref_count 0->1) and only stops when the
+ * last context disables it (ref_count 1->0).
  * ============================================================================ */
 
 void shared_link_enable(int enable) {
     if (!g_link.initialized) return;
 
-    abl_link_enable(g_link.link, enable ? true : false);
+    if (enable) {
+        /* Increment reference count */
+        g_link.ref_count++;
+
+        /* Only actually enable on first reference */
+        if (g_link.ref_count == 1) {
+            abl_link_enable(g_link.link, true);
+        }
+    } else {
+        /* Decrement reference count */
+        if (g_link.ref_count <= 0) return;
+        g_link.ref_count--;
+
+        /* Only actually disable when last reference is released */
+        if (g_link.ref_count == 0) {
+            abl_link_enable(g_link.link, false);
+        }
+    }
 }
 
 int shared_link_is_enabled(void) {
