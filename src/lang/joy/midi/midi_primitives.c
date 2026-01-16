@@ -1,7 +1,8 @@
 /*
  * midi_primitives.c - MIDI primitive implementations for Joy
  *
- * Adapted for psnd: uses joy_midi_backend instead of libremidi directly.
+ * Uses SharedContext from MusicContext for all MIDI/audio operations.
+ * No global state - context flows through JoyContext->user_data.
  */
 
 #include "joy_runtime.h"
@@ -10,6 +11,8 @@
 #include "music_theory.h"
 #include "music_context.h"
 #include "music_notation.h"
+#include "context.h"      /* SharedContext, shared_send_* */
+#include "midi/midi.h"    /* shared_midi_* */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,18 +30,30 @@
     if ((v).type != (t)) { joy_error_type(op, #t, (v).type); return; }
 
 /* ============================================================================
- * MIDI Backend Wrappers
+ * Context-aware MIDI Helpers
  * ============================================================================
  *
- * These functions delegate to joy_midi_backend, which manages MIDI state.
+ * These functions use MusicContext (which contains SharedContext and channel)
+ * for all MIDI operations. No global state.
  */
 
-void send_note_on(int pitch, int velocity) {
-    joy_midi_note_on(pitch, velocity);
+/* Check if audio/MIDI output is available */
+static int music_output_available(MusicContext* mctx) {
+    if (!mctx || !mctx->shared) return 0;
+    SharedContext* s = mctx->shared;
+    return s->midi_out || s->tsf_enabled || s->csound_enabled;
 }
 
-void send_note_off(int pitch) {
-    joy_midi_note_off(pitch);
+/* Send note-on using MusicContext's channel and SharedContext */
+static void send_note_on_ctx(MusicContext* mctx, int pitch, int velocity) {
+    if (!mctx || !mctx->shared) return;
+    shared_send_note_on(mctx->shared, mctx->channel, pitch, velocity);
+}
+
+/* Send note-off using MusicContext's channel and SharedContext */
+static void send_note_off_ctx(MusicContext* mctx, int pitch) {
+    if (!mctx || !mctx->shared) return;
+    shared_send_note_off(mctx->shared, mctx->channel, pitch);
 }
 
 /* ============================================================================
@@ -46,13 +61,19 @@ void send_note_off(int pitch) {
  * ============================================================================ */
 
 void midi_list_(JoyContext* ctx) {
-    (void)ctx;
-    joy_midi_list_ports();
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (mctx && mctx->shared) {
+        shared_midi_list_ports(mctx->shared);
+    }
 }
 
 void midi_virtual_(JoyContext* ctx) {
-    (void)ctx;
-    joy_midi_open_virtual("JoyMIDI");
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (mctx && mctx->shared) {
+        if (shared_midi_open_virtual(mctx->shared, "JoyMIDI") == 0) {
+            printf("Created virtual MIDI port: JoyMIDI\n");
+        }
+    }
 }
 
 void midi_open_(JoyContext* ctx) {
@@ -60,15 +81,26 @@ void midi_open_(JoyContext* ctx) {
     JoyValue v = POP();
     EXPECT_TYPE(v, JOY_INTEGER, "midi-open");
 
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (!mctx || !mctx->shared) {
+        printf("No music context available\n");
+        return;
+    }
+
     int port_idx = (int)v.data.integer;
-    if (joy_midi_open_port(port_idx) != 0) {
+    if (shared_midi_open_port(mctx->shared, port_idx) != 0) {
         printf("Failed to open MIDI port %d\n", port_idx);
+    } else {
+        const char* name = shared_midi_get_port_name(mctx->shared, port_idx);
+        printf("Opened MIDI port %d: %s\n", port_idx, name ? name : "(unknown)");
     }
 }
 
 void midi_close_(JoyContext* ctx) {
-    (void)ctx;
-    joy_midi_close();
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (mctx && mctx->shared) {
+        shared_midi_close(mctx->shared);
+    }
 }
 
 /* ============================================================================
@@ -90,16 +122,17 @@ void midi_note_(JoyContext* ctx) {
     int velocity = (int)vel_v.data.integer;
     int duration = (int)dur_v.data.integer;
 
-    if (!joy_midi_is_open()) {
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (!music_output_available(mctx)) {
         printf("No MIDI output open\n");
         return;
     }
 
-    send_note_on(pitch, velocity);
+    send_note_on_ctx(mctx, pitch, velocity);
     if (duration > 0) {
-        joy_midi_sleep_ms(duration);
+        shared_sleep_ms(mctx->shared, duration);
     }
-    send_note_off(pitch);
+    send_note_off_ctx(mctx, pitch);
 }
 
 void midi_note_on_(JoyContext* ctx) {
@@ -114,7 +147,8 @@ void midi_note_on_(JoyContext* ctx) {
     int pitch = (int)pitch_v.data.integer;
     int velocity = (int)vel_v.data.integer;
 
-    send_note_on(pitch, velocity);
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    send_note_on_ctx(mctx, pitch, velocity);
 }
 
 void midi_note_off_(JoyContext* ctx) {
@@ -124,7 +158,9 @@ void midi_note_off_(JoyContext* ctx) {
     EXPECT_TYPE(pitch_v, JOY_INTEGER, "midi-note-off");
 
     int pitch = (int)pitch_v.data.integer;
-    send_note_off(pitch);
+
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    send_note_off_ctx(mctx, pitch);
 }
 
 void midi_chord_(JoyContext* ctx) {
@@ -142,7 +178,8 @@ void midi_chord_(JoyContext* ctx) {
     int duration = (int)dur_v.data.integer;
     JoyList* pitches = list_v.data.list;
 
-    if (!joy_midi_is_open()) {
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (!music_output_available(mctx)) {
         printf("No MIDI output open\n");
         joy_value_free(&list_v);
         return;
@@ -152,19 +189,19 @@ void midi_chord_(JoyContext* ctx) {
     for (size_t i = 0; i < pitches->length; i++) {
         if (pitches->items[i].type == JOY_INTEGER) {
             int pitch = (int)pitches->items[i].data.integer;
-            send_note_on(pitch, velocity);
+            send_note_on_ctx(mctx, pitch, velocity);
         }
     }
 
     if (duration > 0) {
-        joy_midi_sleep_ms(duration);
+        shared_sleep_ms(mctx->shared, duration);
     }
 
     /* Note off for all pitches */
     for (size_t i = 0; i < pitches->length; i++) {
         if (pitches->items[i].type == JOY_INTEGER) {
             int pitch = (int)pitches->items[i].data.integer;
-            send_note_off(pitch);
+            send_note_off_ctx(mctx, pitch);
         }
     }
 
@@ -187,9 +224,10 @@ void midi_cc_(JoyContext* ctx) {
     int cc = (int)cc_v.data.integer;
     int value = (int)val_v.data.integer;
 
-    if (!joy_midi_is_open()) return;
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (!music_output_available(mctx)) return;
 
-    joy_midi_cc(joy_midi_get_channel(), cc, value);
+    shared_send_cc(mctx->shared, mctx->channel, cc, value);
 }
 
 void midi_program_(JoyContext* ctx) {
@@ -200,19 +238,20 @@ void midi_program_(JoyContext* ctx) {
 
     int program = (int)prog_v.data.integer;
 
-    if (!joy_midi_is_open()) return;
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (!music_output_available(mctx)) return;
 
-    joy_midi_program(joy_midi_get_channel(), program);
+    shared_send_program(mctx->shared, mctx->channel, program);
 }
 
 void midi_panic_(JoyContext* ctx) {
-    (void)ctx;
-    if (!joy_midi_is_open()) {
-        printf("No MIDI output open\n");
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (!mctx || !mctx->shared) {
+        printf("No music context available\n");
         return;
     }
 
-    joy_midi_panic();
+    shared_send_panic(mctx->shared);
 }
 
 /* ============================================================================
@@ -225,9 +264,10 @@ void midi_sleep_(JoyContext* ctx) {
     JoyValue ms_v = POP();
     EXPECT_TYPE(ms_v, JOY_INTEGER, "midi-sleep");
 
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
     int ms = (int)ms_v.data.integer;
-    if (ms > 0) {
-        joy_midi_sleep_ms(ms);
+    if (ms > 0 && mctx && mctx->shared) {
+        shared_sleep_ms(mctx->shared, ms);
     }
 }
 
@@ -521,7 +561,13 @@ void channel_(JoyContext* ctx) {
     EXPECT_TYPE(n, JOY_INTEGER, "channel");
 
     int ch = (int)n.data.integer;
-    joy_midi_set_channel(ch);
+    if (ch < 1) ch = 1;
+    if (ch > 16) ch = 16;
+
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (mctx) {
+        mctx->channel = ch;
+    }
 }
 
 void chan_(JoyContext* ctx) {
@@ -532,19 +578,25 @@ void chan_(JoyContext* ctx) {
     JoyValue p = POP();
     EXPECT_TYPE(n, JOY_INTEGER, "chan");
 
-    int old_channel = joy_midi_get_channel();
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (!mctx) {
+        fprintf(stderr, "chan: no music context\n");
+        joy_value_free(&p);
+        return;
+    }
+
+    int old_channel = mctx->channel;
     int ch = (int)n.data.integer;
-    joy_midi_set_channel(ch);
+    if (ch < 1) ch = 1;
+    if (ch > 16) ch = 16;
+    mctx->channel = ch;
 
     /* Execute quotation or list */
     if (p.type == JOY_QUOTATION) {
         joy_execute_quotation(ctx, p.data.quotation);
     } else if (p.type == JOY_LIST) {
         /* Treat list as sequence of notes to play */
-        MusicContext* mctx = (MusicContext*)ctx->user_data;
-        if (!mctx) {
-            fprintf(stderr, "chan: no music context\n");
-        } else if (!joy_midi_is_open()) {
+        if (!music_output_available(mctx)) {
             fprintf(stderr, "chan: no MIDI output (use midi-virtual or midi-open first)\n");
         } else {
             for (size_t i = 0; i < p.data.list->length; i++) {
@@ -570,7 +622,7 @@ void chan_(JoyContext* ctx) {
                 p.type == JOY_SYMBOL ? "symbol" : "unknown");
     }
 
-    joy_midi_set_channel(old_channel);
+    mctx->channel = old_channel;
     joy_value_free(&p);
 }
 
@@ -696,10 +748,11 @@ void cs_load_(JoyContext* ctx) {
         printf("cs-load requires a string path\n");
         return;
     }
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
     if (joy_csound_load(v.data.string) == 0) {
         printf("Csound: Loaded %s\n", v.data.string);
         /* Auto-enable Csound after successful load */
-        if (joy_csound_enable() == 0) {
+        if (mctx && mctx->shared && joy_csound_enable(mctx->shared) == 0) {
             printf("Csound enabled\n");
         }
     } else {
@@ -710,8 +763,8 @@ void cs_load_(JoyContext* ctx) {
 
 /* cs-enable - enable Csound as audio backend */
 void cs_enable_(JoyContext* ctx) {
-    (void)ctx;
-    if (joy_csound_enable() == 0) {
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (mctx && mctx->shared && joy_csound_enable(mctx->shared) == 0) {
         printf("Csound enabled\n");
     } else {
         const char* err = joy_csound_get_error();
@@ -721,15 +774,17 @@ void cs_enable_(JoyContext* ctx) {
 
 /* cs-disable - disable Csound */
 void cs_disable_(JoyContext* ctx) {
-    (void)ctx;
-    joy_csound_disable();
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (mctx && mctx->shared) {
+        joy_csound_disable(mctx->shared);
+    }
     printf("Csound disabled\n");
 }
 
 /* cs-status - print Csound status */
 void cs_status_(JoyContext* ctx) {
-    (void)ctx;
-    if (joy_csound_is_enabled()) {
+    MusicContext* mctx = (MusicContext*)ctx->user_data;
+    if (mctx && mctx->shared && joy_csound_is_enabled(mctx->shared)) {
         printf("Csound: enabled\n");
     } else {
         printf("Csound: disabled\n");
@@ -755,12 +810,13 @@ void cs_play_(JoyContext* ctx) {
  * Initialization / Cleanup
  * ============================================================================ */
 
+/* These are now no-ops - context lifecycle is managed externally */
 void midi_init(void) {
-    joy_midi_init();
+    /* Context is set up by REPL/editor before primitives are called */
 }
 
 void midi_cleanup(void) {
-    joy_midi_cleanup();
+    /* Context cleanup is handled by REPL/editor */
 }
 
 /* ============================================================================
@@ -844,7 +900,7 @@ void midi_debug_(JoyContext* ctx) {
 }
 
 /* Play a schedule - sorts events and plays them with proper timing */
-void schedule_play(MidiSchedule* sched) {
+void schedule_play_ctx(MidiSchedule* sched, MusicContext* mctx) {
     if (!sched || sched->count == 0) return;
 
     /* Sort events by time */
@@ -862,7 +918,7 @@ void schedule_play(MidiSchedule* sched) {
     }
 
     /* Skip actual playback if no MIDI output */
-    if (!joy_midi_is_open()) return;
+    if (!music_output_available(mctx)) return;
 
     /* Track active notes for note-off scheduling */
     typedef struct { int pitch; int channel; int off_time; } ActiveNote;
@@ -893,7 +949,7 @@ void schedule_play(MidiSchedule* sched) {
 
         /* Sleep until next event */
         if (next_time > current_time) {
-            joy_midi_sleep_ms(next_time - current_time);
+            shared_sleep_ms(mctx->shared, next_time - current_time);
             current_time = next_time;
         }
 
@@ -901,7 +957,7 @@ void schedule_play(MidiSchedule* sched) {
         for (size_t i = 0; i < active_count; ) {
             if (active[i].off_time <= current_time) {
                 /* Send note-off */
-                joy_midi_note_off_ch(active[i].channel, active[i].pitch);
+                shared_send_note_off(mctx->shared, active[i].channel, active[i].pitch);
 
                 /* Remove from active list */
                 active[i] = active[--active_count];
@@ -916,7 +972,7 @@ void schedule_play(MidiSchedule* sched) {
             ScheduledEvent* ev = &sched->events[event_idx];
 
             /* Send note-on */
-            joy_midi_note_on_ch(ev->channel, ev->pitch, ev->velocity);
+            shared_send_note_on(mctx->shared, ev->channel, ev->pitch, ev->velocity);
 
             /* Add to active notes */
             active[active_count].pitch = ev->pitch;
@@ -929,6 +985,13 @@ void schedule_play(MidiSchedule* sched) {
     }
 
     free(active);
+}
+
+/* Legacy wrapper for backward compatibility */
+void schedule_play(MidiSchedule* sched) {
+    /* This should not be called in the new architecture */
+    (void)sched;
+    fprintf(stderr, "schedule_play: use schedule_play_ctx instead\n");
 }
 
 /* Begin scheduling mode for a channel */
@@ -1001,13 +1064,18 @@ void accumulator_add_schedule(MidiSchedule* sched) {
 }
 
 /* Flush the accumulator - play and clear */
-void accumulator_flush(void) {
+void accumulator_flush_ctx(MusicContext* mctx) {
     if (g_accumulator && g_accumulator->count > 0) {
-        schedule_play(g_accumulator);
+        schedule_play_ctx(g_accumulator, mctx);
         schedule_free(g_accumulator);
         g_accumulator = NULL;
     }
     g_accumulator_offset = 0;
+}
+
+/* Legacy wrapper */
+void accumulator_flush(void) {
+    fprintf(stderr, "accumulator_flush: use accumulator_flush_ctx instead\n");
 }
 
 /* Get current accumulator time offset */

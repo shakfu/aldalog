@@ -29,6 +29,14 @@ void music_context_reset(MusicContext* mctx) {
     mctx->last_pitch = -1;      /* No last pitch */
     mctx->in_chord = false;
     mctx->chord_count = 0;
+    mctx->channel = 1;          /* Default MIDI channel 1 */
+    mctx->shared = NULL;        /* Must be set explicitly */
+}
+
+void music_context_set_shared(MusicContext* mctx, struct SharedContext* shared) {
+    if (mctx) {
+        mctx->shared = shared;
+    }
 }
 
 int music_duration_to_ms(int duration, int tempo) {

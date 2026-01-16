@@ -6,6 +6,7 @@
 #define MIDI_PRIMITIVES_H
 
 #include "joy_runtime.h"
+#include "music_context.h"  /* MusicContext typedef */
 
 /* Port management */
 void midi_list_(JoyContext* ctx);
@@ -59,10 +60,6 @@ void midi_cleanup(void);
 /* Register all MIDI primitives with a Joy context */
 void joy_midi_register_primitives(JoyContext* ctx);
 
-/* Low-level MIDI send (used by music_notation.c) */
-void send_note_on(int pitch, int velocity);
-void send_note_off(int pitch);
-
 /* ============================================================================
  * Schedule System - for parallel parts and sequence composition
  * ============================================================================ */
@@ -89,7 +86,8 @@ MidiSchedule* schedule_new(void);
 void schedule_free(MidiSchedule* sched);
 void schedule_add_event(MidiSchedule* sched, int time_ms, int channel,
                         int pitch, int velocity, int duration_ms);
-void schedule_play(MidiSchedule* sched);
+void schedule_play_ctx(MidiSchedule* sched, MusicContext* mctx);  /* Context-aware */
+void schedule_play(MidiSchedule* sched);  /* Deprecated - use schedule_play_ctx */
 
 /* Scheduling mode - when active, play adds to schedule instead of playing */
 void schedule_begin(int channel);  /* Start scheduling mode for a channel */
@@ -102,7 +100,8 @@ void advance_schedule_time(int ms);/* Advance time in current schedule */
 /* Global accumulator for sequence composition */
 void accumulator_init(void);
 void accumulator_add_schedule(MidiSchedule* sched);
-void accumulator_flush(void);      /* Play and clear the accumulator */
+void accumulator_flush_ctx(MusicContext* mctx);  /* Context-aware - play and clear */
+void accumulator_flush(void);      /* Deprecated - use accumulator_flush_ctx */
 int accumulator_get_offset(void);  /* Get current time offset */
 void accumulator_advance(int ms);  /* Advance offset for next sequence */
 

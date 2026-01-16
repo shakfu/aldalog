@@ -11,6 +11,7 @@
 #include "loki/lua.h"
 #include "loki/repl_launcher.h"
 #include "shared/repl_commands.h"
+#include "shared/context.h"
 
 /* Joy library headers */
 #include "joy_runtime.h"
@@ -19,6 +20,9 @@
 #include "music_notation.h"
 #include "music_context.h"
 #include "midi_primitives.h"
+
+/* REPL-owned SharedContext for multi-context support */
+static SharedContext* g_joy_repl_shared = NULL;
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,14 +87,13 @@ static void print_joy_repl_help(void) {
 
 /* Stop callback for Joy REPL */
 static void joy_stop_playback(void) {
-    joy_midi_panic();
+    joy_midi_panic(g_joy_repl_shared);
 }
 
 /* Process a Joy REPL command. Returns: 0=continue, 1=quit, 2=evaluate as Joy code */
 static int joy_process_command(const char* input) {
     /* Try shared commands first */
-    SharedContext* ctx = joy_get_shared_context();
-    int result = shared_process_command(ctx, input, joy_stop_playback);
+    int result = shared_process_command(g_joy_repl_shared, input, joy_stop_playback);
     if (result == REPL_CMD_QUIT) {
         return 1; /* quit */
     }
@@ -209,9 +212,10 @@ static void joy_repl_loop(JoyContext *ctx, editor_ctx_t *syntax_ctx) {
 
 /* List MIDI ports */
 static void joy_cb_list_ports(void) {
-    if (joy_midi_init() == 0) {
-        joy_midi_list_ports();
-        joy_midi_cleanup();
+    SharedContext temp_ctx;
+    if (shared_context_init(&temp_ctx) == 0) {
+        joy_midi_list_ports(&temp_ctx);
+        shared_context_cleanup(&temp_ctx);
     }
 }
 
@@ -232,9 +236,31 @@ static void *joy_cb_init(const SharedReplArgs *args) {
     /* Set parser dictionary for DEFINE support */
     joy_set_parser_dict(ctx->dictionary);
 
-    /* Initialize MIDI backend */
-    if (joy_midi_init() != 0) {
-        fprintf(stderr, "Warning: Failed to initialize MIDI backend\n");
+    /*
+     * Create REPL-owned SharedContext and pass to Joy.
+     * This ensures multiple REPL instances don't stomp each other's context.
+     */
+    g_joy_repl_shared = (SharedContext*)malloc(sizeof(SharedContext));
+    if (!g_joy_repl_shared) {
+        fprintf(stderr, "Error: Failed to allocate shared context\n");
+        music_notation_cleanup(ctx);
+        joy_context_free(ctx);
+        return NULL;
+    }
+
+    if (shared_context_init(g_joy_repl_shared) != 0) {
+        fprintf(stderr, "Error: Failed to initialize shared context\n");
+        free(g_joy_repl_shared);
+        g_joy_repl_shared = NULL;
+        music_notation_cleanup(ctx);
+        joy_context_free(ctx);
+        return NULL;
+    }
+
+    /* Link SharedContext to MusicContext so primitives can access it */
+    MusicContext* mctx = music_get_context(ctx);
+    if (mctx) {
+        music_context_set_shared(mctx, g_joy_repl_shared);
     }
 
     /* Setup output */
@@ -242,14 +268,18 @@ static void *joy_cb_init(const SharedReplArgs *args) {
         /* Use built-in synth */
         if (joy_tsf_load_soundfont(args->soundfont_path) != 0) {
             fprintf(stderr, "Error: Failed to load soundfont: %s\n", args->soundfont_path);
-            joy_midi_cleanup();
+            shared_context_cleanup(g_joy_repl_shared);
+            free(g_joy_repl_shared);
+            g_joy_repl_shared = NULL;
             music_notation_cleanup(ctx);
             joy_context_free(ctx);
             return NULL;
         }
-        if (joy_tsf_enable() != 0) {
+        if (joy_tsf_enable(g_joy_repl_shared) != 0) {
             fprintf(stderr, "Error: Failed to enable built-in synth\n");
-            joy_midi_cleanup();
+            shared_context_cleanup(g_joy_repl_shared);
+            free(g_joy_repl_shared);
+            g_joy_repl_shared = NULL;
             music_notation_cleanup(ctx);
             joy_context_free(ctx);
             return NULL;
@@ -262,19 +292,19 @@ static void *joy_cb_init(const SharedReplArgs *args) {
         int midi_opened = 0;
 
         if (args->virtual_name) {
-            if (joy_midi_open_virtual(args->virtual_name) == 0) {
+            if (joy_midi_open_virtual(g_joy_repl_shared, args->virtual_name) == 0) {
                 midi_opened = 1;
                 if (args->verbose) {
                     printf("Created virtual MIDI output: %s\n", args->virtual_name);
                 }
             }
         } else if (args->port_index >= 0) {
-            if (joy_midi_open_port(args->port_index) == 0) {
+            if (joy_midi_open_port(g_joy_repl_shared, args->port_index) == 0) {
                 midi_opened = 1;
             }
         } else {
             /* Try to open a virtual port by default */
-            if (joy_midi_open_virtual("JoyMIDI") == 0) {
+            if (joy_midi_open_virtual(g_joy_repl_shared, "JoyMIDI") == 0) {
                 midi_opened = 1;
                 if (args->verbose) {
                     printf("Created virtual MIDI output: JoyMIDI\n");
@@ -296,15 +326,22 @@ static void joy_cb_cleanup(void *lang_ctx) {
     JoyContext *ctx = (JoyContext *)lang_ctx;
 
     /* Wait for audio buffer to drain */
-    if (joy_tsf_is_enabled()) {
+    if (joy_tsf_is_enabled(g_joy_repl_shared)) {
         usleep(300000);  /* 300ms for audio tail */
     }
 
-    /* Cleanup */
-    joy_midi_panic();
-    joy_csound_cleanup();
+    /* Send panic and cleanup backends */
+    joy_midi_panic(g_joy_repl_shared);
+    joy_csound_cleanup(g_joy_repl_shared);
     joy_link_cleanup();
-    joy_midi_cleanup();
+
+    /* Free REPL-owned SharedContext */
+    if (g_joy_repl_shared) {
+        shared_context_cleanup(g_joy_repl_shared);
+        free(g_joy_repl_shared);
+        g_joy_repl_shared = NULL;
+    }
+
     music_notation_cleanup(ctx);
     joy_context_free(ctx);
 }

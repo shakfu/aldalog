@@ -22,6 +22,7 @@
 #include "music_context.h"
 #include "midi_primitives.h"
 #include "joy_parser.h"
+#include "context.h"  /* SharedContext, shared_send_* */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -163,7 +164,11 @@ static void play_single_note(MusicContext* mctx, int pitch) {
     /* Immediate playback mode */
     if (pitch == REST_MARKER) {
         /* Rest: just wait */
-        usleep(mctx->duration_ms * 1000);
+        if (mctx->shared) {
+            shared_sleep_ms(mctx->shared, mctx->duration_ms);
+        } else {
+            usleep(mctx->duration_ms * 1000);
+        }
         return;
     }
 
@@ -171,14 +176,16 @@ static void play_single_note(MusicContext* mctx, int pitch) {
     int play_dur = mctx->duration_ms * mctx->quantization / 100;
     int rest_dur = mctx->duration_ms - play_dur;
 
-    send_note_on(pitch, mctx->velocity);
-    if (play_dur > 0) {
-        usleep(play_dur * 1000);
-    }
-    send_note_off(pitch);
-
-    if (rest_dur > 0) {
-        usleep(rest_dur * 1000);
+    /* Use context-aware MIDI functions */
+    if (mctx->shared) {
+        shared_send_note_on(mctx->shared, mctx->channel, pitch, mctx->velocity);
+        if (play_dur > 0) {
+            shared_sleep_ms(mctx->shared, play_dur);
+        }
+        shared_send_note_off(mctx->shared, mctx->channel, pitch);
+        if (rest_dur > 0) {
+            shared_sleep_ms(mctx->shared, rest_dur);
+        }
     }
 }
 
@@ -275,26 +282,28 @@ void music_chord_(JoyContext* ctx) {
         }
 
         /* Immediate playback mode */
-        /* Note on for all */
-        for (int i = 0; i < count; i++) {
-            send_note_on(pitches[i], mctx->velocity);
-        }
+        if (mctx->shared && count > 0) {
+            /* Note on for all */
+            for (int i = 0; i < count; i++) {
+                shared_send_note_on(mctx->shared, mctx->channel, pitches[i], mctx->velocity);
+            }
 
-        /* Wait for duration */
-        int play_dur = mctx->duration_ms * mctx->quantization / 100;
-        if (play_dur > 0) {
-            usleep(play_dur * 1000);
-        }
+            /* Wait for duration */
+            int play_dur = mctx->duration_ms * mctx->quantization / 100;
+            if (play_dur > 0) {
+                shared_sleep_ms(mctx->shared, play_dur);
+            }
 
-        /* Note off for all */
-        for (int i = 0; i < count; i++) {
-            send_note_off(pitches[i]);
-        }
+            /* Note off for all */
+            for (int i = 0; i < count; i++) {
+                shared_send_note_off(mctx->shared, mctx->channel, pitches[i]);
+            }
 
-        /* Rest gap */
-        int rest_dur = mctx->duration_ms - play_dur;
-        if (rest_dur > 0) {
-            usleep(rest_dur * 1000);
+            /* Rest gap */
+            int rest_dur = mctx->duration_ms - play_dur;
+            if (rest_dur > 0) {
+                shared_sleep_ms(mctx->shared, rest_dur);
+            }
         }
 
         joy_value_free(&val);

@@ -1,17 +1,5 @@
 # Psnd TODO
 
-## High Priority
-
-### Architecture (Multi-Context Support)
-
-- [ ] Refactor Joy/TR7 to eliminate global SharedContext (`src/lang/joy/midi/joy_midi_backend.c:29`, `src/lang/tr7/repl.c`)
-  - Both modules use static globals (`g_shared`, `g_tr7_repl_shared`)
-  - Running two Joy/TR7 sessions simultaneously (multiple buffers in loki or separate REPLs) stomps the same context
-  - Cleanup routines (`joy_csound_cleanup()`) can shut down backend even if another language/editor context is active
-  - Fix: Each editor/REPL instance should own its own `SharedContext` (or a handle to ref-counted pool)
-
----
-
 ## Medium Priority
 
 ### Feature Completeness

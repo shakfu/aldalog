@@ -4,6 +4,8 @@
  *
  * Provides the MIDI interface that Joy's primitives expect,
  * backed by psnd's shared MIDI backend.
+ *
+ * All functions take SharedContext* as first parameter - no globals.
  */
 
 #ifndef JOY_MIDI_BACKEND_H
@@ -13,112 +15,94 @@
 extern "C" {
 #endif
 
-/**
- * @brief Initialize Joy MIDI backend.
- * @return 0 on success, -1 on error.
- */
-int joy_midi_init(void);
+/* Forward declaration */
+struct SharedContext;
 
-/**
- * @brief Cleanup Joy MIDI backend.
- */
-void joy_midi_cleanup(void);
+/* ============================================================================
+ * Port Management
+ * ============================================================================ */
 
 /**
  * @brief List available MIDI output ports.
  */
-void joy_midi_list_ports(void);
+void joy_midi_list_ports(struct SharedContext* ctx);
 
 /**
  * @brief Open a MIDI output port by index.
+ * @param ctx Shared context.
  * @param port_idx Port index (0-based).
  * @return 0 on success, -1 on error.
  */
-int joy_midi_open_port(int port_idx);
+int joy_midi_open_port(struct SharedContext* ctx, int port_idx);
 
 /**
  * @brief Create a virtual MIDI output port.
+ * @param ctx Shared context.
  * @param name Port name.
  * @return 0 on success, -1 on error.
  */
-int joy_midi_open_virtual(const char* name);
+int joy_midi_open_virtual(struct SharedContext* ctx, const char* name);
 
 /**
  * @brief Close the current MIDI output.
  */
-void joy_midi_close(void);
+void joy_midi_close(struct SharedContext* ctx);
 
 /**
  * @brief Check if MIDI output is open.
  * @return Non-zero if open, 0 if closed.
  */
-int joy_midi_is_open(void);
+int joy_midi_is_open(struct SharedContext* ctx);
+
+/* ============================================================================
+ * MIDI Messages
+ * ============================================================================ */
 
 /**
- * @brief Set current MIDI channel.
- * @param channel MIDI channel (1-16).
- */
-void joy_midi_set_channel(int channel);
-
-/**
- * @brief Get current MIDI channel.
- * @return Current channel (1-16).
- */
-int joy_midi_get_channel(void);
-
-/**
- * @brief Send a note-on message on current channel.
- * @param pitch Note pitch (0-127).
- * @param velocity Note velocity (0-127).
- */
-void joy_midi_note_on(int pitch, int velocity);
-
-/**
- * @brief Send a note-off message on current channel.
- * @param pitch Note pitch (0-127).
- */
-void joy_midi_note_off(int pitch);
-
-/**
- * @brief Send a note-on message on specific channel.
+ * @brief Send a note-on message.
+ * @param ctx Shared context.
  * @param channel MIDI channel (1-16).
  * @param pitch Note pitch (0-127).
  * @param velocity Note velocity (0-127).
  */
-void joy_midi_note_on_ch(int channel, int pitch, int velocity);
+void joy_midi_note_on(struct SharedContext* ctx, int channel, int pitch, int velocity);
 
 /**
- * @brief Send a note-off message on specific channel.
+ * @brief Send a note-off message.
+ * @param ctx Shared context.
  * @param channel MIDI channel (1-16).
  * @param pitch Note pitch (0-127).
  */
-void joy_midi_note_off_ch(int channel, int pitch);
+void joy_midi_note_off(struct SharedContext* ctx, int channel, int pitch);
 
 /**
  * @brief Send a program change message.
+ * @param ctx Shared context.
  * @param channel MIDI channel (1-16).
  * @param program GM program number (0-127).
  */
-void joy_midi_program(int channel, int program);
+void joy_midi_program(struct SharedContext* ctx, int channel, int program);
 
 /**
  * @brief Send a control change message.
+ * @param ctx Shared context.
  * @param channel MIDI channel (1-16).
  * @param cc Controller number (0-127).
  * @param value Controller value (0-127).
  */
-void joy_midi_cc(int channel, int cc, int value);
+void joy_midi_cc(struct SharedContext* ctx, int channel, int cc, int value);
 
 /**
  * @brief Send all notes off on all channels.
  */
-void joy_midi_panic(void);
+void joy_midi_panic(struct SharedContext* ctx);
 
 /**
  * @brief Sleep for a specified number of milliseconds.
+ * @param ctx Shared context.
  * @param ms Milliseconds to sleep.
  */
-void joy_midi_sleep_ms(int ms);
+void joy_midi_sleep_ms(struct SharedContext* ctx, int ms);
 
 /* ============================================================================
  * TSF Backend Control
@@ -133,20 +117,21 @@ int joy_tsf_load_soundfont(const char* path);
 
 /**
  * @brief Enable TSF synthesis.
+ * @param ctx Shared context.
  * @return 0 on success, -1 on error.
  */
-int joy_tsf_enable(void);
+int joy_tsf_enable(struct SharedContext* ctx);
 
 /**
  * @brief Disable TSF synthesis.
  */
-void joy_tsf_disable(void);
+void joy_tsf_disable(struct SharedContext* ctx);
 
 /**
  * @brief Check if TSF is enabled.
  * @return Non-zero if enabled.
  */
-int joy_tsf_is_enabled(void);
+int joy_tsf_is_enabled(struct SharedContext* ctx);
 
 /* ============================================================================
  * Csound Backend Control
@@ -161,7 +146,7 @@ int joy_csound_init(void);
 /**
  * @brief Cleanup Csound backend.
  */
-void joy_csound_cleanup(void);
+void joy_csound_cleanup(struct SharedContext* ctx);
 
 /**
  * @brief Load a CSD file for Csound synthesis.
@@ -172,20 +157,21 @@ int joy_csound_load(const char* path);
 
 /**
  * @brief Enable Csound synthesis.
+ * @param ctx Shared context.
  * @return 0 on success, -1 on error.
  */
-int joy_csound_enable(void);
+int joy_csound_enable(struct SharedContext* ctx);
 
 /**
  * @brief Disable Csound synthesis.
  */
-void joy_csound_disable(void);
+void joy_csound_disable(struct SharedContext* ctx);
 
 /**
  * @brief Check if Csound is enabled.
  * @return Non-zero if enabled.
  */
-int joy_csound_is_enabled(void);
+int joy_csound_is_enabled(struct SharedContext* ctx);
 
 /**
  * @brief Play a CSD file (blocking).
@@ -265,25 +251,6 @@ double joy_link_get_phase(double quantum);
  * @return Number of peers (excluding this instance).
  */
 int joy_link_num_peers(void);
-
-/* ============================================================================
- * Shared Context Access
- * ============================================================================ */
-
-/* Forward declaration */
-struct SharedContext;
-
-/**
- * @brief Get Joy's shared context.
- * @return Pointer to shared context, or NULL if not initialized.
- */
-struct SharedContext* joy_get_shared_context(void);
-
-/**
- * @brief Set Joy's shared context (for editor integration).
- * @param ctx Shared context to use (NULL to release).
- */
-void joy_set_shared_context(struct SharedContext* ctx);
 
 #ifdef __cplusplus
 }

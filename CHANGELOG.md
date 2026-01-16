@@ -152,6 +152,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - The `midi_out` pointer is still synced from `shared->midi_out` for API compatibility
   - Removed ~200 lines of redundant code from `src/lang/alda/backends/midi_backend.c`
 
+- **Joy Multi-Context Support**: Fixed Joy MIDI backend stomping shared context between sessions
+  - Previously, Joy's MIDI backend used a global `g_shared` that could be overwritten by multiple callers (REPL vs editor)
+  - When one session cleaned up, it would free the context still in use by another session
+  - Added ownership tracking (`g_owns_context` flag) to `joy_midi_backend.c`
+  - `joy_set_shared_context()` now marks external contexts as not owned (won't free on cleanup)
+  - Joy REPL (`repl.c`) now creates and owns its own SharedContext via `g_joy_repl_shared`
+  - Joy editor integration (`register.c`) creates per-editor-context SharedContext
+  - TR7 already had per-context ownership in both REPL and editor integration
+
 - **MIDI Export Multi-track Crash**: Fixed segfault when exporting multi-channel compositions
   - Track 0 (conductor) was empty when no tempo events existed in the shared buffer
   - Now always adds a default tempo (120 BPM) to ensure track 0 has content

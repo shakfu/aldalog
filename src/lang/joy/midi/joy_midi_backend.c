@@ -4,6 +4,8 @@
  *
  * Provides the MIDI interface that Joy's primitives expect.
  * Delegates to the shared audio/MIDI backend for actual I/O.
+ *
+ * All functions take SharedContext* as first parameter - no globals.
  */
 
 #include "joy_midi_backend.h"
@@ -14,211 +16,121 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* Cross-platform sleep for fallback */
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
-
 /* ============================================================================
- * Module State
+ * Port Management
  * ============================================================================ */
 
-static SharedContext* g_shared = NULL;
-static int g_current_channel = 1;
-static int g_initialized = 0;
-
-/* ============================================================================
- * Public API - Initialization
- * ============================================================================ */
-
-int joy_midi_init(void) {
-    if (g_initialized) return 0;
-
-    /* Allocate and initialize shared context */
-    g_shared = (SharedContext*)malloc(sizeof(SharedContext));
-    if (!g_shared) {
-        fprintf(stderr, "Joy MIDI: Failed to allocate shared context\n");
-        return -1;
+void joy_midi_list_ports(SharedContext* ctx) {
+    if (ctx) {
+        shared_midi_list_ports(ctx);
     }
-
-    if (shared_context_init(g_shared) != 0) {
-        free(g_shared);
-        g_shared = NULL;
-        fprintf(stderr, "Joy MIDI: Failed to initialize shared context\n");
-        return -1;
-    }
-
-    g_current_channel = 1;
-    g_initialized = 1;
-
-    return 0;
 }
 
-void joy_midi_cleanup(void) {
-    if (!g_initialized) return;
+int joy_midi_open_port(SharedContext* ctx, int port_idx) {
+    if (!ctx) return -1;
 
-    if (g_shared) {
-        joy_midi_panic();
-        shared_context_cleanup(g_shared);
-        free(g_shared);
-        g_shared = NULL;
-    }
-
-    g_initialized = 0;
-}
-
-/* ============================================================================
- * Public API - Port Management
- * ============================================================================ */
-
-void joy_midi_list_ports(void) {
-    if (!g_shared) {
-        if (joy_midi_init() != 0) return;
-    }
-    shared_midi_list_ports(g_shared);
-}
-
-int joy_midi_open_port(int port_idx) {
-    if (!g_shared) {
-        if (joy_midi_init() != 0) return -1;
-    }
-
-    int ret = shared_midi_open_port(g_shared, port_idx);
+    int ret = shared_midi_open_port(ctx, port_idx);
     if (ret == 0) {
-        const char* name = shared_midi_get_port_name(g_shared, port_idx);
+        const char* name = shared_midi_get_port_name(ctx, port_idx);
         printf("Joy MIDI: Opened port %d: %s\n", port_idx, name ? name : "(unknown)");
     }
     return ret;
 }
 
-int joy_midi_open_virtual(const char* name) {
-    if (!g_shared) {
-        if (joy_midi_init() != 0) return -1;
-    }
+int joy_midi_open_virtual(SharedContext* ctx, const char* name) {
+    if (!ctx) return -1;
 
-    int ret = shared_midi_open_virtual(g_shared, name ? name : "JoyMIDI");
+    int ret = shared_midi_open_virtual(ctx, name ? name : "JoyMIDI");
     if (ret == 0) {
         printf("Joy MIDI: Created virtual port '%s'\n", name ? name : "JoyMIDI");
     }
     return ret;
 }
 
-void joy_midi_close(void) {
-    if (g_shared) {
-        joy_midi_panic();
-        shared_midi_close(g_shared);
+void joy_midi_close(SharedContext* ctx) {
+    if (ctx) {
+        joy_midi_panic(ctx);
+        shared_midi_close(ctx);
         printf("Joy MIDI: Port closed\n");
     }
 }
 
-int joy_midi_is_open(void) {
-    return g_shared && shared_midi_is_open(g_shared);
+int joy_midi_is_open(SharedContext* ctx) {
+    return ctx && shared_midi_is_open(ctx);
 }
 
 /* ============================================================================
- * Public API - Channel Management
+ * MIDI Messages
  * ============================================================================ */
 
-void joy_midi_set_channel(int channel) {
-    if (channel < 1) channel = 1;
-    if (channel > 16) channel = 16;
-    g_current_channel = channel;
-}
-
-int joy_midi_get_channel(void) {
-    return g_current_channel;
-}
-
-/* ============================================================================
- * Public API - MIDI Messages
- * ============================================================================ */
-
-void joy_midi_note_on(int pitch, int velocity) {
-    joy_midi_note_on_ch(g_current_channel, pitch, velocity);
-}
-
-void joy_midi_note_off(int pitch) {
-    joy_midi_note_off_ch(g_current_channel, pitch);
-}
-
-void joy_midi_note_on_ch(int channel, int pitch, int velocity) {
-    if (!g_shared) return;
+void joy_midi_note_on(SharedContext* ctx, int channel, int pitch, int velocity) {
+    if (!ctx) return;
 
     /* Priority 1: Csound (via shared backend) */
-    if (g_shared->csound_enabled && shared_csound_is_enabled()) {
+    if (ctx->csound_enabled && shared_csound_is_enabled()) {
         shared_csound_send_note_on(channel, pitch, velocity);
         return;
     }
 
     /* Priority 2+: TSF/MIDI via shared context */
-    shared_send_note_on(g_shared, channel, pitch, velocity);
+    shared_send_note_on(ctx, channel, pitch, velocity);
 }
 
-void joy_midi_note_off_ch(int channel, int pitch) {
-    if (!g_shared) return;
+void joy_midi_note_off(SharedContext* ctx, int channel, int pitch) {
+    if (!ctx) return;
 
     /* Priority 1: Csound */
-    if (g_shared->csound_enabled && shared_csound_is_enabled()) {
+    if (ctx->csound_enabled && shared_csound_is_enabled()) {
         shared_csound_send_note_off(channel, pitch);
         return;
     }
 
-    shared_send_note_off(g_shared, channel, pitch);
+    shared_send_note_off(ctx, channel, pitch);
 }
 
-void joy_midi_program(int channel, int program) {
-    if (!g_shared) return;
+void joy_midi_program(SharedContext* ctx, int channel, int program) {
+    if (!ctx) return;
 
     /* Route to Csound if enabled */
-    if (g_shared->csound_enabled && shared_csound_is_enabled()) {
+    if (ctx->csound_enabled && shared_csound_is_enabled()) {
         shared_csound_send_program(channel, program);
         return;
     }
 
-    shared_send_program(g_shared, channel, program);
+    shared_send_program(ctx, channel, program);
 }
 
-void joy_midi_cc(int channel, int cc, int value) {
-    if (!g_shared) return;
+void joy_midi_cc(SharedContext* ctx, int channel, int cc, int value) {
+    if (!ctx) return;
 
     /* Route to Csound if enabled */
-    if (g_shared->csound_enabled && shared_csound_is_enabled()) {
+    if (ctx->csound_enabled && shared_csound_is_enabled()) {
         shared_csound_send_cc(channel, cc, value);
         return;
     }
 
-    shared_send_cc(g_shared, channel, cc, value);
+    shared_send_cc(ctx, channel, cc, value);
 }
 
-void joy_midi_panic(void) {
-    if (!g_shared) return;
+void joy_midi_panic(SharedContext* ctx) {
+    if (!ctx) return;
 
     /* Stop Csound notes if enabled */
-    if (g_shared->csound_enabled && shared_csound_is_enabled()) {
+    if (ctx->csound_enabled && shared_csound_is_enabled()) {
         shared_csound_all_notes_off();
     }
 
-    shared_send_panic(g_shared);
+    shared_send_panic(ctx);
 }
 
-void joy_midi_sleep_ms(int ms) {
-    if (g_shared) {
-        shared_sleep_ms(g_shared, ms);
-    } else if (ms > 0) {
-        /* Fallback to direct sleep if no context */
-#ifdef _WIN32
-        Sleep(ms);
-#else
-        usleep(ms * 1000);
-#endif
+void joy_midi_sleep_ms(SharedContext* ctx, int ms) {
+    if (ctx) {
+        shared_sleep_ms(ctx, ms);
     }
 }
 
 /* ============================================================================
- * TSF Backend Control (new functions for Joy)
+ * TSF Backend Control
  * ============================================================================ */
 
 int joy_tsf_load_soundfont(const char* path) {
@@ -229,14 +141,12 @@ int joy_tsf_load_soundfont(const char* path) {
     return shared_tsf_load_soundfont(path);
 }
 
-int joy_tsf_enable(void) {
-    if (!g_shared) {
-        if (joy_midi_init() != 0) return -1;
-    }
+int joy_tsf_enable(SharedContext* ctx) {
+    if (!ctx) return -1;
 
     int ret = shared_tsf_enable();
     if (ret == 0) {
-        g_shared->tsf_enabled = 1;
+        ctx->tsf_enabled = 1;
         /* Set default program (piano=0) for all channels so TSF knows which sound to use */
         for (int ch = 1; ch <= 16; ch++) {
             shared_tsf_send_program(ch, 0);
@@ -245,28 +155,27 @@ int joy_tsf_enable(void) {
     return ret;
 }
 
-void joy_tsf_disable(void) {
-    if (g_shared) {
-        g_shared->tsf_enabled = 0;
+void joy_tsf_disable(SharedContext* ctx) {
+    if (ctx) {
+        ctx->tsf_enabled = 0;
     }
     shared_tsf_disable();
 }
 
-int joy_tsf_is_enabled(void) {
-    return g_shared && g_shared->tsf_enabled && shared_tsf_is_enabled();
+int joy_tsf_is_enabled(SharedContext* ctx) {
+    return ctx && ctx->tsf_enabled && shared_tsf_is_enabled();
 }
 
 /* ============================================================================
- * Csound Backend Control (via shared backend)
+ * Csound Backend Control
  * ============================================================================ */
 
 int joy_csound_init(void) {
     return shared_csound_init();
 }
 
-void joy_csound_cleanup(void) {
-    /* Disable first to clear shared context flag */
-    joy_csound_disable();
+void joy_csound_cleanup(SharedContext* ctx) {
+    joy_csound_disable(ctx);
     shared_csound_cleanup();
 }
 
@@ -278,31 +187,29 @@ int joy_csound_load(const char* path) {
     return shared_csound_load(path);
 }
 
-int joy_csound_enable(void) {
-    if (!g_shared) {
-        if (joy_midi_init() != 0) return -1;
-    }
+int joy_csound_enable(SharedContext* ctx) {
+    if (!ctx) return -1;
 
     int ret = shared_csound_enable();
     if (ret == 0) {
-        g_shared->csound_enabled = 1;
+        ctx->csound_enabled = 1;
         /* Disable TSF when Csound is enabled (Csound takes priority) */
-        if (g_shared->tsf_enabled) {
-            g_shared->tsf_enabled = 0;
+        if (ctx->tsf_enabled) {
+            ctx->tsf_enabled = 0;
         }
     }
     return ret;
 }
 
-void joy_csound_disable(void) {
-    if (g_shared) {
-        g_shared->csound_enabled = 0;
+void joy_csound_disable(SharedContext* ctx) {
+    if (ctx) {
+        ctx->csound_enabled = 0;
     }
     shared_csound_disable();
 }
 
-int joy_csound_is_enabled(void) {
-    return g_shared && g_shared->csound_enabled && shared_csound_is_enabled();
+int joy_csound_is_enabled(SharedContext* ctx) {
+    return ctx && ctx->csound_enabled && shared_csound_is_enabled();
 }
 
 int joy_csound_play_file(const char* path, int verbose) {
@@ -311,25 +218,6 @@ int joy_csound_play_file(const char* path, int verbose) {
 
 const char* joy_csound_get_error(void) {
     return shared_csound_get_error();
-}
-
-/* ============================================================================
- * Shared Context Access (for advanced use)
- * ============================================================================ */
-
-SharedContext* joy_get_shared_context(void) {
-    return g_shared;
-}
-
-void joy_set_shared_context(SharedContext* ctx) {
-    /* If we have an existing context we own, clean it up */
-    if (g_shared && g_initialized) {
-        shared_context_cleanup(g_shared);
-        free(g_shared);
-    }
-
-    g_shared = ctx;
-    g_initialized = (ctx != NULL) ? 1 : 0;
 }
 
 /* ============================================================================

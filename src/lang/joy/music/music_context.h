@@ -9,6 +9,9 @@
 
 #define MUSIC_MAX_CHORD_NOTES 16
 
+/* Forward declaration */
+struct SharedContext;
+
 typedef struct {
     int octave;           /* Current octave (0-9, default 4) */
     int duration_ms;      /* Current duration in ms (default 500) */
@@ -20,6 +23,8 @@ typedef struct {
     bool in_chord;        /* Currently building a chord */
     int chord_pitches[MUSIC_MAX_CHORD_NOTES];  /* Pitches for current chord */
     int chord_count;      /* Number of pitches in chord */
+    int channel;          /* Current MIDI channel (1-16, default 1) */
+    struct SharedContext* shared;  /* Shared audio/MIDI context (not owned) */
 } MusicContext;
 
 /* Create a new music context with default values */
@@ -30,6 +35,9 @@ void music_context_free(MusicContext* mctx);
 
 /* Reset music context to default values */
 void music_context_reset(MusicContext* mctx);
+
+/* Set shared audio/MIDI context (not owned - caller manages lifetime) */
+void music_context_set_shared(MusicContext* mctx, struct SharedContext* shared);
 
 /* Convert duration value (1=whole, 2=half, 4=quarter, etc.) to ms based on tempo */
 int music_duration_to_ms(int duration, int tempo);

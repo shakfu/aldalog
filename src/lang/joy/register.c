@@ -24,6 +24,9 @@
 #include "music_context.h"
 #include "midi_primitives.h"
 
+/* Shared context */
+#include "shared/context.h"
+
 /* ======================= Internal State ======================= */
 
 /* Error buffer size */
@@ -33,6 +36,7 @@
 struct LokiJoyState {
     int initialized;
     JoyContext *joy_ctx;                /* The Joy interpreter context */
+    SharedContext *shared;              /* Editor-owned shared context */
     char last_error[JOY_ERROR_BUFSIZE]; /* Last error message */
     jmp_buf error_jmp;                  /* Error recovery point */
     int in_eval;                        /* Currently evaluating (for error recovery) */
@@ -95,9 +99,13 @@ int loki_joy_init(editor_ctx_t *ctx) {
     /* Set parser dictionary for DEFINE support */
     joy_set_parser_dict(state->joy_ctx->dictionary);
 
-    /* Initialize MIDI backend */
-    if (joy_midi_init() != 0) {
-        set_state_error(state, "Failed to initialize MIDI backend");
+    /*
+     * Create editor-owned SharedContext for this Joy instance.
+     * This ensures multiple editor buffers don't stomp each other's context.
+     */
+    state->shared = (SharedContext*)malloc(sizeof(SharedContext));
+    if (!state->shared) {
+        set_state_error(state, "Failed to allocate shared context");
         music_notation_cleanup(state->joy_ctx);
         joy_context_free(state->joy_ctx);
         free(state);
@@ -105,8 +113,24 @@ int loki_joy_init(editor_ctx_t *ctx) {
         return -1;
     }
 
+    if (shared_context_init(state->shared) != 0) {
+        set_state_error(state, "Failed to initialize shared context");
+        free(state->shared);
+        music_notation_cleanup(state->joy_ctx);
+        joy_context_free(state->joy_ctx);
+        free(state);
+        ctx->joy_state = NULL;
+        return -1;
+    }
+
+    /* Link SharedContext to MusicContext so primitives can access it */
+    MusicContext* mctx = music_get_context(state->joy_ctx);
+    if (mctx) {
+        music_context_set_shared(mctx, state->shared);
+    }
+
     /* Open virtual MIDI port for Joy output */
-    if (joy_midi_open_virtual(PSND_MIDI_PORT_NAME "-joy") != 0) {
+    if (joy_midi_open_virtual(state->shared, PSND_MIDI_PORT_NAME "-joy") != 0) {
         /* Non-fatal - can still use real ports */
     }
 
@@ -124,8 +148,14 @@ void loki_joy_cleanup(editor_ctx_t *ctx) {
     if (!state || !state->initialized) return;
 
     /* Stop MIDI and send panic */
-    joy_midi_panic();
-    joy_midi_cleanup();
+    joy_midi_panic(state->shared);
+
+    /* Free editor-owned SharedContext */
+    if (state->shared) {
+        shared_context_cleanup(state->shared);
+        free(state->shared);
+        state->shared = NULL;
+    }
 
     /* Clean up music notation (frees MusicContext) */
     if (state->joy_ctx) {
@@ -258,7 +288,7 @@ void loki_joy_stop(editor_ctx_t *ctx) {
     LokiJoyState *state = get_joy_state(ctx);
     if (!state || !state->initialized) return;
 
-    joy_midi_panic();
+    joy_midi_panic(state->shared);
 }
 
 int loki_joy_open_port(editor_ctx_t *ctx, int port_idx) {
@@ -268,7 +298,7 @@ int loki_joy_open_port(editor_ctx_t *ctx, int port_idx) {
         return -1;
     }
 
-    if (joy_midi_open_port(port_idx) != 0) {
+    if (joy_midi_open_port(state->shared, port_idx) != 0) {
         set_state_error(state, "Failed to open MIDI port");
         return -1;
     }
@@ -284,7 +314,7 @@ int loki_joy_open_virtual(editor_ctx_t *ctx, const char *name) {
         return -1;
     }
 
-    if (joy_midi_open_virtual(name) != 0) {
+    if (joy_midi_open_virtual(state->shared, name) != 0) {
         set_state_error(state, "Failed to create virtual MIDI port");
         return -1;
     }
@@ -297,7 +327,7 @@ void loki_joy_list_ports(editor_ctx_t *ctx) {
     LokiJoyState *state = get_joy_state(ctx);
     if (!state || !state->initialized) return;
 
-    joy_midi_list_ports();
+    joy_midi_list_ports(state->shared);
 }
 
 /* ======================= Stack Operations ======================= */
@@ -586,12 +616,13 @@ static void joy_register_lua_api(lua_State *L) {
 
 /* Wrapper for backend configuration */
 static int joy_bridge_configure_backend(editor_ctx_t *ctx, const char *sf_path, const char *csd_path) {
-    (void)ctx;  /* Joy uses global backend state */
+    LokiJoyState *state = get_joy_state(ctx);
+    SharedContext *shared = state ? state->shared : NULL;
 
     /* CSD takes precedence over soundfont */
     if (csd_path && *csd_path) {
         if (joy_csound_load(csd_path) == 0) {
-            if (joy_csound_enable() == 0) {
+            if (joy_csound_enable(shared) == 0) {
                 return 0;  /* Success with Csound */
             }
         }
@@ -600,7 +631,7 @@ static int joy_bridge_configure_backend(editor_ctx_t *ctx, const char *sf_path, 
 
     if (sf_path && *sf_path) {
         if (joy_tsf_load_soundfont(sf_path) == 0) {
-            if (joy_tsf_enable() == 0) {
+            if (joy_tsf_enable(shared) == 0) {
                 return 0;  /* Success with TSF */
             }
         }
