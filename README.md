@@ -50,7 +50,7 @@ psnd alda -sf gm.sf2    # REPL with built-in synth
 
 Type Alda notation directly:
 
-```
+```text
 alda> piano: c d e f g
 alda> violin: o5 a b > c d e
 alda> :stop
@@ -67,7 +67,7 @@ psnd joy -p 0           # Joy REPL using MIDI port 0
 
 Type Joy code directly:
 
-```
+```text
 joy> :virtual
 joy> 120 tempo
 joy> [c d e f g] play
@@ -88,7 +88,7 @@ psnd tr7 song.scm       # Run Scheme file
 
 Type Scheme code directly:
 
-```
+```text
 tr7> (midi-virtual "TR7Out")
 tr7> (set-tempo 120)
 tr7> (play-note 60 80 500)      ; note 60, velocity 80, 500ms
@@ -373,13 +373,14 @@ psnd supports [Ableton Link](https://www.ableton.com/en/link/) for tempo synchro
 
 In the editor, use the `:link` command:
 
-```
+```text
 :link on       # Enable Link
 :link off      # Disable Link
 :link          # Toggle Link
 ```
 
 When Link is enabled:
+
 - Status bar shows "ALDA LINK" instead of "ALDA NORMAL"
 - Playback tempo syncs with the Link session
 - Other Link-enabled apps (Ableton Live, etc.) share the same tempo
@@ -464,7 +465,7 @@ This loads the Csound instruments and enables Csound synthesis automatically whe
 
 In the editor, use the `:csd` command after loading a .csd file:
 
-```
+```text
 :csd on        # Enable Csound synthesis
 :csd off       # Disable Csound, switch to TinySoundFont
 :csd           # Toggle between Csound and TSF
@@ -638,7 +639,7 @@ Feedback and experiments are welcome - polyglot support will be guided by real-w
 
 ## Project Structure
 
-```
+```text
 src/
   lang/           # Language implementations
     alda/         # Alda music language (parser, interpreter, backends)

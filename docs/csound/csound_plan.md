@@ -6,7 +6,7 @@ Integrate Csound 6.18.1 as an optional synthesis backend for Psnd, driven by MID
 
 ## Architecture
 
-```
+```text
 [ Alda Parser ] --> [ MIDI Events ] --> [ Scheduler (libuv) ]
                                               |
                     +-------------------------+-------------------------+
@@ -112,6 +112,7 @@ Map to Csound instruments or use massign in orchestra.
 ### Control Change
 
 Use Csound's chnset for real-time control:
+
 ```c
 csoundSetControlChannel(csound, "cc1_ch1", value / 127.0);
 ```
@@ -211,6 +212,7 @@ loki.alda.set_backend("midi")    -- Use external MIDI only
 ```
 
 Example usage in `.aldev/init.lua`:
+
 ```lua
 if loki.alda.csound_available() then
     loki.alda.csound_load(".aldev/csound/default.csd")
@@ -221,7 +223,7 @@ end
 
 ## File Structure
 
-```
+```text
 thirdparty/
   csound-6.18.1/
     Custom.cmake              # Minimal build configuration

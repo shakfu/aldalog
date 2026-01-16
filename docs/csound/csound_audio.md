@@ -10,6 +10,7 @@ Csound synthesis backend is now fully working. The issue was that `async.c` (the
 ### Root Cause
 
 In `thirdparty/alda-midi/lib/src/async.c`, the `send_event()` function only checked for TSF:
+
 ```c
 if (async_sys.ctx && async_sys.ctx->tsf_enabled && alda_tsf_is_enabled()) {
     // routes to TSF...
@@ -53,14 +54,17 @@ The backends are completely independent - no delegation or shared audio devices.
 ## Historical Notes
 
 ### Failed Theory: Multiple miniaudio instances
+
 Early debugging suggested macOS CoreAudio couldn't support multiple miniaudio devices. This was **incorrect** - the actual issue was MIDI event routing.
 
 ### What Actually Fixed It
+
 The `async.c` event dispatcher was only routing to TSF, ignoring Csound entirely. Adding Csound routing to `send_event()` fixed the issue. Separate miniaudio instances work fine.
 
 ## CSD File Notes
 
 The default CSD file (`.psnd/csound/default.csd`) was fixed for:
+
 - `endop` vs `endin` (opcodes use `endop`, instruments use `endin`)
 - FM synthesis instrument 2 (replaced `fmb3` with manual FM)
 - Added `--daemon` flag to CsOptions
@@ -81,7 +85,9 @@ make csound  # or: cmake --build build --target alda_bin
 ## Plugin Warning
 
 The warning about missing plugin directory is harmless:
-```
+
+```text
 WARNING: Error opening plugin directory '/Users/sa/Library/Frameworks/CsoundLib64.framework/Versions/6.0/Resources/Opcodes64': No such file or directory
 ```
+
 This is because we're using a statically linked Csound, not the framework version.

@@ -95,6 +95,7 @@ The `keywords` and `types` arrays are highlighted in different colors:
 - **Types**: Type names, constants, special values (typically secondary color)
 
 This distinction helps readability. For example, in Alda:
+
 - Keywords: instrument names (`piano`, `violin`), attributes (`tempo`, `volume`)
 - Types: note names (`c`, `d`, `e`), octave markers (`o4`, `o5`)
 
@@ -105,6 +106,7 @@ The `separators` string defines word boundaries for keyword matching. Characters
 Default: `",.()+-/*=~%<>[];:"`
 
 For languages with special syntax, customize this. For example, Alda uses:
+
 ```lua
 separators = ",.()+-/*=~%<>[]{}:;|'\""
 ```
@@ -155,7 +157,7 @@ languages.stats()                   -- Show loading statistics
 
 ## File Structure
 
-```
+```text
 ~/.psnd/
   init.lua              -- Loads languages module
   modules/

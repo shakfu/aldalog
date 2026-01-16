@@ -3,6 +3,7 @@
 ## Critical - Functional Regressions
 
 ### `psnd play` broken for Joy/TR7 (FIXED)
+
 - [x] Fix `psnd play <file>` for Joy (DONE)
   - Added dedicated `joy_play_main` in `src/lang/joy/repl.c:373`
   - Parses argv starting at index 0 (not 1)
@@ -13,6 +14,7 @@
   - Updated dispatch to use `tr7_play_main` instead of `tr7_repl_main`
 
 ### SharedContext cleanup leaks global state (FIXED)
+
 - [x] Fix `shared_context_cleanup()` to properly reset backend state (DONE)
   - Now sends panic (all notes off) before cleanup
   - Disables TSF if `ctx->tsf_enabled` was set
@@ -171,3 +173,7 @@
 
 - [ ] JACK backend
   - For pro audio workflows
+
+- [ ] Decouple from the loki editor and use a webserver (linky mongoose)
+
+- [ ] Provide a minimal language example

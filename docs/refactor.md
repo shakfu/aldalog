@@ -13,7 +13,7 @@ Extract a language-agnostic audio/MIDI backend layer from the current Alda-speci
 
 ## Proposed Architecture
 
-```
+```text
 src/
   shared/                   # NEW: Language-agnostic shared layer
     audio/                  # Audio synthesis backends
@@ -111,6 +111,7 @@ mkdir -p src/shared/audio src/shared/midi src/shared/link
 ```
 
 Create header files:
+
 - `src/shared/context.h` - SharedContext struct
 - `src/shared/audio/audio.h` - Audio backend API
 - `src/shared/midi/midi.h` - MIDI I/O API
@@ -153,6 +154,7 @@ void shared_send_note_on(SharedContext* ctx, int ch, int pitch, int vel) {
 ### Step 4: Update Alda to use SharedContext
 
 Modify `src/alda/` to use the shared layer:
+
 - `AldaContext` keeps parser/interpreter state
 - Add `SharedContext* shared` field to `AldaContext`
 - Replace `alda_midi_send_*` calls with `shared_send_*`
@@ -165,6 +167,7 @@ shared_send_note_on(ctx->shared, channel, pitch, velocity);
 ### Step 5: Update Joy to use SharedContext
 
 Modify `src/joy/midi_primitives.c`:
+
 - Remove direct libremidi calls
 - Add `SharedContext*` to `JoyContext`
 - Route through shared backend
@@ -180,6 +183,7 @@ shared_send_note_on(ctx->shared, ctx->channel, pitch, velocity);
 ### Step 6: Update Loki bridges
 
 Modify `src/loki/alda.c` and `src/loki/joy.c`:
+
 - Initialize shared `SharedContext` in editor context
 - Both languages share the same context when in editor
 - REPL mode creates standalone `SharedContext`
@@ -222,6 +226,7 @@ target_link_libraries(libloki shared)
 ### Step 8: Update Joy REPL
 
 Modify `src/repl.c` (joy_repl_main):
+
 - Create `SharedContext` instead of using `joy_midi_*` directly
 - Pass to Joy context for playback
 

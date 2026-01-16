@@ -259,7 +259,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - `12tet.scl` - 12-tone equal temperament
     - `just.scl` - 5-limit just intonation major
     - `pythagorean.scl` - Pythagorean 12-tone chromatic
-  - Format spec: https://www.huygens-fokker.org/scala/scl_format.html
+  - Format spec: <https://www.huygens-fokker.org/scala/scl_format.html>
 
 - **Standalone CSD File Support**: Edit and play Csound .csd files directly
   - `psnd song.csd` - Open CSD file in editor with syntax highlighting
