@@ -1,10 +1,19 @@
 /* csd.c - Csound synthesis command (:csd)
  *
  * Toggle Csound synthesis backend.
+ *
+ * NOTE: Currently uses loki_alda_csound_* functions because the actual
+ * Csound implementation lives in src/alda/csound_backend.c. The shared
+ * backend (src/shared/audio/csound_backend.c) contains only stubs.
+ *
+ * TODO: Once Csound is moved to the shared layer, this command should
+ * use shared_csound_* functions instead, making Csound available to
+ * all languages (Alda, Joy, etc.), not just Alda.
+ * See TODO.md "Move Csound backend to shared layer".
  */
 
 #include "command_impl.h"
-#include "loki/alda.h"
+#include "loki/alda.h"  /* TODO: Replace with shared/audio/audio.h */
 
 /* :csd - Toggle Csound synthesis */
 int cmd_csd(editor_ctx_t *ctx, const char *args) {

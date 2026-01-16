@@ -78,6 +78,22 @@
 
 ### Architecture
 
+- [ ] Move Csound backend to shared layer
+  - Currently: Real implementation in `src/alda/csound_backend.c`, stubs in `src/shared/audio/csound_backend.c`
+  - Move actual Csound implementation to `src/shared/audio/csound_backend.c`
+  - Update Alda to use `shared_csound_*` functions
+  - Update Joy to use `shared_csound_*` functions
+  - Update `:csd` command to use shared API instead of `loki_alda_csound_*`
+  - Enables Csound synthesis for all languages, not just Alda
+
+- [ ] Move MIDI export to shared layer
+  - Currently: `src/loki/midi_export.cpp` uses Alda's internal event model
+  - Define a common `SharedMidiEvent` format in `src/shared/`
+  - Languages populate shared event buffer during playback/evaluation
+  - `:export` command exports from shared event buffer
+  - Update `src/loki/command/export.c` to use shared API
+  - Enables MIDI file export for all languages, not just Alda
+
 - [ ] Modular language selection via CMake options
   - Add `BUILD_ALDA_LANGUAGE` and `BUILD_JOY_LANGUAGE` options (default ON)
   - Conditional library builds and linking in CMakeLists.txt

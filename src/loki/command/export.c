@@ -1,6 +1,13 @@
 /* export.c - MIDI export command (:export)
  *
- * Export Alda compositions to Standard MIDI Files.
+ * Export compositions to Standard MIDI Files.
+ *
+ * NOTE: Currently Alda-specific because it exports Alda's internal event
+ * model to MIDI. Joy uses a different execution model (immediate playback).
+ *
+ * TODO: Move MIDI export to shared layer with a common event format,
+ * enabling export for all languages. See TODO.md "Move MIDI export to
+ * shared layer".
  */
 
 #include "command_impl.h"
