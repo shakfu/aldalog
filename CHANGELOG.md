@@ -100,6 +100,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - `:cs-disable` - Disable Csound
   - `:cs-status` - Show Csound status
 
+- **Shared Service Tests**: New test suite for shared backend services (`tests/shared/`)
+  - `test_link.c` - 17 tests for Ableton Link (init, enable/disable, tempo, peers, start/stop sync, beat/phase)
+  - `test_midi_events.c` - 17 tests for shared MIDI event buffer (recording, retrieval, sorting, capacity)
+  - `test_midi_export.c` - 12 tests for MIDI file export (Type 0/Type 1, header validation via "MThd" magic)
+  - Link tests excluded from ctest (network discovery can hang); run manually with `./build/tests/shared/test_link`
+
+### Fixed
+
+- **MIDI Export Multi-track Crash**: Fixed segfault when exporting multi-channel compositions
+  - Track 0 (conductor) was empty when no tempo events existed in the shared buffer
+  - Now always adds a default tempo (120 BPM) to ensure track 0 has content
+
 ## [0.1.2]
 
 ### Added
