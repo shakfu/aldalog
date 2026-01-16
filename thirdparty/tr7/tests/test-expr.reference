@@ -1,0 +1,126 @@
+(tr7-show-result #t)
+#f
+(tr7-show-prompt #t)
+#f
+tr7> (import (tr7 expr))
+tr7> (define-syntax test (syntax-rules () ((_ . x) (for-each display (list '(expr . x) " => " (expr . x) "\n")))))
+tr7> (define one 1)
+tr7> (define two 2)
+tr7> (define three 3)
+tr7> (define four 4)
+tr7> (define five 5)
+tr7> (test five)
+(expr five) => 5
+tr7> (test 10)
+(expr 10) => 10
+tr7> (test - 5)
+(expr - 5) => -5
+tr7> (test 10 ^ 3)
+(expr 10 ^ 3) => 1000
+tr7> (test 100 % 16)
+(expr 100 % 16) => 4
+tr7> (test 100 // 16)
+(expr 100 // 16) => 6
+tr7> (test 100 / 16)
+(expr 100 / 16) => 6.25
+tr7> (test 100 * 16)
+(expr 100 * 16) => 1600
+tr7> (test 100 - 16)
+(expr 100 - 16) => 84
+tr7> (test 100 + 16)
+(expr 100 + 16) => 116
+tr7> (test (100 + 16))
+(expr (100 + 16)) => 116
+tr7> (test 2 * (10 - 5))
+(expr 2 * (10 - 5)) => 10
+tr7> (test 4 - 1 - 1)
+(expr 4 - 1 - 1) => 2
+tr7> (test four - one - one)
+(expr four - one - one) => 2
+tr7> (test ((even? four)))
+(expr ((even? four))) => #t
+tr7> (test ((odd? four)))
+(expr ((odd? four))) => #f
+tr7> (test 4 < 5)
+(expr 4 < 5) => #t
+tr7> (test 5 < 4)
+(expr 5 < 4) => #f
+tr7> (test 5 < 5)
+(expr 5 < 5) => #f
+tr7> (test 4 > 5)
+(expr 4 > 5) => #f
+tr7> (test 5 > 4)
+(expr 5 > 4) => #t
+tr7> (test 5 > 5)
+(expr 5 > 5) => #f
+tr7> (test 4 = 5)
+(expr 4 = 5) => #f
+tr7> (test 5 = 4)
+(expr 5 = 4) => #f
+tr7> (test 5 = 5)
+(expr 5 = 5) => #t
+tr7> (test 4 <= 5)
+(expr 4 <= 5) => #t
+tr7> (test 5 <= 4)
+(expr 5 <= 4) => #f
+tr7> (test 5 <= 5)
+(expr 5 <= 5) => #t
+tr7> (test 4 >= 5)
+(expr 4 >= 5) => #f
+tr7> (test 5 >= 4)
+(expr 5 >= 4) => #t
+tr7> (test 5 >= 5)
+(expr 5 >= 5) => #t
+tr7> (test 4 <> 5)
+(expr 4 <> 5) => #t
+tr7> (test 5 <> 4)
+(expr 5 <> 4) => #t
+tr7> (test 5 <> 5)
+(expr 5 <> 5) => #f
+tr7> (test four > two and "ok")
+(expr four > two and ok) => ok
+tr7> (test four < two and "not ok")
+(expr four < two and not ok) => #f
+tr7> (test four > two or "not ok")
+(expr four > two or not ok) => #t
+tr7> (test four < two or " ok")
+(expr four < two or  ok) =>  ok
+tr7> (test 1 < 2 eqv 7 > 8)
+(expr 1 < 2 eqv 7 > 8) => #f
+tr7> (test 1 < 2 eqv 7 < 8)
+(expr 1 < 2 eqv 7 < 8) => #t
+tr7> (test 1 > 2 eqv 7 > 8)
+(expr 1 > 2 eqv 7 > 8) => #t
+tr7> (test 1 > 2 eqv 7 < 8)
+(expr 1 > 2 eqv 7 < 8) => #f
+tr7> (test 1 < 2 not eqv 7 > 8)
+(expr 1 < 2 not eqv 7 > 8) => #t
+tr7> (test 1 < 2 not eqv 7 < 8)
+(expr 1 < 2 not eqv 7 < 8) => #f
+tr7> (test 1 > 2 not eqv 7 > 8)
+(expr 1 > 2 not eqv 7 > 8) => #f
+tr7> (test 1 > 2 not eqv 7 < 8)
+(expr 1 > 2 not eqv 7 < 8) => #t
+tr7> (test 1 < 2 implies 7 > 8)
+(expr 1 < 2 implies 7 > 8) => #f
+tr7> (test 1 < 2 implies 7 < 8)
+(expr 1 < 2 implies 7 < 8) => #t
+tr7> (test 1 > 2 implies 7 > 8)
+(expr 1 > 2 implies 7 > 8) => #t
+tr7> (test 1 > 2 implies 7 < 8)
+(expr 1 > 2 implies 7 < 8) => #t
+tr7> (test #t or 1 // 0 < 0 and #t)
+(expr #t or 1 // 0 < 0 and #t) => #t
+tr7> (test #f or #f and 1 // 0 < 0)
+(expr #f or #f and 1 // 0 < 0) => #f
+tr7> (test 100 // 2 + 2)
+(expr 100 // 2 + 2) => 52
+tr7> (test 100 // 2 + 2 * 5)
+(expr 100 // 2 + 2 * 5) => 60
+tr7> (test 100 // 2 // 5 + 2 * 5)
+(expr 100 // 2 // 5 + 2 * 5) => 20
+tr7> (test 100 // 2 // 5 - 5 + 2 * 5 - 10)
+(expr 100 // 2 // 5 - 5 + 2 * 5 - 10) => 5
+tr7> (test 5 6)
+Error: test-expr.scm:82: syntax error: syntax-error reporting: ("bad expr" (5 6))
+tr7> 

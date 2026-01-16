@@ -42,6 +42,9 @@ endif()
 if(LANG_JOY)
     list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/loki/lang/joy.c)
 endif()
+if(LANG_TR7)
+    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/loki/lang/tr7.c)
+endif()
 
 add_library(libloki ${LOKI_LIBRARY_TYPE}
     ${LOKI_CORE_SOURCES}
@@ -79,6 +82,10 @@ endif()
 if(LANG_JOY)
     list(APPEND LOKI_PUBLIC_LIBS joy)
     target_compile_definitions(libloki PUBLIC LANG_JOY=1)
+endif()
+if(LANG_TR7)
+    list(APPEND LOKI_PUBLIC_LIBS tr7)
+    target_compile_definitions(libloki PUBLIC LANG_TR7=1)
 endif()
 
 target_link_libraries(libloki PUBLIC ${LOKI_PUBLIC_LIBS})

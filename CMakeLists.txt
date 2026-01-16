@@ -24,6 +24,7 @@ option(BUILD_CSOUND_BACKEND "Build with Csound synthesis backend (requires libsn
 option(BUILD_TESTING "Build tests (default on)" ON)
 option(LANG_ALDA "Include the Alda language" ON)
 option(LANG_JOY "Include the Joy language" ON)
+option(LANG_TR7 "Include the TR7 Scheme language" OFF)
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)

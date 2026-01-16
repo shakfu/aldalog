@@ -25,20 +25,40 @@ extern int alda_play_main(int argc, char **argv);
 extern int joy_repl_main(int argc, char **argv);
 #endif
 
+#ifdef LANG_TR7
+extern int tr7_repl_main(int argc, char **argv);
+#endif
+
+#ifdef LANG_TR7
+static int has_scheme_extension(const char *path) {
+    if (!path)
+        return 0;
+    size_t len = strlen(path);
+    if (len < 4)
+        return 0;
+    return strcmp(path + len - 4, ".scm") == 0 ||
+           strcmp(path + len - 3, ".ss") == 0 ||
+           (len >= 7 && strcmp(path + len - 7, ".scheme") == 0);
+}
+#endif
+
 static void print_unified_help(const char *prog) {
     printf("psnd %s - Music composition editor and REPL\n", PSND_VERSION);
     printf("\n");
     printf("Usage:\n");
     printf("  %s alda [options]      Start interactive Alda REPL\n", prog);
     printf("  %s joy [options]       Start interactive Joy REPL\n", prog);
+    printf("  %s tr7 [options]       Start interactive Scheme REPL\n", prog);
     printf("  %s <file.alda>         Open Alda file in editor\n", prog);
     printf("  %s <file.joy>          Open Joy file in editor\n", prog);
+    printf("  %s <file.scm>          Open Scheme file in editor\n", prog);
     printf("  %s <file.csd>          Open Csound file in editor\n", prog);
     printf("  %s play <file>         Play file (headless, .alda/.joy/.csd)\n", prog);
     printf("\n");
     printf("Languages:\n");
     printf("  Alda - Music notation language\n");
     printf("  Joy  - Concatenative stack-based music language\n");
+    printf("  TR7  - R7RS-small Scheme with music extensions\n");
     printf("\n");
     printf("Editor Mode:\n");
     printf("  Opens a vim-like modal editor with live-coding support.\n");
@@ -60,6 +80,7 @@ static void print_unified_help(const char *prog) {
     printf("Examples:\n");
     printf("  %s alda                Start Alda REPL: piano: c d e f g\n", prog);
     printf("  %s joy                 Start Joy REPL: [c d e] play\n", prog);
+    printf("  %s tr7                 Start Scheme REPL: (play-note 60)\n", prog);
     printf("  %s alda -sf gm.sf2     Alda REPL with built-in synth\n", prog);
     printf("  %s song.alda           Edit song.alda\n", prog);
     printf("  %s play song.alda      Play song.alda and exit\n", prog);
@@ -133,6 +154,13 @@ int main(int argc, char **argv) {
     }
 #endif
 
+#ifdef LANG_TR7
+    if (strcmp(first_arg, "tr7") == 0 || strcmp(first_arg, "scheme") == 0) {
+        /* TR7 Scheme REPL mode: psnd tr7 [options] [file.scm] */
+        return tr7_repl_main(argc - 1, argv + 1);
+    }
+#endif
+
     if (strcmp(first_arg, "play") == 0) {
         /* Shift arguments past 'play': psnd play file.alda -> file.alda */
         if (argc < 3) {
@@ -158,7 +186,7 @@ int main(int argc, char **argv) {
 #endif
     }
 
-    /* Check if first arg looks like a file (has .alda, .csd, or .joy extension) */
+    /* Check if first arg looks like a file (has .alda, .csd, .joy, or .scm extension) */
     if (
 #ifdef LANG_ALDA
         has_alda_extension(first_arg) ||
@@ -166,6 +194,9 @@ int main(int argc, char **argv) {
         has_csd_extension(first_arg)
 #ifdef LANG_JOY
         || has_joy_extension(first_arg)
+#endif
+#ifdef LANG_TR7
+        || has_scheme_extension(first_arg)
 #endif
     ) {
         /* Definitely a file -> editor mode */
@@ -183,13 +214,16 @@ int main(int argc, char **argv) {
 #ifdef LANG_JOY
                 has_joy_extension(argv[i]) ||
 #endif
+#ifdef LANG_TR7
+                has_scheme_extension(argv[i]) ||
+#endif
                 has_csd_extension(argv[i])) {
                 /* Found supported file -> editor mode with options */
                 return loki_editor_main(argc, argv);
             }
         }
         /* No supported file found - show help */
-        fprintf(stderr, "Error: %s requires a .alda, .joy, or .csd file\n", first_arg);
+        fprintf(stderr, "Error: %s requires a .alda, .joy, .scm, or .csd file\n", first_arg);
         print_unified_help(argv[0]);
         return 1;
     }

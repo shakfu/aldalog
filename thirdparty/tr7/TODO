@@ -1,0 +1,39 @@
+TODO LIST
+=========
+
+conformity
+----------
+ - implement immutable pairs, symbols, strings, improve management of immutables
+   (idea: take the spare pointer for immutable pairs)
+
+fixes
+-----
+ - documentation
+ - fix USE_MATH
+ - improve symbol print
+ - detecting errors in define-record-type
+ - modify mk_atom to not use fold with fixed length
+
+features
+--------
+ - MORE C FUNCTION FOR INTERFACE (NUMBERS)
+ - implement abstraction for ports -> user defined ports
+ - finalize number tower (big integers, rationals, complexes)
+ - candidate built-in SRFI:
+     - 111 (boxes)
+     - 151 (bit ops)
+     - 13 (strings)
+     - 4 (vectors)
+     - 181 (ports)
+      ... ?
+ - save internal program/image
+ - extendable equal? from list of (predicate . compare): (and (predicate a) (predicate b) (compare a b))
+ - improve tr7i.scm
+
+optimisation
+------------
+ - automatic and systematic check of predefined procedures slow down things
+   example: reverse require that the list is proper so (1) check proper,
+   (2) reverse but if detection is made in the procedure, it would be fastest.
+   Also for math, it make sense to check when processing, not before.
+

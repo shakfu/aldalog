@@ -1,0 +1,1099 @@
+
+a
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  00          END
+  ... <a>
+
+
+'a
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  12 06       QUOTE           6=a
+L0       2.  00          END
+  ... a
+
+
+'(a b)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  12 06       QUOTE           6=(a b)
+L0       2.  00          END
+  ... (a b)
+
+
+`a
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  12 06       QUOTE           6=a
+L0       2.  00          END
+  ... a
+
+
+`,a
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  00          END
+  ... <a>
+
+
+`(,a)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  15 03       IMMA            ()
+L0       2.  0A 06       GETGA           6=#<LOC a>
+L0       4.  08 02 39    PROC            2 #<cons>:57
+L0       7.  00          END
+  ... (<a>)
+
+
+`(,a b)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  13 06       QUOTA           6=(b)
+L0       2.  0A 07       GETGA           7=#<LOC a>
+L0       4.  08 02 39    PROC            2 #<cons>:57
+L0       7.  00          END
+  ... (<a> b)
+
+
+`(a ,b)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  15 03       IMMA            ()
+L0       2.  0A 06       GETGA           6=#<LOC b>
+L0       4.  08 02 39    PROC            2 #<cons>:57
+L0       7.  04          ARG
+L0       8.  13 07       QUOTA           7=a
+L0      10.  08 02 39    PROC            2 #<cons>:57
+L0      13.  00          END
+  ... (a <b>)
+
+
+`(a ,b c)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  13 06       QUOTA           6=(c)
+L0       2.  0A 07       GETGA           7=#<LOC b>
+L0       4.  08 02 39    PROC            2 #<cons>:57
+L0       7.  04          ARG
+L0       8.  13 08       QUOTA           8=a
+L0      10.  08 02 39    PROC            2 #<cons>:57
+L0      13.  00          END
+  ... (a <b> c)
+
+
+`(a ,b c d)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  13 06       QUOTA           6=(c d)
+L0       2.  0A 07       GETGA           7=#<LOC b>
+L0       4.  08 02 39    PROC            2 #<cons>:57
+L0       7.  04          ARG
+L0       8.  13 08       QUOTA           8=a
+L0      10.  08 02 39    PROC            2 #<cons>:57
+L0      13.  00          END
+  ... (a <b> c d)
+
+
+`(a ,@(action 1 2) c)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  13 06       QUOTA           6=(c)
+L0       2.  15 09       IMMA            2
+L0       4.  15 05       IMMA            1
+L0       6.  06 02 07    CALLG           2 7=#<LOC action>
+L0       9.  04          ARG
+L0      10.  08 02 47    PROC            2 #<append>:71
+L0      13.  04          ARG
+L0      14.  13 08       QUOTA           8=a
+L0      16.  08 02 39    PROC            2 #<cons>:57
+L0      19.  00          END
+  ... (a 1 2 c)
+
+
+`(a ,b `(,c ,,d))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  15 03       IMMA            ()
+L0       2.  15 03       IMMA            ()
+L0       4.  15 03       IMMA            ()
+L0       6.  15 03       IMMA            ()
+L0       8.  0A 06       GETGA           6=#<LOC d>
+L0      10.  08 02 39    PROC            2 #<cons>:57
+L0      13.  04          ARG
+L0      14.  13 07       QUOTA           7=unquote
+L0      16.  08 02 39    PROC            2 #<cons>:57
+L0      19.  04          ARG
+L0      20.  08 02 39    PROC            2 #<cons>:57
+L0      23.  04          ARG
+L0      24.  13 08       QUOTA           8=,c
+L0      26.  08 02 39    PROC            2 #<cons>:57
+L0      29.  04          ARG
+L0      30.  08 02 39    PROC            2 #<cons>:57
+L0      33.  04          ARG
+L0      34.  13 09       QUOTA           9=quasiquote
+L0      36.  08 02 39    PROC            2 #<cons>:57
+L0      39.  04          ARG
+L0      40.  08 02 39    PROC            2 #<cons>:57
+L0      43.  04          ARG
+L0      44.  0A 0A       GETGA           10=#<LOC b>
+L0      46.  08 02 39    PROC            2 #<cons>:57
+L0      49.  04          ARG
+L0      50.  13 0B       QUOTA           11=a
+L0      52.  08 02 39    PROC            2 #<cons>:57
+L0      55.  00          END
+  ... (a <b> `(,c ,<d>))
+
+
+(begin 1)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 05       IMM             1
+L0       2.  00          END
+  ... 1
+
+
+(begin 1 2)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 05       IMM             1
+L0       2.  14 09       IMM             2
+L0       4.  00          END
+  ... 2
+
+
+(begin 1 2 3)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 05       IMM             1
+L0       2.  14 09       IMM             2
+L0       4.  14 0D       IMM             3
+L0       6.  00          END
+  ... 3
+
+
+(if a b)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  03 03       IFFALSE         @6
+L0       4.  09 07       GETG            7=#<LOC b>
+L0       6.  00          END
+  ... <b>
+
+
+(if a b c)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  03 04       IFFALSE         @7
+L0       4.  09 07       GETG            7=#<LOC b>
+L0       6.  00          END
+L0       7.  09 08       GETG            8=#<LOC c>
+L0       9.  00          END
+  ... <b>
+
+
+(if (not a) b c)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  02 04       IFTRUE          @7
+L0       4.  09 07       GETG            7=#<LOC b>
+L0       6.  00          END
+L0       7.  09 08       GETG            8=#<LOC c>
+L0       9.  00          END
+  ... <c>
+
+
+(begin 0 (if a b c) d)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 01       IMM             0
+L0       2.  09 06       GETG            6=#<LOC a>
+L0       4.  03 05       IFFALSE         @10
+L0       6.  09 07       GETG            7=#<LOC b>
+L0       8.  01 03       GOTO            @12
+L0      10.  09 08       GETG            8=#<LOC c>
+L0      12.  09 09       GETG            9=#<LOC d>
+L0      14.  00          END
+  ... <d>
+
+
+(unless a b c)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  02 05       IFTRUE          @8
+L0       4.  09 07       GETG            7=#<LOC b>
+L0       6.  09 08       GETG            8=#<LOC c>
+L0       8.  00          END
+  ... <a>
+
+
+(when a b c)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  03 05       IFFALSE         @8
+L0       4.  09 07       GETG            7=#<LOC b>
+L0       6.  09 08       GETG            8=#<LOC c>
+L0       8.  00          END
+  ... <c>
+
+
+(or)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 23       IMM             #f
+L0       2.  00          END
+  ... #f
+
+
+(or a)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  00          END
+  ... <a>
+
+
+(or a b)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  02 03       IFTRUE          @6
+L0       4.  09 07       GETG            7=#<LOC b>
+L0       6.  00          END
+  ... <a>
+
+
+(or a b c)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  02 07       IFTRUE          @10
+L0       4.  09 07       GETG            7=#<LOC b>
+L0       6.  02 03       IFTRUE          @10
+L0       8.  09 08       GETG            8=#<LOC c>
+L0      10.  00          END
+  ... <a>
+
+
+(and)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 43       IMM             #t
+L0       2.  00          END
+  ... #t
+
+
+(and a)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  00          END
+  ... <a>
+
+
+(and a b)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  03 03       IFFALSE         @6
+L0       4.  09 07       GETG            7=#<LOC b>
+L0       6.  00          END
+  ... <b>
+
+
+(and a b c)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  03 07       IFFALSE         @10
+L0       4.  09 07       GETG            7=#<LOC b>
+L0       6.  03 03       IFFALSE         @10
+L0       8.  09 08       GETG            8=#<LOC c>
+L0      10.  00          END
+  ... <c>
+
+
+(cond (#t 1))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 43       IMM             #t
+L0       2.  03 03       IFFALSE         @6
+L0       4.  14 05       IMM             1
+L0       6.  00          END
+  ... 1
+
+
+(cond (#t 1) (#f 6))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 43       IMM             #t
+L0       2.  03 04       IFFALSE         @7
+L0       4.  14 05       IMM             1
+L0       6.  00          END
+L0       7.  14 23       IMM             #f
+L0       9.  03 03       IFFALSE         @13
+L0      11.  14 19       IMM             6
+L0      13.  00          END
+  ... 1
+
+
+(cond (#t 1) (else 6))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 43       IMM             #t
+L0       2.  03 04       IFFALSE         @7
+L0       4.  14 05       IMM             1
+L0       6.  00          END
+L0       7.  14 19       IMM             6
+L0       9.  00          END
+  ... 1
+
+
+(cond (#t 1) ((or #f #t) => x) (else 8))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 43       IMM             #t
+L0       2.  03 04       IFFALSE         @7
+L0       4.  14 05       IMM             1
+L0       6.  00          END
+L0       7.  14 23       IMM             #f
+L0       9.  02 03       IFTRUE          @13
+L0      11.  14 43       IMM             #t
+L0      13.  03 06       IFFALSE         @20
+L0      15.  04          ARG
+L0      16.  06 01 06    CALLG           1 6=#<LOC x>
+L0      19.  00          END
+L0      20.  14 21       IMM             8
+L0      22.  00          END
+  ... 1
+
+
+(case a ((1 2 3) 1) ((4 5 6) 2) (else 3))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  1A 05 07    CASE            @8 7=(1 2 3)
+L0       5.  14 05       IMM             1
+L0       7.  00          END
+L0       8.  1A 05 08    CASE            @14 8=(4 5 6)
+L0      11.  14 09       IMM             2
+L0      13.  00          END
+L0      14.  14 0D       IMM             3
+L0      16.  00          END
+  ... 3
+
+
+(case a ((1 2 3) 1) ((4 <a> 6) 2) (else 3))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  1A 05 07    CASE            @8 7=(1 2 3)
+L0       5.  14 05       IMM             1
+L0       7.  00          END
+L0       8.  1A 05 08    CASE            @14 8=(4 <a> 6)
+L0      11.  14 09       IMM             2
+L0      13.  00          END
+L0      14.  14 0D       IMM             3
+L0      16.  00          END
+  ... 2
+
+
+(case a ((1 2 3) => x) ((4 5 6) => y) (else => pass))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  09 06       GETG            6=#<LOC a>
+L0       2.  1A 07 07    CASE            @10 7=(1 2 3)
+L0       5.  04          ARG
+L0       6.  06 01 08    CALLG           1 8=#<LOC x>
+L0       9.  00          END
+L0      10.  1A 07 09    CASE            @18 9=(4 5 6)
+L0      13.  04          ARG
+L0      14.  06 01 0A    CALLG           1 10=#<LOC y>
+L0      17.  00          END
+L0      18.  04          ARG
+L0      19.  06 01 0B    CALLG           1 11=#<LOC pass>
+L0      22.  00          END
+  ... (<a>)
+
+
+(let () 5)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 15       IMM             5
+L0       2.  00          END
+  ... 5
+
+
+(let ((a u) (b a)) a b)
+  ==> PROG ? n.params=0 n.locals=2
+L0       0.  09 06       GETG            6=#<LOC u>
+L0       2.  11 01       SETL            1
+L0       4.  09 07       GETG            7=#<LOC a>
+L0       6.  11 02       SETL            2
+L0       8.  0D 01       GETL            1
+L0      10.  0D 02       GETL            2
+L0      12.  00          END
+  ... <a>
+
+
+(let* ((a u) (b a)) a b)
+  ==> PROG ? n.params=0 n.locals=2
+L0       0.  09 06       GETG            6=#<LOC u>
+L0       2.  11 01       SETL            1
+L0       4.  0D 01       GETL            1
+L0       6.  11 02       SETL            2
+L0       8.  0D 01       GETL            1
+L0      10.  0D 02       GETL            2
+L0      12.  00          END
+  ... <u>
+
+
+(let ((a 5)) (let ((b a)) b) a)
+  ==> PROG ? n.params=0 n.locals=2
+L0       0.  14 15       IMM             5
+L0       2.  11 01       SETL            1
+L0       4.  0D 01       GETL            1
+L0       6.  11 02       SETL            2
+L0       8.  0D 02       GETL            2
+L0      10.  0D 01       GETL            1
+L0      12.  00          END
+  ... 5
+
+
+(let-values (((a b) (values 5 6))) b a)
+  ==> PROG ? n.params=0 n.locals=2
+L0       0.  15 19       IMMA            6
+L0       2.  15 15       IMMA            5
+L0       4.  08 02 96    PROC            2 #<values>:150
+L0       7.  16 02       MVAL            2
+L0       9.  11 01       SETL            1
+L0      11.  11 02       SETL            2
+L0      13.  0D 02       GETL            2
+L0      15.  0D 01       GETL            1
+L0      17.  00          END
+  ... 5
+
+
+(let fact5 ((n 5)) (if (zero? n) 1 (* n (fact5 (- n 1)))))
+  ==> PROG ? n.params=0 n.locals=1
+L0       0.  15 15       IMMA            5
+L0       2.  19 06       LAMBDA          6=#<PROGRAM fact5>
+L0       4.  11 01       SETL            1
+L0       6.  07 01       CALL            1
+L0       8.  00          END
+*** PROG=6
+PROG fact5 n.params=1 n.locals=1
+   L0       0.  0F 01       GETLA           1
+   L0       2.  08 01 0E    PROC            1 #<zero?>:14
+   L0       5.  03 04       IFFALSE         @10
+   L0       7.  14 05       IMM             1
+   L0       9.  00          END
+   L0      10.  15 05       IMMA            1
+   L0      12.  0F 01       GETLA           1
+   L0      14.  08 02 1C    PROC            2 #<->:28
+   L0      17.  04          ARG
+   L0      18.  05 01       CALLSELF        1
+   L0      20.  04          ARG
+   L0      21.  0F 01       GETLA           1
+   L0      23.  08 02 1B    PROC            2 #<*>:27
+   L0      26.  00          END
+  ... 120
+
+
+(let fact5 ((n 5) (r 1)) (if (zero? n) r (fact5 (- n 1) (* n r))))
+  ==> PROG ? n.params=0 n.locals=1
+L0       0.  15 05       IMMA            1
+L0       2.  15 15       IMMA            5
+L0       4.  19 06       LAMBDA          6=#<PROGRAM fact5>
+L0       6.  11 01       SETL            1
+L0       8.  07 02       CALL            2
+L0      10.  00          END
+*** PROG=6
+PROG fact5 n.params=2 n.locals=2
+   L0       0.  0F 01       GETLA           1
+   L0       2.  08 01 0E    PROC            1 #<zero?>:14
+   L0       5.  03 04       IFFALSE         @10
+   L0       7.  0D 02       GETL            2
+   L0       9.  00          END
+   L0      10.  0F 02       GETLA           2
+   L0      12.  0F 01       GETLA           1
+   L0      14.  08 02 1B    PROC            2 #<*>:27
+   L0      17.  04          ARG
+   L0      18.  15 05       IMMA            1
+   L0      20.  0F 01       GETLA           1
+   L0      22.  08 02 1C    PROC            2 #<->:28
+   L0      25.  04          ARG
+   L0      26.  05 02       CALLSELF        2
+   L0      28.  00          END
+  ... 120
+
+
+(define a 3)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 0D       IMM             3
+L0       2.  0B 06       SETG            6=#<LOC a>
+L0       4.  00          END
+  no result!!
+
+
+(let () (define a 4))
+  ==> PROG ? n.params=0 n.locals=1
+L0       0.  14 11       IMM             4
+L0       2.  11 01       SETL            1
+L0       4.  00          END
+  ... 4
+
+
+(define (1+ x) (+ x 1))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  19 06       LAMBDA          6=#<PROGRAM 1+>
+L0       2.  0B 07       SETG            7=#<LOC 1+>
+L0       4.  00          END
+*** PROG=6
+PROG 1+ n.params=1 n.locals=1
+   L0       0.  15 05       IMMA            1
+   L0       2.  0F 01       GETLA           1
+   L0       4.  08 02 1A    PROC            2 #<+>:26
+   L0       7.  00          END
+  no result!!
+
+
+(define-values (a b) (values 5 6))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  15 19       IMMA            6
+L0       2.  15 15       IMMA            5
+L0       4.  08 02 96    PROC            2 #<values>:150
+L0       7.  16 02       MVAL            2
+L0       9.  0B 06       SETG            6=#<LOC a>
+L0      11.  0B 07       SETG            7=#<LOC b>
+L0      13.  00          END
+  no result!!
+
+
+(let () (define-values (a b) (values 7 8)))
+  ==> PROG ? n.params=0 n.locals=2
+L0       0.  15 21       IMMA            8
+L0       2.  15 1D       IMMA            7
+L0       4.  08 02 96    PROC            2 #<values>:150
+L0       7.  16 02       MVAL            2
+L0       9.  11 01       SETL            1
+L0      11.  11 02       SETL            2
+L0      13.  00          END
+  no result!!
+
+
+(set! a 9)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 25       IMM             9
+L0       2.  0B 06       SETG            6=#<LOC a>
+L0       4.  00          END
+  no result!!
+
+
+(let () (set! a 15))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 3D       IMM             15
+L0       2.  0B 06       SETG            6=#<LOC a>
+L0       4.  00          END
+  no result!!
+
+
+(let ((a 1) (b 2)) (set! a 20))
+  ==> PROG ? n.params=0 n.locals=2
+L0       0.  14 05       IMM             1
+L0       2.  11 01       SETL            1
+L0       4.  14 09       IMM             2
+L0       6.  11 02       SETL            2
+L0       8.  14 51       IMM             20
+L0      10.  11 01       SETL            1
+L0      12.  00          END
+  ... 20
+
+
+(lambda () e)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  19 06       LAMBDA          6=#<PROGRAM ?>
+L0       2.  00          END
+*** PROG=6
+PROG ? n.params=0 n.locals=0
+   L0       0.  09 06       GETG            6=#<LOC e>
+   L0       2.  00          END
+  ... #<LAMBDA>
+
+
+(lambda (a b) e a)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  19 06       LAMBDA          6=#<PROGRAM ?>
+L0       2.  00          END
+*** PROG=6
+PROG ? n.params=2 n.locals=2
+   L0       0.  09 06       GETG            6=#<LOC e>
+   L0       2.  0D 01       GETL            1
+   L0       4.  00          END
+  ... #<LAMBDA>
+
+
+(lambda (a . b) (lambda u (+ e a c)))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  19 06       LAMBDA          6=#<PROGRAM ?>
+L0       2.  00          END
+*** PROG=6
+PROG ? n.params=-2 n.locals=2
+   L0       0.  19 06       LAMBDA          6=#<PROGRAM ?>
+   L0       2.  00          END
+   *** PROG=6
+PROG ? n.params=-1 n.locals=1
+      L0       0.  0A 06       GETGA           6=#<LOC c>
+      L0       2.  0E 01 01    GETCA           1 1
+      L0       5.  0A 07       GETGA           7=#<LOC e>
+      L0       7.  08 03 1A    PROC            3 #<+>:26
+      L0      10.  00          END
+  ... #<LAMBDA>
+
+
+(pass a)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  0A 06       GETGA           6=#<LOC a>
+L0       2.  06 01 07    CALLG           1 7=#<LOC pass>
+L0       5.  00          END
+  ... (15)
+
+
+(pass a b)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  0A 06       GETGA           6=#<LOC b>
+L0       2.  0A 07       GETGA           7=#<LOC a>
+L0       4.  06 02 08    CALLG           2 8=#<LOC pass>
+L0       7.  00          END
+  ... (15 6)
+
+
+(pass a b c)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  0A 06       GETGA           6=#<LOC c>
+L0       2.  0A 07       GETGA           7=#<LOC b>
+L0       4.  0A 08       GETGA           8=#<LOC a>
+L0       6.  06 03 09    CALLG           3 9=#<LOC pass>
+L0       9.  00          END
+  ... (15 6 <c>)
+
+
+(pass a b c d)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  0A 06       GETGA           6=#<LOC d>
+L0       2.  0A 07       GETGA           7=#<LOC c>
+L0       4.  0A 08       GETGA           8=#<LOC b>
+L0       6.  0A 09       GETGA           9=#<LOC a>
+L0       8.  06 04 0A    CALLG           4 10=#<LOC pass>
+L0      11.  00          END
+  ... (15 6 <c> <d>)
+
+
+(pass a (pass b c) d)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  0A 06       GETGA           6=#<LOC d>
+L0       2.  0A 07       GETGA           7=#<LOC c>
+L0       4.  0A 08       GETGA           8=#<LOC b>
+L0       6.  06 02 09    CALLG           2 9=#<LOC pass>
+L0       9.  04          ARG
+L0      10.  0A 0A       GETGA           10=#<LOC a>
+L0      12.  06 03 09    CALLG           3 9=#<LOC pass>
+L0      15.  00          END
+  ... (15 (6 <c>) <d>)
+
+
+(pass a b (pass c d))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  0A 06       GETGA           6=#<LOC d>
+L0       2.  0A 07       GETGA           7=#<LOC c>
+L0       4.  06 02 08    CALLG           2 8=#<LOC pass>
+L0       7.  04          ARG
+L0       8.  0A 09       GETGA           9=#<LOC b>
+L0      10.  0A 0A       GETGA           10=#<LOC a>
+L0      12.  06 03 08    CALLG           3 8=#<LOC pass>
+L0      15.  00          END
+  ... (15 6 (<c> <d>))
+
+
+(pass a (pass b c d))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  0A 06       GETGA           6=#<LOC d>
+L0       2.  0A 07       GETGA           7=#<LOC c>
+L0       4.  0A 08       GETGA           8=#<LOC b>
+L0       6.  06 03 09    CALLG           3 9=#<LOC pass>
+L0       9.  04          ARG
+L0      10.  0A 0A       GETGA           10=#<LOC a>
+L0      12.  06 02 09    CALLG           2 9=#<LOC pass>
+L0      15.  00          END
+  ... (15 (6 <c> <d>))
+
+
+((car (pass pass)) c d)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  0A 06       GETGA           6=#<LOC d>
+L0       2.  0A 07       GETGA           7=#<LOC c>
+L0       4.  0A 08       GETGA           8=#<LOC pass>
+L0       6.  06 01 08    CALLG           1 8=#<LOC pass>
+L0       9.  04          ARG
+L0      10.  08 01 3A    PROC            1 #<car>:58
+L0      13.  07 02       CALL            2
+L0      15.  00          END
+  ... (<c> <d>)
+
+
+(do () (#t))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  18 00       MSET            0
+L0       2.  14 43       IMM             #t
+L0       4.  02 05       IFTRUE          @10
+L0       6.  18 00       MSET            0
+L0       8.  01 FF       GOTO            @2
+L0      10.  00          END
+  ... #t
+
+
+(do () (#t 4))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  18 00       MSET            0
+L0       2.  14 43       IMM             #t
+L0       4.  02 05       IFTRUE          @10
+L0       6.  18 00       MSET            0
+L0       8.  01 FF       GOTO            @2
+L0      10.  14 11       IMM             4
+L0      12.  00          END
+  ... 4
+
+
+(do ((i 1 (+ i 1))) ((> i 10)) (display i) (newline))
+  ==> PROG ? n.params=0 n.locals=1
+L0       0.  15 05       IMMA            1
+L0       2.  18 01       MSET            1
+L0       4.  11 01       SETL            1
+L0       6.  15 29       IMMA            10
+L0       8.  0F 01       GETLA           1
+L0      10.  08 02 15    PROC            2 #<>>:21
+L0      13.  02 17       IFTRUE          @37
+L0      15.  0F 01       GETLA           1
+L0      17.  08 01 12    PROC            1 #<display>:288
+L0      20.  08 00 C0    PROC            0 #<newline>:192
+L0      23.  15 05       IMMA            1
+L0      25.  0F 01       GETLA           1
+L0      27.  08 02 1A    PROC            2 #<+>:26
+L0      30.  04          ARG
+L0      31.  18 01       MSET            1
+L0      33.  11 01       SETL            1
+L0      35.  01 FF       GOTO            @6
+L0      37.  00          END
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+  ... #t
+
+
+(do ((i 1 2) (j 3 4)) (5 6) 7 8)
+  ==> PROG ? n.params=0 n.locals=2
+L0       0.  15 0D       IMMA            3
+L0       2.  15 05       IMMA            1
+L0       4.  18 02       MSET            2
+L0       6.  11 01       SETL            1
+L0       8.  11 02       SETL            2
+L0      10.  14 15       IMM             5
+L0      12.  02 11       IFTRUE          @30
+L0      14.  14 1D       IMM             7
+L0      16.  14 21       IMM             8
+L0      18.  15 11       IMMA            4
+L0      20.  15 09       IMMA            2
+L0      22.  18 02       MSET            2
+L0      24.  11 01       SETL            1
+L0      26.  11 02       SETL            2
+L0      28.  01 FF       GOTO            @10
+L0      30.  14 19       IMM             6
+L0      32.  00          END
+  ... 6
+
+
+(+ 1 2)
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  15 09       IMMA            2
+L0       2.  15 05       IMMA            1
+L0       4.  08 02 1A    PROC            2 #<+>:26
+L0       7.  00          END
+  ... 3
+
+
+(delay (+ 1 2))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  21 06       DELAY           6=#<PROGRAM ?>
+L0       2.  00          END
+*** PROG=6
+PROG ? n.params=0 n.locals=0
+   L0       0.  15 09       IMMA            2
+   L0       2.  15 05       IMMA            1
+   L0       4.  08 02 1A    PROC            2 #<+>:26
+   L0       7.  00          END
+  ... #<PROMISE>
+
+
+(delay-force (+ 5 9))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  22 06       DELAYFORCE      6=#<PROGRAM ?>
+L0       2.  00          END
+*** PROG=6
+PROG ? n.params=0 n.locals=0
+   L0       0.  15 25       IMMA            9
+   L0       2.  15 15       IMMA            5
+   L0       4.  08 02 1A    PROC            2 #<+>:26
+   L0       7.  00          END
+  ... #<PROMISE>
+
+
+(cond-expand (tr7 #f) (else #t))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 23       IMM             #f
+L0       2.  00          END
+  ... #f
+
+
+(cond-expand (tr8 #f) (else #t))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 43       IMM             #t
+L0       2.  00          END
+  ... #t
+
+
+(cond-expand ((not tr8) #f) (else #t))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 23       IMM             #f
+L0       2.  00          END
+  ... #f
+
+
+(cond-expand ((and tr7 tr8) #f) (else #t))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 43       IMM             #t
+L0       2.  00          END
+  ... #t
+
+
+(cond-expand ((or tr8 tr7) #f) (else #t))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 23       IMM             #f
+L0       2.  00          END
+  ... #f
+
+
+(cond-expand (tr8 #f) (tr9 #f) (tr7 8) (else #t))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 21       IMM             8
+L0       2.  00          END
+  ... 8
+
+
+(let () (guard (x (a => b) (x c) (else y)) u v w) z)
+  ==> PROG ? n.params=0 n.locals=1
+L0       0.  1B 09       GUARD           @10
+L0       2.  09 06       GETG            6=#<LOC u>
+L0       4.  09 07       GETG            7=#<LOC v>
+L0       6.  09 08       GETG            8=#<LOC w>
+L0       8.  1C 1E       UNGUARD         @39
+L0      10.  11 01       SETL            1
+L0      12.  09 09       GETG            9=#<LOC a>
+L0      14.  03 07       IFFALSE         @22
+L0      16.  04          ARG
+L0      17.  06 01 0A    CALLG           1 10=#<LOC b>
+L0      20.  01 12       GOTO            @39
+L0      22.  0D 01       GETL            1
+L0      24.  03 05       IFFALSE         @30
+L0      26.  09 0B       GETG            11=#<LOC c>
+L0      28.  01 0A       GOTO            @39
+L0      30.  09 0C       GETG            12=#<LOC y>
+L0      32.  01 06       GOTO            @39
+L0      34.  0F 01       GETLA           1
+L0      36.  08 01 9B    PROC            1 #<raise-continuable>:155
+L0      39.  09 0D       GETG            13=#<LOC z>
+L0      41.  00          END
+  ... <z>
+
+
+(guard (x (a => b) (x c)) u v w)
+  ==> PROG ? n.params=0 n.locals=1
+L0       0.  1B 09       GUARD           @10
+L0       2.  09 06       GETG            6=#<LOC u>
+L0       4.  09 07       GETG            7=#<LOC v>
+L0       6.  09 08       GETG            8=#<LOC w>
+L0       8.  1C 18       UNGUARD         @33
+L0      10.  11 01       SETL            1
+L0      12.  09 09       GETG            9=#<LOC a>
+L0      14.  03 06       IFFALSE         @21
+L0      16.  04          ARG
+L0      17.  06 01 0A    CALLG           1 10=#<LOC b>
+L0      20.  00          END
+L0      21.  0D 01       GETL            1
+L0      23.  03 04       IFFALSE         @28
+L0      25.  09 0B       GETG            11=#<LOC c>
+L0      27.  00          END
+L0      28.  0F 01       GETLA           1
+L0      30.  08 01 9B    PROC            1 #<raise-continuable>:155
+L0      33.  00          END
+  ... <w>
+
+
+(case-lambda ((a) a) ((a b) b) ((a b c) c) (x x))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  20 06       CASE_LAMBDA     6=(#<PROGRAM ?> #<PROGRAM ?> #<PROGRAM ?> #<PROGRAM ?>)
+L0       2.  00          END
+  ... #<CASE-LAMBDA>
+
+
+(let ((a (make-parameter 8)) (b (make-parameter 9))) (cons (parameterize ((a 1) (b 2)) (cons (a) (b))) (cons (a) (b))))
+  ==> PROG ? n.params=0 n.locals=2
+L0       0.  15 21       IMMA            8
+L0       2.  08 01 00    PROC            1 #<make-parameter>:0
+L0       5.  11 01       SETL            1
+L0       7.  15 25       IMMA            9
+L0       9.  08 01 00    PROC            1 #<make-parameter>:0
+L0      12.  11 02       SETL            2
+L0      14.  0D 02       GETL            2
+L0      16.  07 00       CALL            0
+L0      18.  04          ARG
+L0      19.  0D 01       GETL            1
+L0      21.  07 00       CALL            0
+L0      23.  04          ARG
+L0      24.  08 02 39    PROC            2 #<cons>:57
+L0      27.  04          ARG
+L0      28.  15 05       IMMA            1
+L0      30.  0D 01       GETL            1
+L0      32.  1D          PARAMETER
+L0      33.  15 09       IMMA            2
+L0      35.  0D 02       GETL            2
+L0      37.  1D          PARAMETER
+L0      38.  0D 02       GETL            2
+L0      40.  07 00       CALL            0
+L0      42.  04          ARG
+L0      43.  0D 01       GETL            1
+L0      45.  07 00       CALL            0
+L0      47.  04          ARG
+L0      48.  08 02 39    PROC            2 #<cons>:57
+L0      51.  1E 02       ENDPARAMETERIZE 2
+L0      53.  04          ARG
+L0      54.  08 02 39    PROC            2 #<cons>:57
+L0      57.  00          END
+  ... ((1 . 2) 8 . 9)
+
+
+(define-record-type <pare> (kons x y) pare? (x kar set-kar!) (y kdr))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 23       IMM             #f
+L0       2.  1F 06 06    DEFRECORD       6 6=(<pare> (x y) #t (#t . x) (#f . y))
+L0       5.  0B 07       SETG            7=#<LOC <pare>>
+L0       7.  0B 08       SETG            8=#<LOC kons>
+L0       9.  0B 09       SETG            9=#<LOC pare?>
+L0      11.  0B 0A       SETG            10=#<LOC kar>
+L0      13.  0B 0B       SETG            11=#<LOC set-kar!>
+L0      15.  0B 0C       SETG            12=#<LOC kdr>
+L0      17.  00          END
+  no result!!
+
+
+(define-record-type <pare> (kons x y) pare? (y kdr) (x kar set-kar!))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 23       IMM             #f
+L0       2.  1F 06 06    DEFRECORD       6 6=(<pare> (x y) #t (#f . y) (#t . x))
+L0       5.  0B 07       SETG            7=#<LOC <pare>>
+L0       7.  0B 08       SETG            8=#<LOC kons>
+L0       9.  0B 09       SETG            9=#<LOC pare?>
+L0      11.  0B 0A       SETG            10=#<LOC kdr>
+L0      13.  0B 0B       SETG            11=#<LOC kar>
+L0      15.  0B 0C       SETG            12=#<LOC set-kar!>
+L0      17.  00          END
+  no result!!
+
+
+(define-record-type <pare> kons pare? (x kar set-kar!) (y kdr))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 23       IMM             #f
+L0       2.  1F 06 06    DEFRECORD       6 6=(<pare> #t #t (#t . x) (#f . y))
+L0       5.  0B 07       SETG            7=#<LOC <pare>>
+L0       7.  0B 08       SETG            8=#<LOC kons>
+L0       9.  0B 09       SETG            9=#<LOC pare?>
+L0      11.  0B 0A       SETG            10=#<LOC kar>
+L0      13.  0B 0B       SETG            11=#<LOC set-kar!>
+L0      15.  0B 0C       SETG            12=#<LOC kdr>
+L0      17.  00          END
+  no result!!
+
+
+(define-record-type <pare> #f #f (x kar set-kar!) (y kdr))
+  ==> PROG ? n.params=0 n.locals=0
+L0       0.  14 23       IMM             #f
+L0       2.  1F 04 06    DEFRECORD       4 6=(<pare> #f #f (#t . x) (#f . y))
+L0       5.  0B 07       SETG            7=#<LOC <pare>>
+L0       7.  0B 08       SETG            8=#<LOC kar>
+L0       9.  0B 09       SETG            9=#<LOC set-kar!>
+L0      11.  0B 0A       SETG            10=#<LOC kdr>
+L0      13.  00          END
+  no result!!
+
+
+(let () (define-record-type <pare> (kons x y) pare? (x kar set-kar!) (y kdr)) (define-record-type (<sub-pare> <pare>) sub-kons sub-pare? (sub sub set-sub!)) <sub-pare>)
+  ==> PROG ? n.params=0 n.locals=11
+L0       0.  14 23       IMM             #f
+L0       2.  1F 06 06    DEFRECORD       6 6=(<pare> (x y) #t (#t . x) (#f . y))
+L0       5.  11 01       SETL            1
+L0       7.  11 02       SETL            2
+L0       9.  11 03       SETL            3
+L0      11.  11 04       SETL            4
+L0      13.  11 05       SETL            5
+L0      15.  11 06       SETL            6
+L0      17.  0D 01       GETL            1
+L0      19.  1F 05 07    DEFRECORD       5 7=(<sub-pare> #t #t (#t . sub))
+L0      22.  11 07       SETL            7
+L0      24.  11 08       SETL            8
+L0      26.  11 09       SETL            9
+L0      28.  11 0A       SETL            10
+L0      30.  11 0B       SETL            11
+L0      32.  0D 07       GETL            7
+L0      34.  00          END
+  ... #<RECORD-DESC <sub-pare>>
+
+
+(let-syntax ((given-that (syntax-rules () ((given-that test stmt) (if test stmt)) ((given-that test stmt1 stmt2 ...) (if test (begin stmt1 stmt2 ...)))))) (let ((if #t)) (given-that if (set! if 'now)) if))
+  ==> PROG ? n.params=0 n.locals=1
+L0       0.  14 43       IMM             #t
+L0       2.  11 01       SETL            1
+L0       4.  0D 01       GETL            1
+L0       6.  03 05       IFFALSE         @12
+L0       8.  12 06       QUOTE           6=now
+L0      10.  11 01       SETL            1
+L0      12.  0D 01       GETL            1
+L0      14.  00          END
+  ... now
+
+
+(let ((x 'outer)) (let-syntax ((m (syntax-rules () ((m) x)))) (let ((x 'inner)) (m))))
+  ==> PROG ? n.params=0 n.locals=2
+L0       0.  12 06       QUOTE           6=outer
+L0       2.  11 01       SETL            1
+L0       4.  12 07       QUOTE           7=inner
+L0       6.  11 02       SETL            2
+L0       8.  0D 01       GETL            1
+L0      10.  00          END
+  ... outer
+
+
+(letrec-syntax ((my-or (syntax-rules () ((my-or) #f) ((my-or e) e) ((my-or e1 e2 ...) (let ((temp e1)) (if temp temp (my-or e2 ...))))))) (let ((x #f) (y 7) (temp 8) (let odd?) (if even?)) (my-or x (let temp) (if y) y)))
+  ==> PROG ? n.params=0 n.locals=8
+L0       0.  14 23       IMM             #f
+L0       2.  11 01       SETL            1
+L0       4.  14 1D       IMM             7
+L0       6.  11 02       SETL            2
+L0       8.  14 21       IMM             8
+L0      10.  11 03       SETL            3
+L0      12.  14 89       IMM             #<odd?>
+L0      14.  11 04       SETL            4
+L0      16.  14 91       IMM             #<even?>
+L0      18.  11 05       SETL            5
+L0      20.  0D 01       GETL            1
+L0      22.  11 06       SETL            6
+L0      24.  0D 06       GETL            6
+L0      26.  03 04       IFFALSE         @31
+L0      28.  0D 06       GETL            6
+L0      30.  00          END
+L0      31.  0F 03       GETLA           3
+L0      33.  0D 04       GETL            4
+L0      35.  07 01       CALL            1
+L0      37.  11 07       SETL            7
+L0      39.  0D 07       GETL            7
+L0      41.  03 04       IFFALSE         @46
+L0      43.  0D 07       GETL            7
+L0      45.  00          END
+L0      46.  0F 02       GETLA           2
+L0      48.  0D 05       GETL            5
+L0      50.  07 01       CALL            1
+L0      52.  11 08       SETL            8
+L0      54.  0D 08       GETL            8
+L0      56.  03 04       IFFALSE         @61
+L0      58.  0D 08       GETL            8
+L0      60.  00          END
+L0      61.  0D 02       GETL            2
+L0      63.  00          END
+  ... 7
+

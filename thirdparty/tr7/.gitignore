@@ -1,0 +1,13 @@
+*.o
+*.so*
+*.a
+tr7i
+demo-c
+tr7.html
+tags
+TAGS
+*.result
+*.swp
+*~
+fatra/
+tr7i.dSYM/

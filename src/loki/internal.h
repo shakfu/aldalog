@@ -108,6 +108,9 @@ struct LokiAldaState;
 /* Joy state - opaque pointer, defined in loki_joy.c */
 struct LokiJoyState;
 
+/* TR7 state - opaque pointer, defined in lang/tr7.c */
+struct LokiTr7State;
+
 /* ======================= Data Structures ================================== */
 
 /* Syntax highlighting color definition */
@@ -204,6 +207,11 @@ struct editor_ctx {
 #ifdef LANG_JOY
     /* Joy state - per-context state (NULL until initialized) */
     struct LokiJoyState *joy_state;
+#endif
+
+#ifdef LANG_TR7
+    /* TR7 state - per-context state (NULL until initialized) */
+    struct LokiTr7State *tr7_state;
 #endif
 
     /* Line numbers display flag */

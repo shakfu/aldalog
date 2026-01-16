@@ -440,6 +440,7 @@ typedef struct LokiLangOps {
 | `src/loki/internal.h` | Editor context with language state pointers |
 | `src/loki/lang/alda.c` | Reference implementation (Alda language) |
 | `src/loki/lang/joy.c` | Reference implementation (Joy language) |
+| `src/loki/lang/tr7.c` | Reference implementation (TR7 Scheme interpreter) |
 
 ### Dispatch Functions
 

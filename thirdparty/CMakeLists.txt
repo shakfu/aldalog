@@ -122,5 +122,10 @@ else()
     message(STATUS "Csound backend disabled (use -DBUILD_CSOUND_BACKEND=ON to enable)")
 endif()
 
+# TR7 Scheme interpreter (optional)
+if(LANG_TR7)
+    add_subdirectory(tr7)
+endif()
+
 # Restore parent project's BUILD_TESTING
 set(BUILD_TESTING ${PSND_BUILD_TESTING} CACHE BOOL "Build tests" FORCE)

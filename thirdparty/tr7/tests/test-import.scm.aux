@@ -1,0 +1,4 @@
+(export s-xcons s-cons* s-circular-list s-iota
+  (rename hurray s-hurray))
+(begin (define (i-stomp . x) (hurray x)))
+(export (rename i-stomp s-stomp))

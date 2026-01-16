@@ -1,0 +1,1486 @@
+(tr7-show-result #t)
+#f
+(tr7-show-prompt #t)
+#f
+tr7> TOTO
+Error: unbound variable: TOTO
+   #0 at test-ref.scm:18 args ()
+tr7> (define |two words| "due parole")
+tr7> |two words|
+"due parole"
+tr7> |two words|
+"due parole"
+tr7> (define fact (lambda (n) (if (= n 0) 1 (* n (fact (- n 1))))))
+tr7> (fact 5)
+120
+tr7> (FACT 5)
+Error: unbound variable: FACT
+   #0 at test-ref.scm:35 args ()
+tr7> (fact 5)
+120
+tr7> (fact 5)
+120
+tr7> (FACT 5)
+Error: unbound variable: FACT
+   #0 at test-ref.scm:40 args ()
+tr7> (fact 5)
+120
+tr7> (let ((x (list 'a 'b 'c))) (set-cdr! (cddr x) x) x)
+#1=(a b c . #1#)
+tr7> '#1=(a b c . #1#)
+#1=(a b c . #1#)
+tr7> '((a b) (5 3) (5 3) (a b) ((a b) (5 3)))
+(#1=(a b) #2=(5 3) #2# #1# (#1# #2#))
+tr7> (define x 28)
+tr7> x
+28
+tr7> 'a
+a
+tr7> '#(a b c)
+#(a b c)
+tr7> '(+ 1 2)
+(+ 1 2)
+tr7> 'a
+a
+tr7> '#(a b c)
+#(a b c)
+tr7> '()
+()
+tr7> '(+ 1 2)
+(+ 1 2)
+tr7> ''a
+'a
+tr7> ''a
+'a
+tr7> '145932
+145932
+tr7> 145932
+145932
+tr7> '"abc"
+"abc"
+tr7> "abc"
+"abc"
+tr7> #(a 10)
+#(a 10)
+tr7> '#t
+#t
+tr7> #t
+#t
+tr7> (+ 3 4)
+7
+tr7> ((if #f + *) 3 4)
+12
+tr7> (lambda (x) (+ x x))
+#<LAMBDA>
+tr7> ((lambda (x) (+ x x)) 4)
+8
+tr7> (define reverse-subtract (lambda (x y) (- y x)))
+tr7> (reverse-subtract 7 10)
+3
+tr7> (define add4 (let ((x 4)) (lambda (y) (+ x y))))
+tr7> (add4 6)
+10
+tr7> ((lambda x x) 3 4 5 6)
+(3 4 5 6)
+tr7> ((lambda (x y . z) z) 3 4 5 6)
+(5 6)
+tr7> ((lambda x (list 'hello . x)) 3 4 5 6)
+Error: test-ref.scm:103: syntax error: improper expression list: x
+tr7> (if (> 3 2) 'yes 'no)
+yes
+tr7> (if (> 2 3) 'yes 'no)
+no
+tr7> (if (> 3 2) (- 3 2) (+ 3 2))
+1
+tr7> (define x 2)
+tr7> (+ x 1)
+3
+tr7> (set! x 4)
+tr7> (+ x 1)
+5
+tr7> (cond ((> 3 2) 'greater) ((< 3 2) 'less))
+greater
+tr7> (cond ((> 3 3) 'greater) ((< 3 3) 'less) (else 'equal))
+equal
+tr7> (cond ((assv 'b '((a 1) (b 2))) => cadr) (else #f))
+2
+tr7> (case (* 2 3) ((2 3 5 7) 'prime) ((1 4 6 8 9) 'composite))
+composite
+tr7> (case (car '(c d)) ((a) 'a) ((b) 'b))
+c
+tr7> (case (car '(c d)) ((a e i o u) 'vowel) ((w y) 'semivowel) (else => (lambda (x) x)))
+c
+tr7> (and (= 2 2) (> 2 1))
+#t
+tr7> (and (= 2 2) (< 2 1))
+#f
+tr7> (and 1 2 'c '(f g))
+(f g)
+tr7> (and)
+#t
+tr7> (or (= 2 2) (> 2 1))
+#t
+tr7> (or (= 2 2) (< 2 1))
+#t
+tr7> (or #f #f #f)
+#f
+tr7> (or (memq 'b '(a b c)) (/ 3 0))
+(b c)
+tr7> (or)
+#f
+tr7> (when (= 1 1.0) (display "1") (display "2"))
+12tr7> (unless (= 1 1.0) (display "1") (display "2"))
+#t
+tr7> (let ((x 2) (y 3)) (* x y))
+6
+tr7> (let ((x 2) (y 3)) (let ((x 7) (z (+ x y))) (* z x)))
+35
+tr7> (let ((x 2) (y 3)) (let* ((x 7) (z (+ x y))) (* z x)))
+70
+tr7> (letrec ((even? (lambda (n) (if (zero? n) #t (odd? (- n 1))))) (odd? (lambda (n) (if (zero? n) #f (even? (- n 1)))))) (even? 88))
+#t
+tr7> (letrec* ((p (lambda (x) (+ 1 (q (- x 1))))) (q (lambda (y) (if (zero? y) 0 (+ 1 (p (- y 1)))))) (x (p 5)) (y x)) y)
+5
+tr7> (define-syntax values->list (syntax-rules () ((values->list expr) (call-with-values (lambda () expr) list))))
+tr7> (let again ((i 0)) (write (values->list (exact-integer-sqrt i))) (newline) (unless (> i 20) (again (+ i 1))))
+(0 0)
+(1 0)
+(1 1)
+(1 2)
+(2 0)
+(2 1)
+(2 2)
+(2 3)
+(2 4)
+(3 0)
+(3 1)
+(3 2)
+(3 3)
+(3 4)
+(3 5)
+(3 6)
+(4 0)
+(4 1)
+(4 2)
+(4 3)
+(4 4)
+(4 5)
+#t
+tr7> (values->list (exact-integer-sqrt 50000))
+(223 271)
+tr7> (let-values (((root rem) (exact-integer-sqrt 32))) (* root rem))
+35
+tr7> (let-values ((a (values 1 2 3 4))) a)
+(1 2 3 4)
+tr7> (let-values (((a . b) (values 1 2 3 4))) (values a b))
+1
+(2 3 4)
+tr7> (let () (define-values a (values 1 2 3 4)) a)
+(1 2 3 4)
+tr7> (let () (define-values (a . b) (values 1 2 3 4)) (values a b))
+1
+(2 3 4)
+tr7> (let ((a 'a) (b 'b) (x 'x) (y 'y)) (let*-values (((a b) (values x y)) ((x y) (values a b))) (list a b x y)))
+(x y x y)
+tr7> (define x 0)
+tr7> (and (= x 0) (begin (set! x 5) (+ x 1)))
+6
+tr7> (begin (display "4 plus 1 equals ") (display (+ 4 1)) (display "\n"))
+4 plus 1 equals 5
+tr7> (do ((vec (make-vector 5)) (i 0 (+ i 1))) ((= i 5) vec) (vector-set! vec i i))
+#(0 1 2 3 4)
+tr7> (let ((x '(1 3 5 7 9))) (do ((x x (cdr x)) (sum 0 (+ sum (car x)))) ((null? x) sum)))
+25
+tr7> (let loop ((numbers '(3 -2 1 6 -5)) (nonneg '()) (neg '())) (cond ((null? numbers) (list nonneg neg)) ((>= (car numbers) 0) (loop (cdr numbers) (cons (car numbers) nonneg) neg)) ((< (car numbers) 0) (loop (cdr numbers) nonneg (cons (car numbers) neg)))))
+((6 1 3) (-5 -2))
+tr7> (force (delay (+ 1 2)))
+3
+tr7> (let ((p (delay (+ 1 2)))) (list (force p) (force p)))
+(3 3)
+tr7> (define integers (letrec ((next (lambda (n) (delay (cons n (next (+ n 1))))))) (next 0)))
+tr7> (define head (lambda (stream) (car (force stream))))
+tr7> (define tail (lambda (stream) (cdr (force stream))))
+tr7> (head (tail (tail integers)))
+2
+tr7> (define (stream-filter p? s) (delay-force (if (null? (force s)) (delay '()) (let ((h (car (force s))) (t (cdr (force s)))) (if (p? h) (delay (cons h (stream-filter p? t))) (stream-filter p? t))))))
+tr7> (head (tail (tail (stream-filter odd? integers))))
+5
+tr7> (define count 0)
+tr7> (define p (delay (begin (set! count (+ count 1)) (if (> count x) count (force p)))))
+tr7> (define x 5)
+tr7> p
+#<PROMISE>
+tr7> (force p)
+6
+tr7> p
+#<PROMISE>
+tr7> (begin (set! x 10) (force p))
+6
+tr7> (define radix (make-parameter 10 (lambda (x) (if (and (exact-integer? x) (<= 2 x 16)) x (error "invalid radix")))))
+tr7> radix
+#<PARAMETER>
+tr7> (radix)
+10
+tr7> (define (f n) (number->string n (radix)))
+tr7> (f 12)
+"12"
+tr7> (parameterize ((radix 2)) (f 12))
+"1100"
+tr7> (radix)
+10
+tr7> (f 12)
+"12"
+tr7> (radix 16)
+16
+tr7> (radix)
+16
+tr7> (f 12)
+"c"
+tr7> (parameterize ((radix 0)) (f 12))
+Error: invalid radix
+   #0 at test-ref.scm:337 args ()
+tr7> (radix)
+16
+tr7> (let ((param0 (make-parameter 10)) (param1 (make-parameter 10)) (param2 (make-parameter 10))) (let ((f (lambda (n) (list (number->string n (param0)) (number->string n (param1)) (number->string n (param2)))))) (display (f 151)) (newline) (display (parameterize ((param0 2) (param1 8) (param2 16)) (f 151))) (newline) (display (f 151)) (newline)))
+(151 151 151)
+(10010111 227 97)
+(151 151 151)
+tr7> (guard (condition ((assq 'a condition) => cdr) ((assq 'b condition))) (raise (list (cons 'a 42))))
+42
+tr7> (eqv? (delay 1) 1)
+#f
+tr7> (pair? (delay (cons 1 2)))
+#f
+tr7> (car (list (delay (* 3 7)) 13))
+#<PROMISE>
+tr7> (promise? x)
+#f
+tr7> (promise? p)
+#t
+tr7> (define q (make-promise 5))
+tr7> (promise? q)
+#t
+tr7> (force q)
+5
+tr7> `(list ,(+ 1 2) 4)
+(list 3 4)
+tr7> (let ((name 'a)) `(list ,name ',name))
+(list a 'a)
+tr7> `(a ,(+ 1 2) ,@(map abs '(4 -5 6)) b)
+(a 3 4 5 6 b)
+tr7> `((foo ,(- 10 3)) ,@(cdr '(c)) unquote (car '(cons)))
+((foo 7) . cons)
+tr7> (apply vector `(10 5 ,(sqrt 4) ,@(map sqrt '(16 9)) 8))
+#(10 5 2.0 4.0 3.0 8)
+tr7> (let ((foo '(foo bar)) (@baz 'baz)) `(list ,@foo ,@baz))
+(list foo bar baz)
+tr7> `(a `(b ,(+ 1 2) ,(foo ,(+ 1 3) d) e) f)
+(a `(b ,(+ 1 2) ,(foo 4 d) e) f)
+tr7> (let ((name1 'x) (name2 'y)) `(a `(b ,,name1 ,',name2 d) e))
+(a `(b ,x ,'y d) e)
+tr7> (let ((a 3)) `((1 2) ,a ,4 ,'five 6))
+((1 2) 3 4 five 6)
+tr7> (let ((a 3)) (cons '(1 2) (cons a (cons 4 (cons 'five '(6))))))
+((1 2) 3 4 five 6)
+tr7> `(list ,(+ 1 2) 4)
+(list 3 4)
+tr7> '`(list ,(+ 1 2) 4)
+`(list ,(+ 1 2) 4)
+tr7> (let ((a 'x)) `(a ,a `(a ,a ,,a `(a ,a ,,a ,,,a `(a ,a ,,a ,,,a ,,,,a `(a ,a ,,a ,,,a ,,,,a ,,,,,a `(a ,a ,,a ,,,a ,,,,a ,,,,,a ,,,,,,a) a ,a ,,a ,,,a ,,,,a ,,,,,a) a ,a ,,a ,,,a ,,,,a) a ,a ,,a ,,,a) a ,a ,,a) a ,a))
+(a x `(a #1=,a ,x `(a #1# #2=,,a ,,x `(a #1# #2# #3=,,,a ,,,x `(a #1# #2# #3# #4=,,,,a ,,,,x `(a #1# #2# #3# #4# ,,,,,a ,,,,,x) a #1# #2# #3# #4# ,,,,x) a #1# #2# #3# ,,,x) a #1# #2# ,,x) a #1# ,x) a x)
+tr7> (define range (case-lambda ((e) (range 0 e)) ((b e) (do ((r '() (cons e r)) (e (- e 1) (- e 1))) ((< e b) r)))))
+tr7> (range 3)
+(0 1 2)
+tr7> (range 3 5)
+(3 4)
+tr7> (let-syntax ((given-that (syntax-rules () ((given-that test stmt) (if test stmt)) ((given-that test stmt1 stmt2 ...) (if test (begin stmt1 stmt2 ...)))))) (let ((if #t)) (given-that if (set! if 'now)) if))
+now
+tr7> (let ((x 'outer)) (let-syntax ((m (syntax-rules () ((m) x)))) (let ((x 'inner)) (m))))
+outer
+tr7> (letrec-syntax ((my-or (syntax-rules () ((my-or) #f) ((my-or e) e) ((my-or e1 e2 ...) (let ((temp e1)) (if temp temp (my-or e2 ...))))))) (let ((x #f) (y 7) (temp 8) (let odd?) (if even?)) (my-or x (let temp) (if y) y)))
+7
+tr7> (define-syntax be-like-begin (syntax-rules () ((be-like-begin name) (define-syntax name (syntax-rules () ((name expr (... ...)) (begin expr (... ...))))))))
+tr7> (be-like-begin sequence)
+tr7> (sequence 1 2 3 4)
+4
+tr7> (let-syntax ((simple-let (syntax-rules () ((_ (head ... ((x . y) val) . tail) body1 body2 ...) (syntax-error "expected an identifier but got" (x . y))) ((_ ((name val) ...) body1 body2 ...) ((lambda (name ...) body1 body2 ...) val ...))))) (simple-let (z ((2 3) 4) 9) body))
+Error: test-ref.scm:476: syntax error: syntax-error reporting: ("expected an identifier but got" (2 3))
+tr7> (define add3 (lambda (x) (+ x 3)))
+tr7> (add3 3)
+6
+tr7> (define first car)
+tr7> (first '(1 2))
+1
+tr7> (let ((x 5)) (define foo (lambda (y) (bar x y))) (define bar (lambda (a b) (+ (* a b) a))) (foo (+ x 3)))
+45
+tr7> (define-values (x y) (exact-integer-sqrt 17))
+tr7> (list x y)
+(4 1)
+tr7> (let () (define-values (x y) (values 1 2)) (+ x y))
+3
+tr7> (define-record-type <pare> (kons x y) pare? (x kar set-kar!) (y kdr))
+tr7> (pare? (kons 1 2))
+#t
+tr7> (pare? (cons 1 2))
+#f
+tr7> (kar (kons 1 2))
+1
+tr7> (kdr (kons 1 2))
+2
+tr7> (let ((k (kons 1 2))) (set-kar! k 3) (kar k))
+3
+tr7> (eqv? 'a 'a)
+#t
+tr7> (eqv? 'a 'b)
+#f
+tr7> (eqv? 2 2)
+#t
+tr7> (eqv? '() '())
+#t
+tr7> (eqv? 100000000 100000000)
+#t
+tr7> (eqv? 0.0 +nan.0)
+#f
+tr7> (eqv? (cons 1 2) (cons 1 2))
+#f
+tr7> (eqv? (lambda () 1) (lambda () 2))
+#f
+tr7> (let ((p (lambda (x) x))) (eqv? p p))
+#t
+tr7> (eqv? #f '())
+#f
+tr7> (eqv? "" "")
+#t
+tr7> (eqv? '#() '#())
+#t
+tr7> (eqv? (lambda (x) x) (lambda (x) x))
+#f
+tr7> (eqv? (lambda (x) x) (lambda (y) y))
+#f
+tr7> (eqv? +nan.0 +nan.0)
+#f
+tr7> (define gen-counter (lambda () (let ((n 0)) (lambda () (set! n (+ n 1)) n))))
+tr7> (let ((g (gen-counter))) (eqv? g g))
+#t
+tr7> (eqv? (gen-counter) (gen-counter))
+#f
+tr7> (define gen-loser (lambda () (let ((n 0)) (lambda () (set! n (+ n 1)) 27))))
+tr7> (let ((g (gen-loser))) (eqv? g g))
+#t
+tr7> (eqv? (gen-loser) (gen-loser))
+#f
+tr7> (letrec ((f (lambda () (if (eqv? f g) 'f 'both))) (g (lambda () (if (eqv? f g) 'g 'both)))) (eqv? f g))
+#f
+tr7> (eqv? '(a) '(a))
+#t
+tr7> (eqv? "a" "a")
+#t
+tr7> (eqv? '(b) (cdr '(a b)))
+#f
+tr7> (let ((x '(a))) (eqv? x x))
+#t
+tr7> (eq? 'a 'a)
+#t
+tr7> (eq? '(a) '(a))
+#t
+tr7> (eq? (list 'a) (list 'a))
+#f
+tr7> (eq? "a" "a")
+#t
+tr7> (eq? "" "")
+#t
+tr7> (eq? '() '())
+#t
+tr7> (eq? 2 2)
+#t
+tr7> (eq? #\A #\A)
+#t
+tr7> (eq? car car)
+#t
+tr7> (let ((n (+ 2 3))) (eq? n n))
+#t
+tr7> (let ((x '(a))) (eq? x x))
+#t
+tr7> (let ((x '#())) (eq? x x))
+#t
+tr7> (let ((p (lambda (x) x))) (eq? p p))
+#t
+tr7> (equal? 'a 'a)
+#t
+tr7> (equal? '(a) '(a))
+#t
+tr7> (equal? '(a (b) c) '(a (b) c))
+#t
+tr7> (equal? "abc" "abc")
+#t
+tr7> (equal? 2 2)
+#t
+tr7> (equal? (make-vector 5 'a) (make-vector 5 'a))
+#t
+tr7> (let ((u '(a b)) (v '(a b a b))) (set-cdr! (cdr u) u) (set-cdr! (cdddr v) v) (equal? u v))
+#t
+tr7> (equal? (lambda (x) x) (lambda (y) y))
+#f
+tr7> (letrec ((u `(,x ,y c)) (v `(,x ,y c)) (x (apply vector `(a b ,u ,v))) (y `(a b ,u ,v))) (equal? u v))
+#t
+tr7> (complex? 3)
+#t
+tr7> (real? 3)
+#t
+tr7> (real? +inf.0)
+#t
+tr7> (real? +nan.0)
+#t
+tr7> (rational? -inf.0)
+#f
+tr7> (rational? 3.5)
+#f
+tr7> (integer? 3.0)
+#t
+tr7> (exact? 3.0)
+#f
+tr7> (inexact? 3.0)
+#t
+tr7> (exact-integer? 32)
+#t
+tr7> (exact-integer? 32.0)
+#f
+tr7> (finite? 3)
+#t
+tr7> (finite? +inf.0)
+#f
+tr7> (infinite? 3)
+#f
+tr7> (infinite? +inf.0)
+#t
+tr7> (infinite? +nan.0)
+#f
+tr7> (nan? +nan.0)
+#t
+tr7> (nan? 32)
+#f
+tr7> (= 1 2)
+#f
+tr7> (= 1 1.0)
+#t
+tr7> (= 1.2 1.0)
+#f
+tr7> (<= 1 2)
+#t
+tr7> (<= 1 1.0)
+#t
+tr7> (<= 1.2 1.0)
+#f
+tr7> (>= 1 2)
+#f
+tr7> (>= 1 1.0)
+#t
+tr7> (>= 1.2 1.0)
+#t
+tr7> (< 1 2)
+#t
+tr7> (< 1 1.0)
+#f
+tr7> (< 1.2 1.0)
+#f
+tr7> (> 1 2)
+#f
+tr7> (> 1 1.0)
+#f
+tr7> (> 1.2 1.0)
+#t
+tr7> (= 0.0 -0.0)
+#t
+tr7> (zero? 4)
+#f
+tr7> (zero? 0)
+#t
+tr7> (zero? -4)
+#f
+tr7> (zero? 4.0)
+#f
+tr7> (zero? 0.0)
+#t
+tr7> (zero? -4.0)
+#f
+tr7> (zero? 0.0)
+#t
+tr7> (zero? -0.0)
+#t
+tr7> (positive? 4)
+#t
+tr7> (positive? 0)
+#f
+tr7> (positive? -4)
+#f
+tr7> (positive? 4.0)
+#t
+tr7> (positive? 0.0)
+#f
+tr7> (positive? -4.0)
+#f
+tr7> (positive? 0.0)
+#f
+tr7> (positive? -0.0)
+#f
+tr7> (negative? 4)
+#f
+tr7> (negative? 0)
+#f
+tr7> (negative? -4)
+#t
+tr7> (negative? 4.0)
+#f
+tr7> (negative? 0.0)
+#f
+tr7> (negative? -4.0)
+#t
+tr7> (negative? 0.0)
+#f
+tr7> (negative? -0.0)
+#f
+tr7> (max 3 4 2)
+4
+tr7> (max 3.9 4 2)
+4.0
+tr7> (min 3 4 2)
+2
+tr7> (min 3.9 4 2)
+2.0
+tr7> (- 3 4)
+-1
+tr7> (- 3 4 5)
+-6
+tr7> (- 3)
+-3
+tr7> (/ 3 4 5)
+0.15
+tr7> (/ 3)
+0.3333333333333333
+tr7> (abs -7)
+7
+tr7> (values->list (floor/ 5 2))
+(2 1)
+tr7> (values->list (floor/ -5 2))
+(-3 1)
+tr7> (values->list (floor/ 5 -2))
+(-3 -1)
+tr7> (values->list (floor/ -5 -2))
+(2 -1)
+tr7> (values->list (truncate/ 5 2))
+(2 1)
+tr7> (values->list (truncate/ -5 2))
+(-2 -1)
+tr7> (values->list (truncate/ 5 -2))
+(-2 1)
+tr7> (values->list (truncate/ -5 -2))
+(2 -1)
+tr7> (values->list (truncate/ -5.0 -2))
+(2.0 -1.0)
+tr7> (gcd 32 -36)
+4
+tr7> (gcd)
+0
+tr7> (lcm 32 -36)
+288
+tr7> (lcm 32.0 -36)
+288.0
+tr7> (lcm)
+1
+tr7> (floor -4.3)
+-5.0
+tr7> (ceiling -4.3)
+-4.0
+tr7> (truncate -4.3)
+-4.0
+tr7> (round -4.3)
+-4.0
+tr7> (floor 3.5)
+3.0
+tr7> (ceiling 3.5)
+4.0
+tr7> (truncate 3.5)
+3.0
+tr7> (round 3.5)
+4.0
+tr7> (round 7)
+7
+tr7> (square 7)
+49
+tr7> (square -1.1)
+1.21
+tr7> (values->list (exact-integer-sqrt 4))
+(2 0)
+tr7> (values->list (exact-integer-sqrt 5))
+(2 1)
+tr7> #t
+#t
+tr7> #f
+#f
+tr7> '#f
+#f
+tr7> (not #t)
+#f
+tr7> (not 3)
+#f
+tr7> (not (list 3))
+#f
+tr7> (not #f)
+#t
+tr7> (not '())
+#f
+tr7> (not (list))
+#f
+tr7> (not 'nil)
+#f
+tr7> (boolean? #f)
+#t
+tr7> (boolean? 0)
+#f
+tr7> (boolean? '())
+#f
+tr7> (boolean=? 1 1 1)
+#f
+tr7> (boolean=? #f #f #f)
+#t
+tr7> (boolean=? #t #t #t)
+#t
+tr7> (boolean=? #f #f #t)
+#f
+tr7> (pair? '(a . b))
+#t
+tr7> (pair? '(a b c))
+#t
+tr7> (pair? '())
+#f
+tr7> (pair? '#(a b))
+#f
+tr7> (cons 'a '())
+(a)
+tr7> (cons '(a) '(b c d))
+((a) b c d)
+tr7> (cons "a" '(b c))
+("a" b c)
+tr7> (cons 'a 3)
+(a . 3)
+tr7> (cons '(a b) 'c)
+((a b) . c)
+tr7> (car '(a b c))
+a
+tr7> (car '((a) b c d))
+(a)
+tr7> (car '(1 . 2))
+1
+tr7> (car '())
+Error: when calling car, argument 1 must be pair: (())
+tr7> (cdr '((a) b c d))
+(b c d)
+tr7> (cdr '(1 . 2))
+2
+tr7> (cdr '())
+Error: when calling cdr, argument 1 must be pair: (())
+tr7> (car '(car . cdr))
+car
+tr7> (cdr '(car . cdr))
+cdr
+tr7> (caar '((caar . cdar) cadr . cddr))
+caar
+tr7> (cadr '((caar . cdar) cadr . cddr))
+cadr
+tr7> (cdar '((caar . cdar) cadr . cddr))
+cdar
+tr7> (cddr '((caar . cdar) cadr . cddr))
+cddr
+tr7> (caaar '(((caaar . cdaar) cadar . cddar) (caadr . cdadr) caddr . cdddr))
+caaar
+tr7> (caadr '(((caaar . cdaar) cadar . cddar) (caadr . cdadr) caddr . cdddr))
+caadr
+tr7> (cadar '(((caaar . cdaar) cadar . cddar) (caadr . cdadr) caddr . cdddr))
+cadar
+tr7> (caddr '(((caaar . cdaar) cadar . cddar) (caadr . cdadr) caddr . cdddr))
+caddr
+tr7> (cdaar '(((caaar . cdaar) cadar . cddar) (caadr . cdadr) caddr . cdddr))
+cdaar
+tr7> (cdadr '(((caaar . cdaar) cadar . cddar) (caadr . cdadr) caddr . cdddr))
+cdadr
+tr7> (cddar '(((caaar . cdaar) cadar . cddar) (caadr . cdadr) caddr . cdddr))
+cddar
+tr7> (cdddr '(((caaar . cdaar) cadar . cddar) (caadr . cdadr) caddr . cdddr))
+cdddr
+tr7> (caaaar '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+caaaar
+tr7> (caaadr '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+caaadr
+tr7> (caadar '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+caadar
+tr7> (caaddr '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+caaddr
+tr7> (cadaar '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cadaar
+tr7> (cadadr '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cadadr
+tr7> (caddar '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+caddar
+tr7> (cadddr '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cadddr
+tr7> (cdaaar '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cdaaar
+tr7> (cdaadr '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cdaadr
+tr7> (cdadar '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cdadar
+tr7> (cdaddr '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cdaddr
+tr7> (cddaar '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cddaar
+tr7> (cddadr '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cddadr
+tr7> (cdddar '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cdddar
+tr7> (cddddr '((((caaaar . cdaaar) cadaar . cddaar) (caadar . cdadar) caddar . cdddar) ((caaadr . cdaadr) cadadr . cddadr) (caaddr . cdaddr) cadddr . cddddr))
+cddddr
+tr7> (list? '(a b c))
+#t
+tr7> (list? '())
+#t
+tr7> (list? '(a . b))
+#f
+tr7> (let ((x (list 'a))) (set-cdr! x x) (list? x))
+#f
+tr7> (make-list 2 3)
+(3 3)
+tr7> (list 'a (+ 3 4) 'c)
+(a 7 c)
+tr7> (list)
+()
+tr7> (length '(a b c))
+3
+tr7> (length '(a (b) (c d e)))
+3
+tr7> (length '())
+0
+tr7> (append '(x) '(y))
+(x y)
+tr7> (append '(a) '(b c d))
+(a b c d)
+tr7> (append '(a (b)) '((c)))
+(a (b) (c))
+tr7> (append '(a b) '(c . d))
+(a b c . d)
+tr7> (append '() 'a)
+a
+tr7> (let* ((a '(a b c)) (d '(d e f)) (u (append a d))) (set-cdr! a 1) (set-cdr! d 4) u)
+(a b c d . 4)
+tr7> (reverse '(a b c))
+(c b a)
+tr7> (reverse '(a (b c) d (e (f))))
+((e (f)) d (b c) a)
+tr7> (list-ref '(a b c d) 2)
+c
+tr7> (list-ref '(a b c d) (exact (round 1.8)))
+c
+tr7> (let ((ls (list 'one 'two 'five!))) (list-set! ls 2 'three) ls)
+(one two three)
+tr7> (memq 'a '(a b c))
+(a b c)
+tr7> (memq 'b '(a b c))
+(b c)
+tr7> (memq 'a '(b c d))
+#f
+tr7> (memq (list 'a) '(b (a) c))
+#f
+tr7> (member (list 'a) '(b (a) c))
+((a) c)
+tr7> (member "B" '("a" "b" "c") string-ci=?)
+("b" "c")
+tr7> (memq 101 '(100 101 102))
+(101 102)
+tr7> (memv 101 '(100 101 102))
+(101 102)
+tr7> (assq 'a '((a 1) (b 2) (c 3)))
+(a 1)
+tr7> (assq 'b '((a 1) (b 2) (c 3)))
+(b 2)
+tr7> (assq 'd '((a 1) (b 2) (c 3)))
+#f
+tr7> (assq (list 'a) '(((a)) ((b)) ((c))))
+#f
+tr7> (assoc (list 'a) '(((a)) ((b)) ((c))))
+((a))
+tr7> (assoc 2.0 '((1 1) (2 4) (3 9)) =)
+(2 4)
+tr7> (assq 5 '((2 3) (5 7) (11 13)))
+(5 7)
+tr7> (assv 5 '((2 3) (5 7) (11 13)))
+(5 7)
+tr7> (list-copy 7)
+7
+tr7> (list-copy '())
+()
+tr7> (list-copy #u8(0 0 0 0))
+#u8(0 0 0 0)
+tr7> (list-copy '(a b 1 2 3))
+(a b 1 2 3)
+tr7> (let* ((a '(1 8 2 8))) (eq? a (list-copy a)))
+#f
+tr7> (let* ((a '(1 8 2 8))) (eqv? a (list-copy a)))
+#f
+tr7> (let* ((a '(1 8 2 8))) (equal? a (list-copy a)))
+#t
+tr7> (let* ((a '(1 8 2 8)) (b (list-copy a))) (set-car! b 3) b)
+(3 8 2 8)
+tr7> (let ((v '(a b a b))) (set-cdr! (cdddr v) v) (list-copy v))
+Error: invalid argument
+tr7> (symbol? 'foo)
+#t
+tr7> (symbol? (car '(a b)))
+#t
+tr7> (symbol? "bar")
+#f
+tr7> (symbol? 'nil)
+#t
+tr7> (symbol? '())
+#f
+tr7> (symbol? #f)
+#f
+tr7> (symbol=? 'a 'a (string->symbol "a"))
+#t
+tr7> (symbol=? 'a 'a (string->symbol "a") 'h)
+#f
+tr7> (symbol->string 'flying-fish)
+"flying-fish"
+tr7> (symbol->string 'Martin)
+"Martin"
+tr7> (symbol->string (string->symbol "Malvina"))
+"Malvina"
+tr7> (string->symbol "mISSISSIppi")
+mISSISSIppi
+tr7> (eqv? 'bitBlt (string->symbol "bitBlt"))
+#t
+tr7> (eqv? 'LollyPop (string->symbol (symbol->string 'LollyPop)))
+#t
+tr7> (string=? "K. Harper, M.D." (symbol->string (string->symbol "K. Harper, M.D.")))
+#t
+tr7> #\alarm
+#\alarm
+tr7> #\alarm
+#\alarm
+tr7> #\backspace
+#\backspace
+tr7> #\backspace
+#\backspace
+tr7> #\delete
+#\delete
+tr7> #\delete
+#\delete
+tr7> #\escape
+#\escape
+tr7> #\escape
+#\escape
+tr7> #\newline
+#\newline
+tr7> #\newline
+#\newline
+tr7> #\null
+#\null
+tr7> #\null
+#\null
+tr7> #\return
+#\return
+tr7> #\return
+#\return
+tr7> #\space
+#\space
+tr7> #\space
+#\space
+tr7> #\tab
+#\tab
+tr7> #\tab
+#\tab
+tr7> #\a
+#\a
+tr7> #\A
+#\A
+tr7> #\(
+#\(
+tr7> #\space
+#\space
+tr7> (char? #t)
+#f
+tr7> (char? #\a)
+#t
+tr7> (char=? #\z #\z #\z)
+#t
+tr7> (char=? #\z #\Z #\z)
+#f
+tr7> (char=? #\z #\z #\x)
+#f
+tr7> (char>? #\z #\y #\x)
+#t
+tr7> (char>? #\Z #\y #\x)
+#f
+tr7> (char>? #\z #\y #\y #\x)
+#f
+tr7> (char>? #\a #\b #\c)
+#f
+tr7> (char>? #\a #\B #\c)
+#f
+tr7> (char>? #\a #\b #\b #\c)
+#f
+tr7> (char<? #\z #\y #\x)
+#f
+tr7> (char<? #\Z #\y #\x)
+#f
+tr7> (char<? #\z #\y #\y #\x)
+#f
+tr7> (char<? #\a #\b #\c)
+#t
+tr7> (char<? #\a #\B #\c)
+#f
+tr7> (char<? #\a #\b #\b #\c)
+#f
+tr7> (char>=? #\z #\y #\x)
+#t
+tr7> (char>=? #\Z #\y #\x)
+#f
+tr7> (char>=? #\z #\y #\y #\x)
+#t
+tr7> (char>=? #\a #\b #\c)
+#f
+tr7> (char>=? #\a #\B #\c)
+#f
+tr7> (char>=? #\a #\b #\b #\c)
+#f
+tr7> (char<=? #\z #\y #\x)
+#f
+tr7> (char<=? #\Z #\y #\x)
+#f
+tr7> (char<=? #\z #\y #\y #\x)
+#f
+tr7> (char<=? #\a #\b #\c)
+#t
+tr7> (char<=? #\a #\B #\c)
+#f
+tr7> (char<=? #\a #\b #\b #\c)
+#t
+tr7> (char-ci=? #\z #\z #\z)
+#t
+tr7> (char-ci=? #\z #\Z #\z)
+#t
+tr7> (char-ci=? #\z #\z #\x)
+#f
+tr7> (char-ci>? #\z #\y #\x)
+#t
+tr7> (char-ci>? #\Z #\y #\x)
+#t
+tr7> (char-ci>? #\z #\y #\y #\x)
+#f
+tr7> (char-ci>? #\a #\b #\c)
+#f
+tr7> (char-ci>? #\a #\B #\c)
+#f
+tr7> (char-ci>? #\a #\b #\b #\c)
+#f
+tr7> (char-ci<? #\z #\y #\x)
+#f
+tr7> (char-ci<? #\Z #\y #\x)
+#f
+tr7> (char-ci<? #\z #\y #\y #\x)
+#f
+tr7> (char-ci<? #\a #\b #\c)
+#t
+tr7> (char-ci<? #\a #\B #\c)
+#t
+tr7> (char-ci<? #\a #\b #\b #\c)
+#f
+tr7> (char-ci>=? #\z #\y #\x)
+#t
+tr7> (char-ci>=? #\Z #\y #\x)
+#t
+tr7> (char-ci>=? #\z #\y #\y #\x)
+#t
+tr7> (char-ci>=? #\a #\b #\c)
+#f
+tr7> (char-ci>=? #\a #\B #\c)
+#f
+tr7> (char-ci>=? #\a #\b #\b #\c)
+#f
+tr7> (char-ci<=? #\z #\y #\x)
+#f
+tr7> (char-ci<=? #\Z #\y #\x)
+#f
+tr7> (char-ci<=? #\z #\y #\y #\x)
+#f
+tr7> (char-ci<=? #\a #\b #\c)
+#t
+tr7> (char-ci<=? #\a #\B #\c)
+#t
+tr7> (char-ci<=? #\a #\b #\b #\c)
+#t
+tr7> (char-alphabetic? #\a)
+#t
+tr7> (char-alphabetic? #\B)
+#t
+tr7> (char-alphabetic? #\5)
+#f
+tr7> (char-alphabetic? #\,)
+#f
+tr7> (char-alphabetic? #\tab)
+#f
+tr7> (char-numeric? #\a)
+#f
+tr7> (char-numeric? #\B)
+#f
+tr7> (char-numeric? #\5)
+#t
+tr7> (char-numeric? #\,)
+#f
+tr7> (char-numeric? #\tab)
+#f
+tr7> (char-whitespace? #\a)
+#f
+tr7> (char-whitespace? #\B)
+#f
+tr7> (char-whitespace? #\5)
+#f
+tr7> (char-whitespace? #\,)
+#f
+tr7> (char-whitespace? #\tab)
+#t
+tr7> (char-upper-case? #\a)
+#f
+tr7> (char-upper-case? #\B)
+#t
+tr7> (char-upper-case? #\5)
+#f
+tr7> (char-upper-case? #\,)
+#f
+tr7> (char-upper-case? #\tab)
+#f
+tr7> (char-lower-case? #\a)
+#t
+tr7> (char-lower-case? #\B)
+#f
+tr7> (char-lower-case? #\5)
+#f
+tr7> (char-lower-case? #\,)
+#f
+tr7> (char-lower-case? #\tab)
+#f
+tr7> (digit-value #\3)
+3
+tr7> (digit-value #\e)
+#f
+tr7> (char->integer #\3)
+51
+tr7> (char->integer #\e)
+101
+tr7> (integer->char 51)
+#\3
+tr7> (integer->char 101)
+#\e
+tr7> "The word \"recursion\" has many meanings."
+"The word \"recursion\" has many meanings."
+tr7> "Another example:\ntwo lines of text"
+"Another example:\ntwo lines of text"
+tr7> "Here’s text containing just one line"
+"Here’s text containing just one line"
+tr7> "α is named GREEK SMALL LETTER ALPHA."
+"α is named GREEK SMALL LETTER ALPHA."
+tr7> (string? "hello")
+#t
+tr7> (string? 5)
+#f
+tr7> (make-string 6)
+"      "
+tr7> (make-string 10 #\X)
+"XXXXXXXXXX"
+tr7> (string #\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7)
+"01234567"
+tr7> (string)
+""
+tr7> (string-length "")
+0
+tr7> (string-length "test")
+4
+tr7> (string-ref "0123456789" 5)
+#\5
+tr7> (let ((s (string-copy "0123456789"))) (string-set! s 5 #\X) s)
+"01234X6789"
+tr7> (string=? "123" "123" "123" "123")
+#t
+tr7> (string=? "123" "123" "123" "456")
+#f
+tr7> (string<=? "123" "123" "123" "456")
+#t
+tr7> (string-upcase "Hello")
+"HELLO"
+tr7> (string-upcase "ööö")
+"ÖÖÖ"
+tr7> (string-downcase "Hello")
+"hello"
+tr7> (string-downcase "ÖÖÖ")
+"ööö"
+tr7> (string-foldcase "Hello")
+"hello"
+tr7> (string-append "123" "456" "789")
+"123456789"
+tr7> (string->list "Hello")
+(#\H #\e #\l #\l #\o)
+tr7> (string->list "Hello" 2)
+(#\l #\l #\o)
+tr7> (string->list "Hello" 2 4)
+(#\l #\l)
+tr7> (list->string (list #\H #\e #\l #\l #\o #\H #\e #\l #\l #\o))
+"HelloHello"
+tr7> (string-copy "0123456789")
+"0123456789"
+tr7> (string-copy "0123456789" 3)
+"3456789"
+tr7> (string-copy "0123456789" 3 8)
+"34567"
+tr7> (string-copy "0123456789" 10 10)
+""
+tr7> (let ((s (string-copy "0123456789"))) (string-copy! s 3 "ABCD") s)
+"012ABCD789"
+tr7> (let ((s (string-copy "0123456789"))) (string-copy! s 3 "ABCD" 2) s)
+"012CD56789"
+tr7> (let ((s (string-copy "0123456789"))) (string-copy! s 3 "ABCD" 1 3) s)
+"012BC56789"
+tr7> (let ((s (string-copy "0123456789"))) (string-copy! s 3 "ABCD" 3 3) s)
+"0123456789"
+tr7> (let ((s (string-copy "0123456789"))) (string-copy! s 10 "ABCD" 3 3) s)
+"0123456789"
+tr7> (let ((s (string-copy "0123456789"))) (string-fill! s #\x) s)
+"xxxxxxxxxx"
+tr7> (let ((s (string-copy "0123456789"))) (string-fill! s #\x 3) s)
+"012xxxxxxx"
+tr7> (let ((s (string-copy "0123456789"))) (string-fill! s #\x 3 7) s)
+"012xxxx789"
+tr7> (let ((s (string-copy "0123456789"))) (string-fill! s #\x 10 10) s)
+"0123456789"
+tr7> (vector 'a 'b 'c)
+#(a b c)
+tr7> (vector-ref '#(1 1 2 3 5 8 13 21) 5)
+8
+tr7> (vector-ref '#(1 1 2 3 5 8 13 21) (exact (round (* 2 (acos -1)))))
+13
+tr7> (let ((vec (vector 0 '(2 2 2 2) "Anna"))) (vector-set! vec 1 '("Sue" "Sue")) vec)
+#(0 ("Sue" "Sue") "Anna")
+tr7> (vector->list '#(dah dah didah))
+(dah dah didah)
+tr7> (vector->list '#(dah dah didah) 1 2)
+(dah)
+tr7> (list->vector '(dididit dah))
+#(dididit dah)
+tr7> (string->vector "0123456789")
+#(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9)
+tr7> (string->vector "0123456789" 2)
+#(#\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9)
+tr7> (string->vector "0123456789" 2 4)
+#(#\2 #\3)
+tr7> (vector->string #(#\0 #\1 #\2 #\3 #\4 #\5))
+"012345"
+tr7> (vector->string #(#\0 #\1 #\2 #\3 #\4 #\5) 2)
+"2345"
+tr7> (vector->string #(#\0 #\1 #\2 #\3 #\4 #\5) 2 4)
+"23"
+tr7> (vector-copy (string->vector "0123456789"))
+#(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9)
+tr7> (vector-copy (string->vector "0123456789") 3)
+#(#\3 #\4 #\5 #\6 #\7 #\8 #\9)
+tr7> (vector-copy (string->vector "0123456789") 3 8)
+#(#\3 #\4 #\5 #\6 #\7)
+tr7> (vector-copy (string->vector "0123456789") 10 10)
+#()
+tr7> (let ((s (string->vector "0123456789"))) (vector-copy! s 3 #(#\a #\b #\c)) s)
+#(#\0 #\1 #\2 #\a #\b #\c #\6 #\7 #\8 #\9)
+tr7> (let ((s (string->vector "0123456789"))) (vector-copy! s 3 #(#\a #\b #\c) 2) s)
+#(#\0 #\1 #\2 #\c #\4 #\5 #\6 #\7 #\8 #\9)
+tr7> (let ((s (string->vector "0123456789"))) (vector-copy! s 3 #(#\a #\b #\c) 1 3) s)
+#(#\0 #\1 #\2 #\b #\c #\5 #\6 #\7 #\8 #\9)
+tr7> (let ((s (string->vector "0123456789"))) (vector-copy! s 3 #(#\a #\b #\c) 3 3) s)
+#(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9)
+tr7> (let ((s (string->vector "0123456789"))) (vector-copy! s 10 #(#\a #\b #\c) 3 3) s)
+#(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9)
+tr7> (vector-append #(0 1 2) #(3 4 5) #(6 7 8 9 10))
+#(0 1 2 3 4 5 6 7 8 9 10)
+tr7> (let ((a (vector 1 2 3 4 5))) (vector-fill! a 'smash) a)
+#(smash smash smash smash smash)
+tr7> (let ((a (vector 1 2 3 4 5))) (vector-fill! a 'smash 2) a)
+#(1 2 smash smash smash)
+tr7> (let ((a (vector 1 2 3 4 5))) (vector-fill! a 'smash 2 4) a)
+#(1 2 smash smash 5)
+tr7> (let ((a (vector 1 2 3 4 5))) (vector-fill! a 'smash 5 5) a)
+#(1 2 3 4 5)
+tr7> #u8(0 10 5)
+#u8(0 10 5)
+tr7> (make-bytevector 2 12)
+#u8(12 12)
+tr7> (make-bytevector 3)
+#u8(0 0 0)
+tr7> (bytevector? #(0 10 5))
+#f
+tr7> (bytevector? #u8(0 10 5))
+#t
+tr7> (bytevector-length (make-bytevector 8 7))
+8
+tr7> (bytevector-u8-ref #u8(1 1 2 3 5 8 13 21) 5)
+8
+tr7> (let ((bv (bytevector 1 2 3 4))) (bytevector-u8-set! bv 1 3) bv)
+#u8(1 3 3 4)
+tr7> (let ((a #u8(1 2 3 4 5))) (bytevector-copy a 2 4))
+#u8(3 4)
+tr7> (let ((a (bytevector 1 2 3 4 5)) (b (bytevector 10 20 30 40 50))) (bytevector-copy! b 1 a 0 2) b)
+#u8(10 1 2 40 50)
+tr7> (bytevector-append #u8(0 1 2) #u8(3 4 5) #u8(6 7 8 9 10))
+#u8(0 1 2 3 4 5 6 7 8 9 10)
+tr7> (map cadr '((a b) (d e) (g h)))
+(b e h)
+tr7> (map (lambda (n) (expt n n)) '(1 2 3 4 5))
+(1 4 27 256 3125)
+tr7> (map + '(1 2 3) '(4 5 6 7))
+(5 7 9)
+tr7> (let ((count 0)) (map (lambda (ignored) (set! count (+ count 1)) count) '(a b)))
+(1 2)
+tr7> (string-map char-foldcase "AbdEgH")
+"abdegh"
+tr7> (string-map (lambda (c) (integer->char (+ 1 (char->integer c)))) "HAL")
+"IBM"
+tr7> (string-map (lambda (c k) ((if (eqv? k #\u) char-upcase char-downcase) c)) "studlycaps xxx" "ululululul")
+"StUdLyCaPs"
+tr7> (string-map (let ((kte (- (char->integer #\A) (char->integer #\0)))) (lambda (c) (integer->char (+ kte (char->integer c))))) "0123456789")
+"ABCDEFGHIJ"
+tr7> (string-map (let ((kte (- (char->integer #\α) (char->integer #\0)))) (lambda (c) (integer->char (+ kte (char->integer c))))) "0123456789")
+"αβγδεζηθικ"
+tr7> (vector-map cadr '#((a b) (d e) (g h)))
+#(b e h)
+tr7> (vector-map (lambda (n) (expt n n)) '#(1 2 3 4 5))
+#(1 4 27 256 3125)
+tr7> (vector-map + '#(1 2 3) '#(4 5 6 7))
+#(5 7 9)
+tr7> (let ((count 0)) (vector-map (lambda (ignored) (set! count (+ count 1)) count) '#(a b)))
+#(2 1)
+tr7> (let ((v (make-vector 5))) (for-each (lambda (i) (vector-set! v i (* i i))) '(0 1 2 3 4)) v)
+#(0 1 4 9 16)
+tr7> (let ((v '())) (string-for-each (lambda (c) (set! v (cons (char->integer c) v))) "abcde") v)
+(101 100 99 98 97)
+tr7> (let ((v '())) (string-for-each (lambda (c) (set! v (cons (char->integer c) v))) "αβγδ") v)
+(948 947 946 945)
+tr7> (string-for-each display "αβγδ\n")
+αβγδ
+tr7> (let ((v (make-list 5))) (vector-for-each (lambda (i) (list-set! v i (* i i))) '#(0 1 2 3 4)) v)
+(0 1 4 9 16)
+tr7> (call/cc (lambda (exit) (for-each (lambda (x) (if (negative? x) (exit x))) '(54 0 37 -3 245 19)) #t))
+-3
+tr7> (call-with-values (lambda () (values 4 5)) (lambda (a b) a))
+4
+tr7> (call-with-values (lambda () (values 4 5)) (lambda (a b) b))
+5
+tr7> (call-with-values * -)
+-1
+tr7> (let ((path '()) (c #f)) (let ((add (lambda (s) (set! path (cons s path))))) (dynamic-wind (lambda () (add 'connect)) (lambda () (add (call-with-current-continuation (lambda (c0) (set! c c0) 'talk1)))) (lambda () (add 'disconnect))) (if (< (length path) 4) (c 'talk2) (reverse path))))
+(connect talk1 disconnect connect talk2 disconnect)
+tr7> (call-with-current-continuation (lambda (k) (with-exception-handler (lambda (x) (display "condition: ") (write x) (newline) (k 'exception)) (lambda () (+ 1 (raise 'an-error))))))
+condition: an-error
+exception
+tr7> (with-exception-handler (lambda (x) (display "something went wrong\n")) (lambda () (+ 1 (raise 'an-error))))
+Exception: an-error
+something went wrong
+tr7> (with-exception-handler (lambda (con) (cond ((string? con) (display con)) (else (display "a warning has been issued\n"))) 42) (lambda () (+ (raise-continuable "should be a number\n") 23)))
+should be a number
+65
+tr7> (define (cat-port port) (let loop ((v (read port))) (unless (eof-object? v) (write v) (newline) (loop (read port)))))
+tr7> (let ((f (open-input-file "test-ref.scm.aux"))) (cat-port f) (close-port f))
+(display "COUCOU\n")
+(display "KUKU\n")
+tr7> (call-with-input-file "test-ref.scm.aux" cat-port)
+(display "COUCOU\n")
+(display "KUKU\n")
+tr7> (call-with-port (open-input-file "test-ref.scm.aux") cat-port)
+(display "COUCOU\n")
+(display "KUKU\n")
+tr7> (define (cat) (cat-port (current-input-port)))
+tr7> (with-input-from-file "test-ref.scm.aux" cat)
+(display "COUCOU\n")
+(display "KUKU\n")
+tr7> (let ((rec '#1=("a" b c . #1#)) (sha '(("a" b) (5 3) (5 3) ("a" b) (("a" b) (5 3)))) (p (lambda (fun obj) (fun obj) (newline)))) (p write rec) (p write sha) (p write-shared rec) (p write-shared sha) (p write-simple sha) (p display rec) (p display sha))
+#1=("a" b c . #1#)
+(("a" b) (5 3) (5 3) ("a" b) (("a" b) (5 3)))
+#1=("a" b c . #1#)
+(#1=("a" b) #2=(5 3) #2# #1# (#1# #2#))
+(("a" b) (5 3) (5 3) ("a" b) (("a" b) (5 3)))
+#1=(a b c . #1#)
+((a b) (5 3) (5 3) (a b) ((a b) (5 3)))
+tr7> (parameterize ((current-output-port (open-output-string))) (display "piece") (display " by piece ") (display "by piece.") (newline) (get-output-string (current-output-port)))
+"piece by piece by piece.\n"
+tr7> (let* ((twp (lambda (port) (guard (err ((read-error? err) "read-error") ((file-error? err) "file-error") (#t "other-error")) (read port)))) (td (lambda (port) (display (twp port)) (newline)))) (td (open-input-string "")) (td (open-input-string "5")) (td (open-input-string ")5")) (td (open-input-bytevector #u8(0 0))))
+#<EOF>
+5
+read-error
+other-error
+tr7> (file-exists? "invalidfile")
+#f
+tr7> (with-output-to-file "invalidfile" (lambda () (write "hello world") (display #\newline)))
+tr7> (file-exists? "invalidfile")
+#t
+tr7> (with-input-from-file "invalidfile" cat)
+"hello world"
+tr7> (delete-file "invalidfile")
+tr7> (file-exists? "invalidfile")
+#f
+tr7> (define-record-type <root> root root? (value root-get root-set!))
+tr7> (define-record-type (<kind1> <root>) kind1 kind1? (value1 kind1-get1 kind1-set1!) (value2 kind1-get2))
+tr7> (define-record-type (<kind2> <root>) kind2 kind2? (value1 kind2-get1 kind2-set1!) (value2 kind2-get2))
+tr7> (define-record-type (<kind22> <kind2>) kind22 kind22? (value22 kind22-get))
+tr7> (define r (root 1))
+tr7> (define k1 (kind1 11 12 13))
+tr7> (define k2 (kind2 21 22 23))
+tr7> (define k22 (kind22 221 222 223 224))
+tr7> (root? r)
+#t
+tr7> (root? k1)
+#t
+tr7> (root? k2)
+#t
+tr7> (root? k22)
+#t
+tr7> (kind1? r)
+#f
+tr7> (kind1? k1)
+#t
+tr7> (kind1? k2)
+#f
+tr7> (kind1? k22)
+#f
+tr7> (kind2? r)
+#f
+tr7> (kind2? k1)
+#f
+tr7> (kind2? k2)
+#t
+tr7> (kind2? k22)
+#t
+tr7> (kind22? r)
+#f
+tr7> (kind22? k1)
+#f
+tr7> (kind22? k2)
+#f
+tr7> (kind22? k22)
+#t
+tr7> (root-get r)
+1
+tr7> (root-get k1)
+11
+tr7> (root-get k2)
+21
+tr7> (root-get k22)
+221
+tr7> (root-set! r 1001)
+tr7> (root-set! k1 1011)
+tr7> (root-set! k2 1021)
+tr7> (root-set! k22 1221)
+tr7> (root-get r)
+1001
+tr7> (root-get k1)
+1011
+tr7> (root-get k2)
+1021
+tr7> (root-get k22)
+1221
+tr7> (kind1-get1 k1)
+12
+tr7> (kind2-get1 k2)
+22
+tr7> (kind2-get1 k22)
+222
+tr7> (kind1-set1! k1 1012)
+tr7> (kind2-set1! k2 1022)
+tr7> (kind2-set1! k22 1222)
+tr7> (kind1-get1 k1)
+1012
+tr7> (kind2-get1 k2)
+1022
+tr7> (kind2-get1 k22)
+1222
+tr7> (kind1-get2 k1)
+13
+tr7> (kind2-get2 k2)
+23
+tr7> (kind2-get2 k22)
+223
+tr7> (kind22-get k22)
+224
+tr7> ((λ x (for-each display x)) "hello" #\space "world!" #\newline)
+hello world!
+tr7> 1000000
+1000000
+tr7> 1000000
+1000000
+tr7> 1000000
+1000000
+tr7> 1000000
+1000000
+tr7> 1000000
+1000000
+tr7> (define plus (lambda (x y) (+ x y)))
+tr7> (plus 4 5)
+9
+tr7> (map char->integer (map integer->char (list 0 55295 55296 57343 57344 1114111 1114112 4294967295)))
+(0 55295 55296 57343 57344 1114111 1114112 576460752303423487)
+tr7> (map char-unicode? (map integer->char (list 0 55295 55296 57343 57344 1114111 1114112 4294967295)))
+(#t #t #f #f #t #t #f #f)
+tr7> (list->string (map integer->char (list 0 13 65 224 4294967295)))
+"\x00;\rAà�"
+tr7> (write-char (integer->char 281474976710655))
+�tr7> (string->utf8 (string (integer->char 281474976710655)))
+#u8(239 191 189)
+tr7> (hash-by-identity 1)
+1
+tr7> (hash-by-identity '())
+0
+tr7> (hash-by-identity #f)
+8
+tr7> (hash-by-identity #t)
+16
+tr7> (hash-by-identity #\A)
+522
+tr7> (define-record-type foo (make-foo) foo? (bar bar-get bar-set!))
+tr7> (define second-bar-get bar-get)
+tr7> (make-foo)
+#<RECORD foo #<VOID>>
+tr7> (make-foo 1)
+Error: wrong argument count
+tr7> (define-record-type foo (make-foo bar) foo? (bar bar-get bar-set!) (baz baz-get baz-set!))
+tr7> (define second-bar-get bar-get)
+tr7> (make-foo)
+Error: wrong argument count
+tr7> (make-foo 1)
+#<RECORD foo 1 #<VOID>>
+tr7> (make-foo 1 2)
+Error: wrong argument count
+tr7> (define-syntax foo (syntax-rules () ((_ x (l ...) y ...) (display '(x (l ...) : y ...)))))
+tr7> (foo X () A B C)
+(X () : A B C)tr7> (newline)
+
+tr7> (foo X (u))
+(X (u) :)tr7> (newline)
+
+tr7> (define-syntax foo (syntax-rules () ((_ x (l ...) y ...) (display '(_ (l x) ... : y ...)))))
+tr7> (foo X (u))
+(_ (u X) :)tr7> (foo X () A B C)
+(_ : A B C)tr7> (foo X (a b c) A B C)
+(_ (a X) (b X) (c X) : A B C)tr7> (newline)
+
+tr7> (define-syntax foo2 (syntax-rules () ((_ (x y ...) ...) (begin (for-each display (list "x=" x ", y:" y ... "\n")) ...))))
+tr7> (foo2 (1 2 3 4) (5 6 7 8))
+x=1, y:234
+x=5, y:678
+tr7> (display "END\n")
+END
+tr7> (tr7-gc-verbose #t)
+#f
+tr7> (tr7-gc)
+gc...done: 44400 items were recovered (355200), 149987816 free now (1199902528/1200000000).
+tr7> 

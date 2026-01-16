@@ -1,0 +1,5 @@
+#!tr7i -1
+;; here my scheme program, example: 
+(import (scheme process-context) (scheme write))
+(write (command-line))
+(newline)

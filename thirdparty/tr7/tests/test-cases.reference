@@ -1,0 +1,94 @@
+gc...done: 115 items were recovered (920), 149996004 free now (1199968032/1200000000).
+(tr7-show-result #t)
+#f
+(tr7-show-prompt #t)
+#f
+tr7> (tr7-gc)
+gc...done: 76 items were recovered (608), 149995971 free now (1199967768/1200000000).
+tr7> #\alarm
+#\alarm
+tr7> #\backspace
+#\backspace
+tr7> #\delete
+#\delete
+tr7> #\escape
+#\escape
+tr7> #\newline
+#\newline
+tr7> #\null
+#\null
+tr7> #\return
+#\return
+tr7> #\space
+#\space
+tr7> #\tab
+#\tab
+tr7> #\alarm
+#\alarm
+tr7> #\backspace
+#\backspace
+tr7> #\delete
+#\delete
+tr7> #\escape
+#\escape
+tr7> #\newline
+#\newline
+tr7> #\null
+#\null
+tr7> #\return
+#\return
+tr7> #\space
+#\space
+tr7> #\tab
+#\tab
+tr7> #\a
+#\a
+tr7> #\space
+#\space
+tr7> #\(
+#\(
+tr7> #\)
+#\)
+tr7> #\"
+#\"
+tr7> #\'
+#\'
+tr7> (tr7-gc)
+gc...done: 281 items were recovered (2248), 149995771 free now (1199966168/1200000000).
+tr7> (+ 1 2 3 4 5)
+15
+tr7> (* 1 2 3 4 5)
+120
+tr7> (* 3.14 5)
+15.7
+tr7> (tr7-gc)
+gc...done: 102 items were recovered (816), 149995737 free now (1199965896/1200000000).
+tr7> (memq 'a '(a b c))
+(a b c)
+tr7> (memq 'b '(a b c))
+(b c)
+tr7> (memq 'a '(b c d))
+#f
+tr7> (memq (list 'a) '(b (a) c))
+#f
+tr7> (member (list 'a) '(b (a) c))
+((a) c)
+tr7> (member "B" '("a" "b" "c") string-ci=?)
+("b" "c")
+tr7> (memq 101 '(100 101 102))
+(101 102)
+tr7> (memv 101 '(100 101 102))
+(101 102)
+tr7> (tr7-gc)
+gc...done: 428 items were recovered (3424), 149995649 free now (1199965192/1200000000).
+tr7> (if #t 1)
+1
+tr7> (if #f 1)
+#f
+tr7> (if #f 1 2)
+2
+tr7> (if #t 1 2)
+1
+tr7> (tr7-gc)
+gc...done: 132 items were recovered (1056), 149995606 free now (1199964848/1200000000).
+tr7> 

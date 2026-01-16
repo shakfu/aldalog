@@ -1,0 +1,19 @@
+(tr7-show-result #t)
+#f
+(tr7-show-prompt #t)
+#f
+tr7> (define-library (test-import) (import (scheme base) (prefix (srfi :1) s-)) (include-library-declarations "test-import.scm.aux") (begin (define (hurray x) (list 'hurray x '!))))
+tr7> (import (test-import))
+tr7> (s-xcons '(b c) 'a)
+(a b c)
+tr7> (s-cons* 1 2 3 4)
+(1 2 3 . 4)
+tr7> (s-circular-list 'z 'q)
+#1=(z q . #1#)
+tr7> (s-iota 5)
+(0 1 2 3 4)
+tr7> (s-hurray 'scheme)
+(hurray scheme !)
+tr7> (s-stomp 'big 'big 'little 'thing)
+(hurray (big big little thing) !)
+tr7> 

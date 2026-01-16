@@ -1,0 +1,163 @@
+(tr7-show-result #t)
+#f
+(tr7-show-prompt #t)
+#f
+tr7> (closure? car)
+#f
+tr7> (define %car (lambda args (apply car args)))
+tr7> (closure? %car)
+#t
+tr7> (%car '(1 . 2))
+1
+tr7> (closure-get-tag %car)
+()
+tr7> (%car '(1 . 2))
+1
+tr7> (closure-set-tag! %car 0)
+tr7> (%car '(1 . 2))
+1
+tr7> (closure-get-tag %car)
+0
+tr7> (%car '(1 . 2))
+1
+tr7> (define %car2 (closure-copy %car))
+tr7> (closure? %car2)
+#t
+tr7> (%car2 '(1 . 2))
+1
+tr7> (closure-get-tag %car2)
+0
+tr7> (%car2 '(1 . 2))
+1
+tr7> (closure-set-tag! %car2 100)
+tr7> (%car2 '(1 . 2))
+1
+tr7> (closure-get-tag %car2)
+100
+tr7> (closure-get-tag %car)
+0
+tr7> (closure-set-tag! %car 200)
+tr7> (closure-get-tag %car)
+200
+tr7> (closure-get-tag %car2)
+100
+tr7> (define %test (case-lambda (() 1) ((x) 2)))
+tr7> (closure? %test)
+#t
+tr7> (closure-get-tag %test)
+()
+tr7> (closure-set-tag! %test 100)
+tr7> (closure-get-tag %test)
+100
+tr7> (%test)
+1
+tr7> (%test 1000)
+2
+tr7> (define-procedure-tag make-a-tagged a-tagged? a-tag)
+tr7> (define-syntax should-throw (syntax-rules () ((_ body ...) (call/cc (lambda (return) (with-exception-handler (lambda (ex) (return 'ok)) (lambda () body ...)))))))
+tr7> (should-throw (make-a-tagged 0 #t))
+ok
+tr7> (should-throw (make-a-tagged 0 '()))
+ok
+tr7> (should-throw (make-a-tagged 0 0))
+ok
+tr7> (should-throw (make-a-tagged 0 'call/cc))
+ok
+tr7> (should-throw (make-a-tagged 0 "string"))
+ok
+tr7> (should-throw (make-a-tagged 0 '(pair)))
+ok
+tr7> (define (greet whom) (list 'hello whom))
+tr7> (should-throw (make-a-tagged greet))
+ok
+tr7> (define greet-a (make-a-tagged 12 greet))
+tr7> (a-tagged? greet-a)
+#t
+tr7> (a-tagged? greet)
+#f
+tr7> (a-tagged? 'a)
+#f
+tr7> (a-tag greet-a)
+12
+tr7> (should-throw (a-tag greet))
+ok
+tr7> (should-throw (a-tag 'a))
+ok
+tr7> (greet 'world)
+(hello world)
+tr7> (greet-a 'world)
+(hello world)
+tr7> (define greet-a* (make-a-tagged 12 greet))
+tr7> (eqv? greet-a greet-a*)
+#f
+tr7> (eq? greet-a greet-a*)
+#f
+tr7> (greet-a* 'world)
+(hello world)
+tr7> (define tagged-car (make-a-tagged 100 car))
+tr7> (a-tagged? tagged-car)
+#t
+tr7> (a-tagged? car)
+#f
+tr7> (a-tag tagged-car)
+100
+tr7> (car '(1 . 2))
+1
+tr7> (define-procedure-tag make-b-tagged b-tagged? b-tag)
+tr7> (define greet-b (make-b-tagged 34 greet))
+tr7> (a-tagged? greet-b)
+#f
+tr7> (b-tagged? greet-b)
+#t
+tr7> (b-tag greet-b)
+34
+tr7> (define greet-ab (make-b-tagged 56 greet-a))
+tr7> (a-tagged? greet-ab)
+#t
+tr7> (b-tagged? greet-ab)
+#t
+tr7> (a-tag greet-ab)
+12
+tr7> (b-tag greet-ab)
+56
+tr7> (define greet-ab* (make-a-tagged 1234 greet-ab))
+tr7> (a-tagged? greet-ab*)
+#t
+tr7> (b-tagged? greet-ab*)
+#t
+tr7> (a-tag greet-ab*)
+1234
+tr7> (b-tag greet-ab*)
+56
+tr7> (a-tag greet-ab)
+12
+tr7> (define (make-procedure-tag) (define-procedure-tag make is-a? ref) (values make is-a? ref))
+tr7> (define-values (make-c-tagged c-tagged? c-tag) (make-procedure-tag))
+tr7> (define-values (make-d-tagged d-tagged? d-tag) (make-procedure-tag))
+tr7> (define greet-c (make-c-tagged 'alpha greet))
+tr7> (define greet-d (make-d-tagged 'beta greet))
+tr7> (c-tagged? greet-c)
+#t
+tr7> (d-tagged? greet-c)
+#f
+tr7> (c-tagged? greet-d)
+#f
+tr7> (d-tagged? greet-d)
+#t
+tr7> (c-tag greet-c)
+alpha
+tr7> (d-tag greet-d)
+beta
+tr7> (define test (make-a-tagged 100 (case-lambda (() 1) ((x) 2))))
+tr7> (a-tagged? test)
+#t
+tr7> (a-tag test)
+100
+tr7> (define test2 (make-a-tagged 1000 test))
+tr7> (a-tagged? test2)
+#t
+tr7> (a-tag test2)
+1000
+tr7> (a-tag test)
+100
+tr7> 
