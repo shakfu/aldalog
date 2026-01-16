@@ -221,6 +221,7 @@ add_library(libloki ${LOKI_LIBRARY_TYPE}
     src/loki/joy.c
     src/loki/link.c
     src/loki/csound.c
+    src/loki/export.c
     src/loki/midi_export.cpp
 )
 

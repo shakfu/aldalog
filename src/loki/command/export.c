@@ -2,17 +2,13 @@
  *
  * Export compositions to Standard MIDI Files.
  *
- * NOTE: Currently Alda-specific because it exports Alda's internal event
- * model to MIDI. Joy uses a different execution model (immediate playback).
- *
- * TODO: Move MIDI export to shared layer with a common event format,
- * enabling export for all languages. See TODO.md "Move MIDI export to
- * shared layer".
+ * Uses the editor-level loki_export_* functions which detect which
+ * language has exportable events. Currently Alda supports export
+ * (event-based model), while Joy uses immediate playback.
  */
 
 #include "command_impl.h"
-#include "loki/alda.h"
-#include "loki/midi_export.h"
+#include "loki/export.h"
 
 /* :export - Export to MIDI file */
 int cmd_export(editor_ctx_t *ctx, const char *args) {
@@ -21,18 +17,18 @@ int cmd_export(editor_ctx_t *ctx, const char *args) {
         return 0;
     }
 
-    /* Check if Alda is initialized */
-    if (!loki_alda_is_initialized(ctx)) {
-        editor_set_status_msg(ctx, "No Alda context (play Alda code first)");
+    /* Check if any language has exportable events */
+    if (!loki_export_available(ctx)) {
+        editor_set_status_msg(ctx, "No events to export (play music code first)");
         return 0;
     }
 
     /* Export to MIDI file */
-    if (loki_midi_export(ctx, args) == 0) {
+    if (loki_export_midi(ctx, args) == 0) {
         editor_set_status_msg(ctx, "%s exported", args);
         return 1;
     } else {
-        const char *err = loki_midi_export_error();
+        const char *err = loki_export_error();
         editor_set_status_msg(ctx, "Export failed: %s", err ? err : "unknown error");
         return 0;
     }
