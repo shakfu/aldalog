@@ -126,6 +126,33 @@ char *Joy_HL_keywords[] = {
 
 char *Joy_HL_extensions[] = {".joy",NULL};
 
+/* Scheme R7RS keywords */
+char *Scheme_HL_keywords[] = {
+	/* Special forms */
+	"define","define-syntax","define-library","define-record-type",
+	"lambda","let","let*","letrec","letrec*","let-values","let*-values",
+	"if","cond","case","else","when","unless",
+	"and","or","not","begin","do","set!",
+	"quote","quasiquote","unquote","unquote-splicing",
+	"import","export","include","syntax-rules",
+	/* Common functions */
+	"apply","map","for-each","filter","fold","append","reverse",
+	"list","cons","car","cdr","cadr","caddr","length",
+	"display","newline","write","read","load","eval",
+	/* TR7 music primitives */
+	"play-note","note-on","note-off","play-chord",
+	"set-tempo","set-octave","set-velocity","set-channel",
+	"tempo","octave","velocity","channel",
+	"midi-list","midi-open","midi-virtual","midi-panic",
+	"tsf-load","sleep-ms","program-change","control-change",
+	/* Type predicates (highlighted as types) */
+	"null?|","pair?|","list?|","symbol?|","number?|","string?|",
+	"boolean?|","procedure?|","vector?|","zero?|","positive?|","negative?|",
+	NULL
+};
+
+char *Scheme_HL_extensions[] = {".scm",".ss",".scheme",".sld",NULL};
+
 /* Extensions */
 char *C_HL_extensions[] = {".c",".h",".cpp",".hpp",".cc",NULL};
 char *Python_HL_extensions[] = {".py",".pyw",NULL};
@@ -208,6 +235,15 @@ struct t_editor_syntax HLDB[] = {
         Joy_HL_keywords,
         "#","","",
         " \t,.()[]{}+-/*=~%<>:;|",
+        HL_HIGHLIGHT_STRINGS | HL_HIGHLIGHT_NUMBERS,
+        HL_TYPE_C
+    },
+    /* Scheme R7RS (.scm, .ss, .sld) */
+    {
+        Scheme_HL_extensions,
+        Scheme_HL_keywords,
+        ";","","",
+        "()[]{}\"'`,@#",
         HL_HIGHLIGHT_STRINGS | HL_HIGHLIGHT_NUMBERS,
         HL_TYPE_C
     },

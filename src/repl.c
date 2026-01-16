@@ -1872,19 +1872,10 @@ static void tr7_repl_loop_pipe(void) {
         if (result == 1) break;      /* quit */
         if (result == 0) continue;   /* command handled */
 
-        /* Evaluate as Scheme */
-        int status = tr7_run_string(g_tr7_repl_engine, line);
-        tr7_t val = tr7_get_last_value(g_tr7_repl_engine);
-        if (status != 0 || tr7_is_error(val)) {
-            if (tr7_is_error(val)) {
-                tr7_t msg = tr7_error_message(val);
-                if (TR7_IS_STRING(msg)) {
-                    printf("Error: %s\n", tr7_string_buffer(msg));
-                } else {
-                    printf("Error\n");
-                }
-            }
-        }
+        /* Evaluate as Scheme - use tr7_play_string which handles result printing */
+        tr7_play_string(g_tr7_repl_engine, line,
+            Tr7_Play_Show_Result | Tr7_Play_Show_Errors | Tr7_Play_Keep_Playing);
+        fflush(stdout);
     }
 }
 
@@ -1924,24 +1915,10 @@ static void tr7_repl_loop(editor_ctx_t *syntax_ctx) {
         if (result == 1) break;      /* quit */
         if (result == 0) continue;   /* command handled */
 
-        /* Evaluate Scheme code */
-        int status = tr7_run_string(g_tr7_repl_engine, input);
-        tr7_t val = tr7_get_last_value(g_tr7_repl_engine);
-
-        if (status != 0 || tr7_is_error(val)) {
-            if (tr7_is_error(val)) {
-                tr7_t msg = tr7_error_message(val);
-                if (TR7_IS_STRING(msg)) {
-                    printf("Error: %s\n", tr7_string_buffer(msg));
-                } else {
-                    printf("Error\n");
-                }
-            }
-        } else if (!TR7_IS_VOID(val)) {
-            /* Print non-void results */
-            tr7_write(g_tr7_repl_engine, val);
-            printf("\n");
-        }
+        /* Evaluate Scheme code - use tr7_play_string which handles result printing */
+        tr7_play_string(g_tr7_repl_engine, input,
+            Tr7_Play_Show_Result | Tr7_Play_Show_Errors | Tr7_Play_Keep_Playing);
+        fflush(stdout);
     }
 
     /* Disable raw mode before exit */
