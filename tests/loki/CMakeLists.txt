@@ -151,3 +151,14 @@ target_include_directories(test_row_operations PRIVATE
 )
 target_link_libraries(test_row_operations PRIVATE libloki test_framework)
 add_test(NAME test_row_operations COMMAND test_row_operations)
+
+# Unit tests for EditorModel serialization
+add_executable(test_serialize test_serialize.c)
+target_include_directories(test_serialize PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/tests
+    ${LUA_INCLUDE_DIR}
+)
+target_link_libraries(test_serialize PRIVATE libloki test_framework)
+add_test(NAME test_serialize COMMAND test_serialize)
