@@ -10,16 +10,16 @@ int cmd_write(editor_ctx_t *ctx, const char *args) {
     /* Use provided filename or current filename */
     if (args && args[0]) {
         /* Save to new filename */
-        if (ctx->filename) {
-            free(ctx->filename);
+        if (ctx->model.filename) {
+            free(ctx->model.filename);
         }
-        ctx->filename = strdup(args);
+        ctx->model.filename = strdup(args);
 
         /* Update buffer display name */
         buffer_update_display_name(buffer_get_current_id());
     }
 
-    if (!ctx->filename) {
+    if (!ctx->model.filename) {
         editor_set_status_msg(ctx, "No filename");
         return 0;
     }
@@ -28,8 +28,8 @@ int cmd_write(editor_ctx_t *ctx, const char *args) {
     int len = editor_save(ctx);
     if (len >= 0) {
         editor_set_status_msg(ctx, "\"%s\" %dL written",
-                             ctx->filename, ctx->numrows);
-        ctx->dirty = 0;
+                             ctx->model.filename, ctx->model.numrows);
+        ctx->model.dirty = 0;
         return 1;
     } else {
         editor_set_status_msg(ctx, "Error writing file");
@@ -44,7 +44,7 @@ int cmd_edit(editor_ctx_t *ctx, const char *args) {
         return 0;
     }
 
-    if (ctx->dirty) {
+    if (ctx->model.dirty) {
         editor_set_status_msg(ctx, "Unsaved changes! Save first or use :q!");
         return 0;
     }

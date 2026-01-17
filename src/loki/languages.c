@@ -238,7 +238,7 @@ void editor_update_syntax_markdown(editor_ctx_t *ctx, t_erow *row) {
 
     char *p = row->render;
     int i = 0;
-    int prev_cb_lang = (row->idx > 0 && ctx && ctx->row) ? ctx->row[row->idx - 1].cb_lang : CB_LANG_NONE;
+    int prev_cb_lang = (row->idx > 0 && ctx && ctx->model.row) ? ctx->model.row[row->idx - 1].cb_lang : CB_LANG_NONE;
 
     /* Code blocks: lines starting with ``` */
     if (row->rsize >= 3 && p[0] == '`' && p[1] == '`' && p[2] == '`') {
@@ -602,8 +602,8 @@ void editor_update_syntax_csound(editor_ctx_t *ctx, t_erow *row) {
     char *p = row->render;
 
     /* Get section state from previous row */
-    int prev_section = (row->idx > 0 && ctx && ctx->row)
-        ? ctx->row[row->idx - 1].csd_section
+    int prev_section = (row->idx > 0 && ctx && ctx->model.row)
+        ? ctx->model.row[row->idx - 1].csd_section
         : CSD_SECTION_NONE;
 
     /* Check if this line changes the section */

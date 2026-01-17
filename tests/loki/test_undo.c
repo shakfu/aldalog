@@ -20,17 +20,17 @@
 static void init_ctx_with_undo(editor_ctx_t *ctx, const char *text) {
     editor_ctx_init(ctx);
 
-    ctx->numrows = 1;
-    ctx->row = calloc(1, sizeof(t_erow));
-    ctx->row[0].chars = strdup(text);
-    ctx->row[0].size = strlen(text);
-    ctx->row[0].render = strdup(text);
-    ctx->row[0].rsize = strlen(text);
-    ctx->row[0].hl = NULL;
-    ctx->row[0].idx = 0;
+    ctx->model.numrows = 1;
+    ctx->model.row = calloc(1, sizeof(t_erow));
+    ctx->model.row[0].chars = strdup(text);
+    ctx->model.row[0].size = strlen(text);
+    ctx->model.row[0].render = strdup(text);
+    ctx->model.row[0].rsize = strlen(text);
+    ctx->model.row[0].hl = NULL;
+    ctx->model.row[0].idx = 0;
 
-    ctx->screenrows = 24;
-    ctx->screencols = 80;
+    ctx->view.screenrows = 24;
+    ctx->view.screencols = 80;
 
     /* Initialize undo with reasonable limits */
     undo_init(ctx, 100, 1024 * 1024);  /* 100 entries, 1MB */
@@ -40,20 +40,20 @@ static void init_ctx_with_undo(editor_ctx_t *ctx, const char *text) {
 static void init_multiline_ctx_with_undo(editor_ctx_t *ctx, int num_lines, const char **lines) {
     editor_ctx_init(ctx);
 
-    ctx->numrows = num_lines;
-    ctx->row = calloc(num_lines, sizeof(t_erow));
+    ctx->model.numrows = num_lines;
+    ctx->model.row = calloc(num_lines, sizeof(t_erow));
 
     for (int i = 0; i < num_lines; i++) {
-        ctx->row[i].chars = strdup(lines[i]);
-        ctx->row[i].size = strlen(lines[i]);
-        ctx->row[i].render = strdup(lines[i]);
-        ctx->row[i].rsize = strlen(lines[i]);
-        ctx->row[i].hl = NULL;
-        ctx->row[i].idx = i;
+        ctx->model.row[i].chars = strdup(lines[i]);
+        ctx->model.row[i].size = strlen(lines[i]);
+        ctx->model.row[i].render = strdup(lines[i]);
+        ctx->model.row[i].rsize = strlen(lines[i]);
+        ctx->model.row[i].hl = NULL;
+        ctx->model.row[i].idx = i;
     }
 
-    ctx->screenrows = 24;
-    ctx->screencols = 80;
+    ctx->view.screenrows = 24;
+    ctx->view.screencols = 80;
 
     undo_init(ctx, 100, 1024 * 1024);
 }
@@ -73,14 +73,14 @@ TEST(undo_init_creates_state) {
     editor_ctx_init(&ctx);
 
     /* editor_ctx_init already calls undo_init, so state should exist */
-    ASSERT_NOT_NULL(ctx.undo_state);
+    ASSERT_NOT_NULL(ctx.model.undo_state);
 
     /* Clear and reinit to test explicit init */
     undo_free(&ctx);
-    ASSERT_NULL(ctx.undo_state);
+    ASSERT_NULL(ctx.model.undo_state);
 
     undo_init(&ctx, 100, 1024 * 1024);
-    ASSERT_NOT_NULL(ctx.undo_state);
+    ASSERT_NOT_NULL(ctx.model.undo_state);
 
     editor_ctx_free(&ctx);
 }
@@ -148,8 +148,8 @@ TEST(undo_performs_insert_char_undo) {
     init_ctx_with_undo(&ctx, "hello!");
 
     /* Record an insert at position 5 (the '!') */
-    ctx.cx = 5;
-    ctx.cy = 0;
+    ctx.view.cx = 5;
+    ctx.view.cy = 0;
     undo_record_insert_char(&ctx, 0, 5, '!');
 
     /* Perform undo - should delete the '!' */
@@ -157,8 +157,8 @@ TEST(undo_performs_insert_char_undo) {
     ASSERT_EQ(result, 1);
 
     /* Verify the character was removed */
-    ASSERT_EQ(ctx.row[0].size, 5);
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
+    ASSERT_EQ(ctx.model.row[0].size, 5);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
 
     cleanup_ctx(&ctx);
 }
@@ -168,8 +168,8 @@ TEST(undo_performs_delete_char_undo) {
     init_ctx_with_undo(&ctx, "hell");
 
     /* Record that 'o' was deleted from position 4 */
-    ctx.cx = 4;
-    ctx.cy = 0;
+    ctx.view.cx = 4;
+    ctx.view.cy = 0;
     undo_record_delete_char(&ctx, 0, 4, 'o');
 
     /* Perform undo - should re-insert 'o' */
@@ -177,8 +177,8 @@ TEST(undo_performs_delete_char_undo) {
     ASSERT_EQ(result, 1);
 
     /* Verify the character was restored */
-    ASSERT_EQ(ctx.row[0].size, 5);
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
+    ASSERT_EQ(ctx.model.row[0].size, 5);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
 
     cleanup_ctx(&ctx);
 }
@@ -192,19 +192,19 @@ TEST(redo_after_undo_restores_change) {
     init_ctx_with_undo(&ctx, "hello!");
 
     /* Record an insert */
-    ctx.cx = 5;
-    ctx.cy = 0;
+    ctx.view.cx = 5;
+    ctx.view.cy = 0;
     undo_record_insert_char(&ctx, 0, 5, '!');
 
     /* Undo - removes the '!' */
     undo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
 
     /* Redo - re-inserts the '!' */
     ASSERT_TRUE(undo_can_redo(&ctx));
     int result = redo_perform(&ctx);
     ASSERT_EQ(result, 1);
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello!");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello!");
 
     cleanup_ctx(&ctx);
 }
@@ -272,7 +272,7 @@ TEST(undo_groups_consecutive_inserts) {
     undo_perform(&ctx);
 
     /* After undo, row should just be "h" */
-    ASSERT_STR_EQ(ctx.row[0].chars, "h");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "h");
 
     cleanup_ctx(&ctx);
 }
@@ -282,7 +282,7 @@ TEST(undo_break_group_forces_new_group) {
     init_ctx_with_undo(&ctx, "he");
 
     /* Position cursor at end of "he" */
-    ctx.cx = 2;
+    ctx.view.cx = 2;
 
     /* Actually insert 'l', 'l' into the buffer */
     editor_insert_char(&ctx, 'l');  /* "hel" */
@@ -294,15 +294,15 @@ TEST(undo_break_group_forces_new_group) {
     /* Insert 'o' in new group */
     editor_insert_char(&ctx, 'o');  /* "hello" */
 
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
 
     /* First undo should only remove 'o' */
     undo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "hell");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hell");
 
     /* Second undo should remove 'l', 'l' */
     undo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "he");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "he");
 
     cleanup_ctx(&ctx);
 }
@@ -312,23 +312,23 @@ TEST(undo_breaks_on_operation_type_change) {
     init_ctx_with_undo(&ctx, "hello");
 
     /* Move cursor to end and insert 'X' */
-    ctx.cx = 5;
+    ctx.view.cx = 5;
     editor_insert_char(&ctx, 'X');  /* "helloX" */
-    ASSERT_STR_EQ(ctx.row[0].chars, "helloX");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "helloX");
 
     /* Now delete (operation type change) - move cursor back and delete */
-    ctx.cx = 6;  /* After 'X' */
+    ctx.view.cx = 6;  /* After 'X' */
     editor_del_char(&ctx);  /* "hello" */
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
 
     /* Operation type change should break group */
     /* First undo should only undo the delete (restore 'X') */
     undo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "helloX");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "helloX");
 
     /* Second undo should undo the insert (remove 'X') */
     undo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
 
     cleanup_ctx(&ctx);
 }
@@ -346,11 +346,11 @@ TEST(undo_breaks_on_row_change) {
 
     /* First undo should only undo row 1 change */
     undo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[1].chars, "line2");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "line2");
 
     /* Second undo should undo row 0 change */
     undo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "line1");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "line1");
 
     cleanup_ctx(&ctx);
 }
@@ -416,16 +416,16 @@ TEST(undo_respects_capacity_limit) {
     editor_ctx_t ctx;
     editor_ctx_init(&ctx);
 
-    ctx.numrows = 1;
-    ctx.row = calloc(1, sizeof(t_erow));
-    ctx.row[0].chars = strdup("test");
-    ctx.row[0].size = 4;
-    ctx.row[0].render = strdup("test");
-    ctx.row[0].rsize = 4;
-    ctx.row[0].hl = NULL;
+    ctx.model.numrows = 1;
+    ctx.model.row = calloc(1, sizeof(t_erow));
+    ctx.model.row[0].chars = strdup("test");
+    ctx.model.row[0].size = 4;
+    ctx.model.row[0].render = strdup("test");
+    ctx.model.row[0].rsize = 4;
+    ctx.model.row[0].hl = NULL;
 
-    ctx.screenrows = 24;
-    ctx.screencols = 80;
+    ctx.view.screenrows = 24;
+    ctx.view.screencols = 80;
 
     /* Initialize with small capacity */
     undo_init(&ctx, 5, 1024 * 1024);  /* Only 5 entries */
@@ -455,12 +455,12 @@ TEST(undo_handles_null_undo_state) {
     editor_ctx_t ctx;
     /* Manually initialize context without undo */
     memset(&ctx, 0, sizeof(editor_ctx_t));
-    ctx.mode = MODE_NORMAL;
-    ctx.screenrows = 24;
-    ctx.screencols = 80;
+    ctx.view.mode = MODE_NORMAL;
+    ctx.view.screenrows = 24;
+    ctx.view.screencols = 80;
 
     /* undo_state should be NULL since we skipped normal init */
-    ASSERT_NULL(ctx.undo_state);
+    ASSERT_NULL(ctx.model.undo_state);
 
     /* These should not crash */
     ASSERT_FALSE(undo_can_undo(&ctx));
@@ -482,43 +482,43 @@ TEST(undo_multiple_undo_redo_cycles) {
     init_ctx_with_undo(&ctx, "abc");
 
     /* Insert 'd' */
-    ctx.row[0].chars = realloc(ctx.row[0].chars, 5);
-    ctx.row[0].chars[3] = 'd';
-    ctx.row[0].chars[4] = '\0';
-    ctx.row[0].size = 4;
+    ctx.model.row[0].chars = realloc(ctx.model.row[0].chars, 5);
+    ctx.model.row[0].chars[3] = 'd';
+    ctx.model.row[0].chars[4] = '\0';
+    ctx.model.row[0].size = 4;
     undo_record_insert_char(&ctx, 0, 3, 'd');
     undo_break_group(&ctx);
 
     /* Insert 'e' */
-    ctx.row[0].chars = realloc(ctx.row[0].chars, 6);
-    ctx.row[0].chars[4] = 'e';
-    ctx.row[0].chars[5] = '\0';
-    ctx.row[0].size = 5;
+    ctx.model.row[0].chars = realloc(ctx.model.row[0].chars, 6);
+    ctx.model.row[0].chars[4] = 'e';
+    ctx.model.row[0].chars[5] = '\0';
+    ctx.model.row[0].size = 5;
     undo_record_insert_char(&ctx, 0, 4, 'e');
     undo_break_group(&ctx);
 
-    ASSERT_STR_EQ(ctx.row[0].chars, "abcde");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "abcde");
 
     /* Undo 'e' */
     undo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "abcd");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "abcd");
 
     /* Undo 'd' */
     undo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "abc");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "abc");
 
     /* Redo 'd' */
     redo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "abcd");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "abcd");
 
     /* Redo 'e' */
     redo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "abcde");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "abcde");
 
     /* Undo both again */
     undo_perform(&ctx);
     undo_perform(&ctx);
-    ASSERT_STR_EQ(ctx.row[0].chars, "abc");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "abc");
 
     cleanup_ctx(&ctx);
 }

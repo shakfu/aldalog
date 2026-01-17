@@ -81,7 +81,7 @@ static struct LokiTr7State *g_tr7_state = NULL;
 
 /* Get TR7 state from editor context */
 static struct LokiTr7State* get_tr7_state(editor_ctx_t *ctx) {
-    return ctx ? ctx->tr7_state : NULL;
+    return ctx ? ctx->model.tr7_state : NULL;
 }
 
 /* ======================= Helper Functions ======================= */
@@ -614,16 +614,16 @@ static int tr7_lang_init(editor_ctx_t *ctx) {
     if (!ctx) return -1;
 
     /* Check if already initialized */
-    if (ctx->tr7_state && ctx->tr7_state->initialized) {
+    if (ctx->model.tr7_state && ctx->model.tr7_state->initialized) {
         return 0;  /* Already initialized is success */
     }
 
     /* Allocate state if needed */
-    struct LokiTr7State *state = ctx->tr7_state;
+    struct LokiTr7State *state = ctx->model.tr7_state;
     if (!state) {
         state = (struct LokiTr7State *)calloc(1, sizeof(struct LokiTr7State));
         if (!state) return -1;
-        ctx->tr7_state = state;
+        ctx->model.tr7_state = state;
     }
 
     /* Create TR7 engine */
@@ -631,7 +631,7 @@ static int tr7_lang_init(editor_ctx_t *ctx) {
     if (!state->engine) {
         set_error(state, "Failed to create TR7 engine");
         free(state);
-        ctx->tr7_state = NULL;
+        ctx->model.tr7_state = NULL;
         return -1;
     }
 
@@ -709,7 +709,7 @@ static void tr7_lang_cleanup(editor_ctx_t *ctx) {
 
     /* Free the state structure */
     free(state);
-    ctx->tr7_state = NULL;
+    ctx->model.tr7_state = NULL;
 }
 
 static int tr7_lang_is_initialized(editor_ctx_t *ctx) {

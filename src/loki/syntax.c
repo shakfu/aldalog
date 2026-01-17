@@ -63,21 +63,21 @@ void syntax_update_row(editor_ctx_t *ctx, t_erow *row) {
 
     int default_ran = 0;
 
-    if (ctx->syntax != NULL) {
-        if (ctx->syntax->type == HL_TYPE_MARKDOWN) {
+    if (ctx->view.syntax != NULL) {
+        if (ctx->view.syntax->type == HL_TYPE_MARKDOWN) {
             editor_update_syntax_markdown(ctx, row);
             default_ran = 1;
-        } else if (ctx->syntax->type == HL_TYPE_CSOUND) {
+        } else if (ctx->view.syntax->type == HL_TYPE_CSOUND) {
             editor_update_syntax_csound(ctx, row);
             default_ran = 1;
         } else {
             int i, prev_sep, in_string, in_comment;
             char *p;
-            char **keywords = ctx->syntax->keywords;
-            char *scs = ctx->syntax->singleline_comment_start;
-            char *mcs = ctx->syntax->multiline_comment_start;
-            char *mce = ctx->syntax->multiline_comment_end;
-            char *separators = ctx->syntax->separators;
+            char **keywords = ctx->view.syntax->keywords;
+            char *scs = ctx->view.syntax->singleline_comment_start;
+            char *mcs = ctx->view.syntax->multiline_comment_start;
+            char *mce = ctx->view.syntax->multiline_comment_end;
+            char *separators = ctx->view.syntax->separators;
 
             /* Point to the first non-space char. */
             p = row->render;
@@ -92,7 +92,7 @@ void syntax_update_row(editor_ctx_t *ctx, t_erow *row) {
 
             /* If the previous line has an open comment, this line starts
              * with an open comment state. */
-            if (row->idx > 0 && syntax_row_has_open_comment(&ctx->row[row->idx-1]))
+            if (row->idx > 0 && syntax_row_has_open_comment(&ctx->model.row[row->idx-1]))
                 in_comment = 1;
 
             while(*p) {
@@ -208,8 +208,8 @@ void syntax_update_row(editor_ctx_t *ctx, t_erow *row) {
      * state changed. This may recursively affect all the following rows
      * in the file. */
     int oc = syntax_row_has_open_comment(row);
-    if (row->hl_oc != oc && row->idx+1 < ctx->numrows)
-        syntax_update_row(ctx, &ctx->row[row->idx+1]);
+    if (row->hl_oc != oc && row->idx+1 < ctx->model.numrows)
+        syntax_update_row(ctx, &ctx->model.row[row->idx+1]);
     row->hl_oc = oc;
 }
 
@@ -218,7 +218,7 @@ void syntax_update_row(editor_ctx_t *ctx, t_erow *row) {
  * Returns the length of the formatted string. */
 int syntax_format_color(editor_ctx_t *ctx, int hl, char *buf, size_t bufsize) {
     if (hl < 0 || hl >= 9) hl = 0;  /* Default to HL_NORMAL */
-    t_hlcolor *color = &ctx->colors[hl];
+    t_hlcolor *color = &ctx->view.colors[hl];
     return snprintf(buf, bufsize, "\x1b[38;2;%d;%d;%dm",
                     color->r, color->g, color->b);
 }
@@ -234,7 +234,7 @@ void syntax_select_for_filename(editor_ctx_t *ctx, char *filename) {
             int patlen = strlen(s->filematch[i]);
             if ((p = strstr(filename,s->filematch[i])) != NULL) {
                 if (s->filematch[i][0] != '.' || p[patlen] == '\0') {
-                    ctx->syntax = s;
+                    ctx->view.syntax = s;
                     return;
                 }
             }
@@ -253,7 +253,7 @@ void syntax_select_for_filename(editor_ctx_t *ctx, char *filename) {
             int patlen = strlen(s->filematch[i]);
             if ((p = strstr(filename,s->filematch[i])) != NULL) {
                 if (s->filematch[i][0] != '.' || p[patlen] == '\0') {
-                    ctx->syntax = s;
+                    ctx->view.syntax = s;
                     return;
                 }
             }
@@ -267,21 +267,21 @@ void syntax_select_for_filename(editor_ctx_t *ctx, char *filename) {
  * These defaults match the visual appearance of the original ANSI color scheme. */
 void syntax_init_default_colors(editor_ctx_t *ctx) {
     /* HL_NORMAL */
-    ctx->colors[0].r = 200; ctx->colors[0].g = 200; ctx->colors[0].b = 200;
+    ctx->view.colors[0].r = 200; ctx->view.colors[0].g = 200; ctx->view.colors[0].b = 200;
     /* HL_NONPRINT */
-    ctx->colors[1].r = 100; ctx->colors[1].g = 100; ctx->colors[1].b = 100;
+    ctx->view.colors[1].r = 100; ctx->view.colors[1].g = 100; ctx->view.colors[1].b = 100;
     /* HL_COMMENT */
-    ctx->colors[2].r = 100; ctx->colors[2].g = 100; ctx->colors[2].b = 100;
+    ctx->view.colors[2].r = 100; ctx->view.colors[2].g = 100; ctx->view.colors[2].b = 100;
     /* HL_MLCOMMENT */
-    ctx->colors[3].r = 100; ctx->colors[3].g = 100; ctx->colors[3].b = 100;
+    ctx->view.colors[3].r = 100; ctx->view.colors[3].g = 100; ctx->view.colors[3].b = 100;
     /* HL_KEYWORD1 */
-    ctx->colors[4].r = 220; ctx->colors[4].g = 100; ctx->colors[4].b = 220;
+    ctx->view.colors[4].r = 220; ctx->view.colors[4].g = 100; ctx->view.colors[4].b = 220;
     /* HL_KEYWORD2 */
-    ctx->colors[5].r = 100; ctx->colors[5].g = 220; ctx->colors[5].b = 220;
+    ctx->view.colors[5].r = 100; ctx->view.colors[5].g = 220; ctx->view.colors[5].b = 220;
     /* HL_STRING */
-    ctx->colors[6].r = 220; ctx->colors[6].g = 220; ctx->colors[6].b = 100;
+    ctx->view.colors[6].r = 220; ctx->view.colors[6].g = 220; ctx->view.colors[6].b = 100;
     /* HL_NUMBER */
-    ctx->colors[7].r = 200; ctx->colors[7].g = 100; ctx->colors[7].b = 200;
+    ctx->view.colors[7].r = 200; ctx->view.colors[7].g = 100; ctx->view.colors[7].b = 200;
     /* HL_MATCH */
-    ctx->colors[8].r = 100; ctx->colors[8].g = 150; ctx->colors[8].b = 220;
+    ctx->view.colors[8].r = 100; ctx->view.colors[8].g = 150; ctx->view.colors[8].b = 220;
 }

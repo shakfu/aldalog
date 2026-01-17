@@ -44,7 +44,7 @@ struct LokiJoyState {
 
 /* Get Joy state from editor context, returning NULL if not initialized */
 static LokiJoyState* get_joy_state(editor_ctx_t *ctx) {
-    return ctx ? ctx->joy_state : NULL;
+    return ctx ? ctx->model.joy_state : NULL;
 }
 
 /* ======================= Helper Functions ======================= */
@@ -65,17 +65,17 @@ int loki_joy_init(editor_ctx_t *ctx) {
     if (!ctx) return -1;
 
     /* Check if already initialized for this context */
-    if (ctx->joy_state && ctx->joy_state->initialized) {
-        set_state_error(ctx->joy_state, "Joy already initialized");
+    if (ctx->model.joy_state && ctx->model.joy_state->initialized) {
+        set_state_error(ctx->model.joy_state, "Joy already initialized");
         return -1;
     }
 
     /* Allocate state if needed */
-    LokiJoyState *state = ctx->joy_state;
+    LokiJoyState *state = ctx->model.joy_state;
     if (!state) {
         state = (LokiJoyState *)calloc(1, sizeof(LokiJoyState));
         if (!state) return -1;
-        ctx->joy_state = state;
+        ctx->model.joy_state = state;
     }
 
     /* Create Joy context */
@@ -83,7 +83,7 @@ int loki_joy_init(editor_ctx_t *ctx) {
     if (!state->joy_ctx) {
         set_state_error(state, "Failed to create Joy context");
         free(state);
-        ctx->joy_state = NULL;
+        ctx->model.joy_state = NULL;
         return -1;
     }
 
@@ -109,7 +109,7 @@ int loki_joy_init(editor_ctx_t *ctx) {
         music_notation_cleanup(state->joy_ctx);
         joy_context_free(state->joy_ctx);
         free(state);
-        ctx->joy_state = NULL;
+        ctx->model.joy_state = NULL;
         return -1;
     }
 
@@ -119,7 +119,7 @@ int loki_joy_init(editor_ctx_t *ctx) {
         music_notation_cleanup(state->joy_ctx);
         joy_context_free(state->joy_ctx);
         free(state);
-        ctx->joy_state = NULL;
+        ctx->model.joy_state = NULL;
         return -1;
     }
 
@@ -172,7 +172,7 @@ void loki_joy_cleanup(editor_ctx_t *ctx) {
 
     /* Free the state structure */
     free(state);
-    ctx->joy_state = NULL;
+    ctx->model.joy_state = NULL;
 }
 
 int loki_joy_is_initialized(editor_ctx_t *ctx) {

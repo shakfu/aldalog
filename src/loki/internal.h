@@ -156,66 +156,127 @@ typedef struct t_lua_repl {
     char *log[LUA_REPL_LOG_MAX];
 } t_lua_repl;
 
+/* ======================= Model/View Separation ============================= */
+
+/* EditorModel - Document state that persists across views.
+ * Contains buffer content, file metadata, and language-specific state.
+ * Multiple views can share the same model in future implementations. */
+typedef struct EditorModel {
+    t_erow *row;              /* Buffer content (rows) */
+    int numrows;              /* Number of rows */
+    char *filename;           /* Currently open filename */
+    int dirty;                /* File modified but not saved */
+    struct undo_state *undo_state;        /* Undo/redo state (NULL if disabled) */
+    struct indent_config *indent_config;  /* Auto-indent settings */
+
+    /* Language states - per-context state (NULL until initialized) */
+#ifdef LANG_ALDA
+    struct LokiAldaState *alda_state;
+#endif
+#ifdef LANG_JOY
+    struct LokiJoyState *joy_state;
+#endif
+#ifdef LANG_TR7
+    struct LokiTr7State *tr7_state;
+#endif
+} EditorModel;
+
+/* EditorView - Presentation state that is terminal/viewport-specific.
+ * Contains cursor position, viewport offset, display settings, and UI state.
+ * Each view has its own cursor, scroll position, and mode. */
+typedef struct EditorView {
+    /* Cursor position */
+    int cx, cy;               /* Cursor x and y position in characters */
+
+    /* Viewport offset */
+    int rowoff;               /* Offset of row displayed */
+    int coloff;               /* Offset of column displayed */
+
+    /* Screen dimensions */
+    int screenrows;           /* Number of rows that we can show */
+    int screencols;           /* Number of cols that we can show */
+    int screenrows_total;     /* Rows available after status bars (before REPL) */
+
+    /* Selection state */
+    int sel_active;           /* Selection active flag */
+    int sel_start_x, sel_start_y;  /* Selection start position */
+    int sel_end_x, sel_end_y;      /* Selection end position */
+
+    /* Display settings */
+    struct t_editor_syntax *syntax;  /* Current syntax highlight, or NULL */
+    t_hlcolor colors[9];      /* Syntax highlight colors: indexed by HL_* constants */
+    int line_numbers;         /* Line numbers display flag */
+    int word_wrap;            /* Word wrap enabled flag */
+
+    /* Modal state */
+    EditorMode mode;          /* Current editor mode (normal/insert/visual/command) */
+    char cmd_buffer[256];     /* Command input buffer */
+    int cmd_length;           /* Length of command */
+    int cmd_cursor_pos;       /* Cursor position in command */
+    int cmd_history_index;    /* Current history position */
+
+    /* REPL & status */
+    t_lua_repl repl;          /* Lua REPL state - managed by loki_editor.c */
+    char statusmsg[80];       /* Status message */
+    time_t statusmsg_time;    /* Status message timestamp */
+    lua_State *L;             /* Lua state - managed by loki_editor.c */
+} EditorView;
+
 /* Editor context - one instance per editor viewport/buffer.
  * This structure will enable multiple independent editor contexts for future
  * split windows and multiple buffers implementation.
- * The typedef editor_ctx_t is declared in loki/core.h (public API). */
+ * The typedef editor_ctx_t is declared in loki/core.h (public API).
+ *
+ * ARCHITECTURE: Model/View separation enables:
+ * - Multiple views of the same document (split windows)
+ * - Independent cursor/scroll positions per view
+ * - Future serialization of model state
+ * - Potential RPC/remote editing scenarios */
 struct editor_ctx {
-    int cx,cy;  /* Cursor x and y position in characters */
-    int rowoff;     /* Offset of row displayed. */
-    int coloff;     /* Offset of column displayed. */
-    int screenrows; /* Number of rows that we can show */
-    int screencols; /* Number of cols that we can show */
-    int screenrows_total; /* Rows available after status bars (before REPL) */
-    int numrows;    /* Number of rows */
-    /* Note: rawmode moved to TerminalHost (terminal.h) */
-    t_erow *row;      /* Rows */
-    int dirty;      /* File modified but not saved. */
-    char *filename; /* Currently open filename */
-    char statusmsg[80];
-    time_t statusmsg_time;
-    struct t_editor_syntax *syntax;    /* Current syntax highlight, or NULL. */
-    lua_State *L;        /* Lua state - managed by loki_editor.c */
-    t_lua_repl repl;     /* Lua REPL state - managed by loki_editor.c */
-    EditorMode mode; /* Current editor mode (normal/insert/visual/command) */
-    int word_wrap;  /* Word wrap enabled flag */
-    int sel_active; /* Selection active flag */
-    int sel_start_x, sel_start_y; /* Selection start position */
-    int sel_end_x, sel_end_y;     /* Selection end position */
-    t_hlcolor colors[9]; /* Syntax highlight colors: indexed by HL_* constants */
-
-    /* Note: winsize_changed moved to TerminalHost (terminal.h) */
-
-    /* Command mode state */
-    char cmd_buffer[256];      /* Command input buffer */
-    int cmd_length;            /* Length of command */
-    int cmd_cursor_pos;        /* Cursor position in command */
-    int cmd_history_index;     /* Current history position */
-
-    /* Undo/redo state */
-    struct undo_state *undo_state;  /* NULL if undo disabled */
-
-    /* Indentation configuration */
-    struct indent_config *indent_config;  /* Auto-indent settings */
-
-#ifdef LANG_ALDA
-    /* Alda state - per-context state (NULL until initialized) */
-    struct LokiAldaState *alda_state;
-#endif
-
-#ifdef LANG_JOY
-    /* Joy state - per-context state (NULL until initialized) */
-    struct LokiJoyState *joy_state;
-#endif
-
-#ifdef LANG_TR7
-    /* TR7 state - per-context state (NULL until initialized) */
-    struct LokiTr7State *tr7_state;
-#endif
-
-    /* Line numbers display flag */
-    int line_numbers;
+    EditorModel model;        /* Document state (buffer, file, undo, languages) */
+    EditorView view;          /* Presentation state (cursor, viewport, UI) */
 };
+
+/* ======================= Compatibility Macros ============================== */
+/* These macros provide backwards compatibility during the migration period.
+ * They allow existing code to continue using ctx->field syntax while we
+ * incrementally migrate to ctx->model.field or ctx->view.field.
+ * REMOVE these macros once migration is complete. */
+
+/* Model field accessors */
+#define ctx_row(ctx) ((ctx)->model.row)
+#define ctx_numrows(ctx) ((ctx)->model.numrows)
+#define ctx_filename(ctx) ((ctx)->model.filename)
+#define ctx_dirty(ctx) ((ctx)->model.dirty)
+#define ctx_undo_state(ctx) ((ctx)->model.undo_state)
+#define ctx_indent_config(ctx) ((ctx)->model.indent_config)
+
+/* View field accessors */
+#define ctx_cx(ctx) ((ctx)->view.cx)
+#define ctx_cy(ctx) ((ctx)->view.cy)
+#define ctx_rowoff(ctx) ((ctx)->view.rowoff)
+#define ctx_coloff(ctx) ((ctx)->view.coloff)
+#define ctx_screenrows(ctx) ((ctx)->view.screenrows)
+#define ctx_screencols(ctx) ((ctx)->view.screencols)
+#define ctx_screenrows_total(ctx) ((ctx)->view.screenrows_total)
+#define ctx_sel_active(ctx) ((ctx)->view.sel_active)
+#define ctx_sel_start_x(ctx) ((ctx)->view.sel_start_x)
+#define ctx_sel_start_y(ctx) ((ctx)->view.sel_start_y)
+#define ctx_sel_end_x(ctx) ((ctx)->view.sel_end_x)
+#define ctx_sel_end_y(ctx) ((ctx)->view.sel_end_y)
+#define ctx_syntax(ctx) ((ctx)->view.syntax)
+#define ctx_colors(ctx) ((ctx)->view.colors)
+#define ctx_line_numbers(ctx) ((ctx)->view.line_numbers)
+#define ctx_word_wrap(ctx) ((ctx)->view.word_wrap)
+#define ctx_mode(ctx) ((ctx)->view.mode)
+#define ctx_cmd_buffer(ctx) ((ctx)->view.cmd_buffer)
+#define ctx_cmd_length(ctx) ((ctx)->view.cmd_length)
+#define ctx_cmd_cursor_pos(ctx) ((ctx)->view.cmd_cursor_pos)
+#define ctx_cmd_history_index(ctx) ((ctx)->view.cmd_history_index)
+#define ctx_repl(ctx) ((ctx)->view.repl)
+#define ctx_statusmsg(ctx) ((ctx)->view.statusmsg)
+#define ctx_statusmsg_time(ctx) ((ctx)->view.statusmsg_time)
+#define ctx_L(ctx) ((ctx)->view.L)
 
 /* Legacy type name for compatibility during migration.
  * New code should use editor_ctx_t. */

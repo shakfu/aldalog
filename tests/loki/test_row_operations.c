@@ -18,24 +18,24 @@
 /* Helper: Initialize empty editor context */
 static void init_empty_ctx(editor_ctx_t *ctx) {
     editor_ctx_init(ctx);
-    ctx->screenrows = 24;
-    ctx->screencols = 80;
+    ctx->view.screenrows = 24;
+    ctx->view.screencols = 80;
 }
 
 /* Helper: Create context with specific rows */
 static void init_ctx_with_rows(editor_ctx_t *ctx, int num_rows, const char **content) {
     init_empty_ctx(ctx);
 
-    ctx->numrows = num_rows;
-    ctx->row = calloc(num_rows, sizeof(t_erow));
+    ctx->model.numrows = num_rows;
+    ctx->model.row = calloc(num_rows, sizeof(t_erow));
 
     for (int i = 0; i < num_rows; i++) {
-        ctx->row[i].chars = strdup(content[i]);
-        ctx->row[i].size = strlen(content[i]);
-        ctx->row[i].render = strdup(content[i]);
-        ctx->row[i].rsize = strlen(content[i]);
-        ctx->row[i].hl = NULL;
-        ctx->row[i].idx = i;
+        ctx->model.row[i].chars = strdup(content[i]);
+        ctx->model.row[i].size = strlen(content[i]);
+        ctx->model.row[i].render = strdup(content[i]);
+        ctx->model.row[i].rsize = strlen(content[i]);
+        ctx->model.row[i].hl = NULL;
+        ctx->model.row[i].idx = i;
     }
 }
 
@@ -49,10 +49,10 @@ TEST(row_insert_into_empty_buffer) {
 
     editor_insert_row(&ctx, 0, "first line", 10);
 
-    ASSERT_EQ(ctx.numrows, 1);
-    ASSERT_STR_EQ(ctx.row[0].chars, "first line");
-    ASSERT_EQ(ctx.row[0].size, 10);
-    ASSERT_EQ(ctx.row[0].idx, 0);
+    ASSERT_EQ(ctx.model.numrows, 1);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "first line");
+    ASSERT_EQ(ctx.model.row[0].size, 10);
+    ASSERT_EQ(ctx.model.row[0].idx, 0);
 
     editor_ctx_free(&ctx);
 }
@@ -64,13 +64,13 @@ TEST(row_insert_at_beginning) {
 
     editor_insert_row(&ctx, 0, "new first", 9);
 
-    ASSERT_EQ(ctx.numrows, 2);
-    ASSERT_STR_EQ(ctx.row[0].chars, "new first");
-    ASSERT_STR_EQ(ctx.row[1].chars, "existing line");
+    ASSERT_EQ(ctx.model.numrows, 2);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "new first");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "existing line");
 
     /* Verify indices updated */
-    ASSERT_EQ(ctx.row[0].idx, 0);
-    ASSERT_EQ(ctx.row[1].idx, 1);
+    ASSERT_EQ(ctx.model.row[0].idx, 0);
+    ASSERT_EQ(ctx.model.row[1].idx, 1);
 
     editor_ctx_free(&ctx);
 }
@@ -82,10 +82,10 @@ TEST(row_insert_at_end) {
 
     editor_insert_row(&ctx, 1, "second line", 11);
 
-    ASSERT_EQ(ctx.numrows, 2);
-    ASSERT_STR_EQ(ctx.row[0].chars, "first line");
-    ASSERT_STR_EQ(ctx.row[1].chars, "second line");
-    ASSERT_EQ(ctx.row[1].idx, 1);
+    ASSERT_EQ(ctx.model.numrows, 2);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "first line");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "second line");
+    ASSERT_EQ(ctx.model.row[1].idx, 1);
 
     editor_ctx_free(&ctx);
 }
@@ -97,14 +97,14 @@ TEST(row_insert_in_middle) {
 
     editor_insert_row(&ctx, 1, "line two", 8);
 
-    ASSERT_EQ(ctx.numrows, 3);
-    ASSERT_STR_EQ(ctx.row[0].chars, "line one");
-    ASSERT_STR_EQ(ctx.row[1].chars, "line two");
-    ASSERT_STR_EQ(ctx.row[2].chars, "line three");
+    ASSERT_EQ(ctx.model.numrows, 3);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "line one");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "line two");
+    ASSERT_STR_EQ(ctx.model.row[2].chars, "line three");
 
     /* Verify all indices */
     for (int i = 0; i < 3; i++) {
-        ASSERT_EQ(ctx.row[i].idx, i);
+        ASSERT_EQ(ctx.model.row[i].idx, i);
     }
 
     editor_ctx_free(&ctx);
@@ -117,9 +117,9 @@ TEST(row_insert_empty_line) {
 
     editor_insert_row(&ctx, 1, "", 0);
 
-    ASSERT_EQ(ctx.numrows, 3);
-    ASSERT_STR_EQ(ctx.row[1].chars, "");
-    ASSERT_EQ(ctx.row[1].size, 0);
+    ASSERT_EQ(ctx.model.numrows, 3);
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "");
+    ASSERT_EQ(ctx.model.row[1].size, 0);
 
     editor_ctx_free(&ctx);
 }
@@ -128,11 +128,11 @@ TEST(row_insert_sets_dirty_flag) {
     editor_ctx_t ctx;
     init_empty_ctx(&ctx);
 
-    ctx.dirty = 0;
+    ctx.model.dirty = 0;
 
     editor_insert_row(&ctx, 0, "new line", 8);
 
-    ASSERT_TRUE(ctx.dirty > 0);
+    ASSERT_TRUE(ctx.model.dirty > 0);
 
     editor_ctx_free(&ctx);
 }
@@ -148,9 +148,9 @@ TEST(row_update_creates_render) {
     editor_insert_row(&ctx, 0, "simple text", 11);
 
     /* render should match chars for non-special content */
-    ASSERT_NOT_NULL(ctx.row[0].render);
-    ASSERT_STR_EQ(ctx.row[0].render, "simple text");
-    ASSERT_EQ(ctx.row[0].rsize, 11);
+    ASSERT_NOT_NULL(ctx.model.row[0].render);
+    ASSERT_STR_EQ(ctx.model.row[0].render, "simple text");
+    ASSERT_EQ(ctx.model.row[0].rsize, 11);
 
     editor_ctx_free(&ctx);
 }
@@ -162,8 +162,8 @@ TEST(row_update_expands_tabs) {
     editor_insert_row(&ctx, 0, "a\tb", 3);
 
     /* Tab should be expanded (default 8 or 4 spaces typically) */
-    ASSERT_NOT_NULL(ctx.row[0].render);
-    ASSERT_TRUE(ctx.row[0].rsize > 3);  /* Expanded size > raw size */
+    ASSERT_NOT_NULL(ctx.model.row[0].render);
+    ASSERT_TRUE(ctx.model.row[0].rsize > 3);  /* Expanded size > raw size */
 
     editor_ctx_free(&ctx);
 }
@@ -175,7 +175,7 @@ TEST(row_update_multiple_tabs) {
     editor_insert_row(&ctx, 0, "\t\t\t", 3);
 
     /* Three tabs should expand significantly */
-    ASSERT_TRUE(ctx.row[0].rsize >= 3);
+    ASSERT_TRUE(ctx.model.row[0].rsize >= 3);
 
     editor_ctx_free(&ctx);
 }
@@ -189,14 +189,14 @@ TEST(char_insert_at_beginning) {
     const char *rows[] = {"hello"};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 0;
-    ctx.cy = 0;
+    ctx.view.cx = 0;
+    ctx.view.cy = 0;
 
     editor_insert_char(&ctx, 'X');
 
-    ASSERT_STR_EQ(ctx.row[0].chars, "Xhello");
-    ASSERT_EQ(ctx.row[0].size, 6);
-    ASSERT_EQ(ctx.cx, 1);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "Xhello");
+    ASSERT_EQ(ctx.model.row[0].size, 6);
+    ASSERT_EQ(ctx.view.cx, 1);
 
     editor_ctx_free(&ctx);
 }
@@ -206,13 +206,13 @@ TEST(char_insert_in_middle) {
     const char *rows[] = {"helo"};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 2;
-    ctx.cy = 0;
+    ctx.view.cx = 2;
+    ctx.view.cy = 0;
 
     editor_insert_char(&ctx, 'l');
 
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
-    ASSERT_EQ(ctx.cx, 3);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
+    ASSERT_EQ(ctx.view.cx, 3);
 
     editor_ctx_free(&ctx);
 }
@@ -222,13 +222,13 @@ TEST(char_insert_at_end) {
     const char *rows[] = {"hello"};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 5;
-    ctx.cy = 0;
+    ctx.view.cx = 5;
+    ctx.view.cy = 0;
 
     editor_insert_char(&ctx, '!');
 
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello!");
-    ASSERT_EQ(ctx.cx, 6);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello!");
+    ASSERT_EQ(ctx.view.cx, 6);
 
     editor_ctx_free(&ctx);
 }
@@ -238,13 +238,13 @@ TEST(char_insert_into_empty_row) {
     const char *rows[] = {""};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 0;
-    ctx.cy = 0;
+    ctx.view.cx = 0;
+    ctx.view.cy = 0;
 
     editor_insert_char(&ctx, 'a');
 
-    ASSERT_STR_EQ(ctx.row[0].chars, "a");
-    ASSERT_EQ(ctx.row[0].size, 1);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "a");
+    ASSERT_EQ(ctx.model.row[0].size, 1);
 
     editor_ctx_free(&ctx);
 }
@@ -258,13 +258,13 @@ TEST(char_delete_at_end) {
     const char *rows[] = {"hello!"};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 6;
-    ctx.cy = 0;
+    ctx.view.cx = 6;
+    ctx.view.cy = 0;
 
     editor_del_char(&ctx);
 
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
-    ASSERT_EQ(ctx.cx, 5);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
+    ASSERT_EQ(ctx.view.cx, 5);
 
     editor_ctx_free(&ctx);
 }
@@ -274,12 +274,12 @@ TEST(char_delete_in_middle) {
     const char *rows[] = {"helllo"};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 4;  /* After first 'l' */
-    ctx.cy = 0;
+    ctx.view.cx = 4;  /* After first 'l' */
+    ctx.view.cy = 0;
 
     editor_del_char(&ctx);
 
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
 
     editor_ctx_free(&ctx);
 }
@@ -289,14 +289,14 @@ TEST(char_delete_at_beginning_merges_lines) {
     const char *rows[] = {"first", "second"};
     init_ctx_with_rows(&ctx, 2, rows);
 
-    ctx.cx = 0;
-    ctx.cy = 1;
+    ctx.view.cx = 0;
+    ctx.view.cy = 1;
 
     editor_del_char(&ctx);
 
     /* Should merge lines */
-    ASSERT_EQ(ctx.numrows, 1);
-    ASSERT_STR_EQ(ctx.row[0].chars, "firstsecond");
+    ASSERT_EQ(ctx.model.numrows, 1);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "firstsecond");
 
     editor_ctx_free(&ctx);
 }
@@ -306,14 +306,14 @@ TEST(char_delete_at_very_beginning_does_nothing) {
     const char *rows[] = {"hello"};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 0;
-    ctx.cy = 0;
+    ctx.view.cx = 0;
+    ctx.view.cy = 0;
 
     editor_del_char(&ctx);
 
     /* At file beginning - nothing to delete */
-    ASSERT_EQ(ctx.numrows, 1);
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
+    ASSERT_EQ(ctx.model.numrows, 1);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
 
     editor_ctx_free(&ctx);
 }
@@ -327,14 +327,14 @@ TEST(newline_splits_line_at_cursor) {
     const char *rows[] = {"hello world"};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 5;  /* After "hello" */
-    ctx.cy = 0;
+    ctx.view.cx = 5;  /* After "hello" */
+    ctx.view.cy = 0;
 
     editor_insert_newline(&ctx);
 
-    ASSERT_EQ(ctx.numrows, 2);
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello");
-    ASSERT_STR_EQ(ctx.row[1].chars, " world");
+    ASSERT_EQ(ctx.model.numrows, 2);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, " world");
 
     editor_ctx_free(&ctx);
 }
@@ -344,14 +344,14 @@ TEST(newline_at_line_start_creates_empty_line_above) {
     const char *rows[] = {"content"};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 0;
-    ctx.cy = 0;
+    ctx.view.cx = 0;
+    ctx.view.cy = 0;
 
     editor_insert_newline(&ctx);
 
-    ASSERT_EQ(ctx.numrows, 2);
-    ASSERT_STR_EQ(ctx.row[0].chars, "");
-    ASSERT_STR_EQ(ctx.row[1].chars, "content");
+    ASSERT_EQ(ctx.model.numrows, 2);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "content");
 
     editor_ctx_free(&ctx);
 }
@@ -361,14 +361,14 @@ TEST(newline_at_line_end_creates_empty_line_below) {
     const char *rows[] = {"content"};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 7;  /* End of "content" */
-    ctx.cy = 0;
+    ctx.view.cx = 7;  /* End of "content" */
+    ctx.view.cy = 0;
 
     editor_insert_newline(&ctx);
 
-    ASSERT_EQ(ctx.numrows, 2);
-    ASSERT_STR_EQ(ctx.row[0].chars, "content");
-    ASSERT_STR_EQ(ctx.row[1].chars, "");
+    ASSERT_EQ(ctx.model.numrows, 2);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "content");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "");
 
     editor_ctx_free(&ctx);
 }
@@ -378,13 +378,13 @@ TEST(newline_moves_cursor_to_new_line) {
     const char *rows[] = {"hello world"};
     init_ctx_with_rows(&ctx, 1, rows);
 
-    ctx.cx = 6;
-    ctx.cy = 0;
+    ctx.view.cx = 6;
+    ctx.view.cy = 0;
 
     editor_insert_newline(&ctx);
 
-    ASSERT_EQ(ctx.cy, 1);
-    ASSERT_EQ(ctx.cx, 0);
+    ASSERT_EQ(ctx.view.cy, 1);
+    ASSERT_EQ(ctx.view.cx, 0);
 
     editor_ctx_free(&ctx);
 }
@@ -404,9 +404,9 @@ TEST(row_handles_long_line) {
 
     editor_insert_row(&ctx, 0, long_line, sizeof(long_line) - 1);
 
-    ASSERT_EQ(ctx.row[0].size, 2047);
-    ASSERT_NOT_NULL(ctx.row[0].chars);
-    ASSERT_NOT_NULL(ctx.row[0].render);
+    ASSERT_EQ(ctx.model.row[0].size, 2047);
+    ASSERT_NOT_NULL(ctx.model.row[0].chars);
+    ASSERT_NOT_NULL(ctx.model.row[0].render);
 
     editor_ctx_free(&ctx);
 }
@@ -422,13 +422,13 @@ TEST(char_insert_into_long_line) {
 
     editor_insert_row(&ctx, 0, long_line, sizeof(long_line) - 1);
 
-    ctx.cx = 500;  /* Middle of line */
-    ctx.cy = 0;
+    ctx.view.cx = 500;  /* Middle of line */
+    ctx.view.cy = 0;
 
     editor_insert_char(&ctx, 'X');
 
-    ASSERT_EQ(ctx.row[0].size, 1024);
-    ASSERT_EQ(ctx.row[0].chars[500], 'X');
+    ASSERT_EQ(ctx.model.row[0].size, 1024);
+    ASSERT_EQ(ctx.model.row[0].chars[500], 'X');
 
     editor_ctx_free(&ctx);
 }
@@ -447,13 +447,13 @@ TEST(multiple_insertions) {
         editor_insert_row(&ctx, i, line, strlen(line));
     }
 
-    ASSERT_EQ(ctx.numrows, 10);
+    ASSERT_EQ(ctx.model.numrows, 10);
 
     for (int i = 0; i < 10; i++) {
         char expected[32];
         snprintf(expected, sizeof(expected), "line %d", i);
-        ASSERT_STR_EQ(ctx.row[i].chars, expected);
-        ASSERT_EQ(ctx.row[i].idx, i);
+        ASSERT_STR_EQ(ctx.model.row[i].chars, expected);
+        ASSERT_EQ(ctx.model.row[i].idx, i);
     }
 
     editor_ctx_free(&ctx);
@@ -465,16 +465,16 @@ TEST(interleaved_insert_delete) {
     init_ctx_with_rows(&ctx, 3, rows);
 
     /* Delete middle line content by setting cursor there */
-    ctx.cy = 1;
-    ctx.cx = 8;
+    ctx.view.cy = 1;
+    ctx.view.cx = 8;
 
     /* Insert char */
     editor_insert_char(&ctx, '!');
-    ASSERT_STR_EQ(ctx.row[1].chars, "line two!");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "line two!");
 
     /* Delete char */
     editor_del_char(&ctx);
-    ASSERT_STR_EQ(ctx.row[1].chars, "line two");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "line two");
 
     editor_ctx_free(&ctx);
 }
@@ -490,9 +490,9 @@ TEST(row_insert_null_content_safe) {
     /* Empty content should be safe */
     editor_insert_row(&ctx, 0, "", 0);
 
-    ASSERT_EQ(ctx.numrows, 1);
-    ASSERT_EQ(ctx.row[0].size, 0);
-    ASSERT_NOT_NULL(ctx.row[0].chars);
+    ASSERT_EQ(ctx.model.numrows, 1);
+    ASSERT_EQ(ctx.model.row[0].size, 0);
+    ASSERT_NOT_NULL(ctx.model.row[0].chars);
 
     editor_ctx_free(&ctx);
 }
@@ -502,11 +502,11 @@ TEST(empty_buffer_operations) {
     init_empty_ctx(&ctx);
 
     /* Delete on empty buffer should not crash */
-    ctx.cx = 0;
-    ctx.cy = 0;
+    ctx.view.cx = 0;
+    ctx.view.cy = 0;
     editor_del_char(&ctx);
 
-    ASSERT_EQ(ctx.numrows, 0);
+    ASSERT_EQ(ctx.model.numrows, 0);
 
     editor_ctx_free(&ctx);
 }
@@ -518,8 +518,8 @@ TEST(special_characters_in_row) {
     /* Row with special characters */
     editor_insert_row(&ctx, 0, "hello\tworld\t!", 13);
 
-    ASSERT_EQ(ctx.row[0].size, 13);
-    ASSERT_TRUE(ctx.row[0].rsize > 13);  /* Tabs expand */
+    ASSERT_EQ(ctx.model.row[0].size, 13);
+    ASSERT_TRUE(ctx.model.row[0].rsize > 13);  /* Tabs expand */
 
     editor_ctx_free(&ctx);
 }
@@ -531,7 +531,7 @@ TEST(unicode_aware_row) {
     /* UTF-8 content (stored as bytes) */
     editor_insert_row(&ctx, 0, "café", 5);  /* UTF-8: c, a, f, é (2 bytes), = 5 bytes */
 
-    ASSERT_EQ(ctx.row[0].size, 5);
+    ASSERT_EQ(ctx.model.row[0].size, 5);
 
     editor_ctx_free(&ctx);
 }

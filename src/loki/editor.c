@@ -49,43 +49,43 @@ static void loki_lua_status_reporter(const char *message, void *userdata) {
 /* Update REPL layout when active/inactive state changes */
 void editor_update_repl_layout(editor_ctx_t *ctx) {
     if (!ctx) return;
-    int reserved = ctx->repl.active ? LUA_REPL_TOTAL_ROWS : 0;
-    int available = ctx->screenrows_total;
+    int reserved = ctx->view.repl.active ? LUA_REPL_TOTAL_ROWS : 0;
+    int available = ctx->view.screenrows_total;
     if (available > reserved) {
-        ctx->screenrows = available - reserved;
+        ctx->view.screenrows = available - reserved;
     } else {
-        ctx->screenrows = 1;
+        ctx->view.screenrows = 1;
     }
-    if (ctx->screenrows < 1) ctx->screenrows = 1;
+    if (ctx->view.screenrows < 1) ctx->view.screenrows = 1;
 
-    if (ctx->cy >= ctx->screenrows) {
-        ctx->cy = ctx->screenrows - 1;
-        if (ctx->cy < 0) ctx->cy = 0;
+    if (ctx->view.cy >= ctx->view.screenrows) {
+        ctx->view.cy = ctx->view.screenrows - 1;
+        if (ctx->view.cy < 0) ctx->view.cy = 0;
     }
 
-    if (ctx->numrows > ctx->screenrows && ctx->rowoff > ctx->numrows - ctx->screenrows) {
-        ctx->rowoff = ctx->numrows - ctx->screenrows;
+    if (ctx->model.numrows > ctx->view.screenrows && ctx->view.rowoff > ctx->model.numrows - ctx->view.screenrows) {
+        ctx->view.rowoff = ctx->model.numrows - ctx->view.screenrows;
     }
-    if (ctx->numrows <= ctx->screenrows) {
-        ctx->rowoff = 0;
+    if (ctx->model.numrows <= ctx->view.screenrows) {
+        ctx->view.rowoff = 0;
     }
 }
 
 /* Toggle the Lua REPL focus */
 static void exec_lua_command(editor_ctx_t *ctx, int fd) {
     (void)fd;
-    if (!ctx || !ctx->L) {
+    if (!ctx || !ctx->view.L) {
         editor_set_status_msg(ctx, "Lua not available");
         return;
     }
-    int was_active = ctx->repl.active;
-    ctx->repl.active = !ctx->repl.active;
+    int was_active = ctx->view.repl.active;
+    ctx->view.repl.active = !ctx->view.repl.active;
     editor_update_repl_layout(ctx);
-    if (ctx->repl.active) {
-        ctx->repl.history_index = -1;
+    if (ctx->view.repl.active) {
+        ctx->view.repl.history_index = -1;
         editor_set_status_msg(ctx, 
             "Lua REPL: Enter runs, ESC exits, Up/Down history, type 'help'");
-        if (ctx->repl.log_len == 0) {
+        if (ctx->view.repl.log_len == 0) {
             lua_repl_append_log(ctx, "Type 'help' for built-in commands");
         }
     } else {
@@ -97,8 +97,8 @@ static void exec_lua_command(editor_ctx_t *ctx, int fd) {
 
 /* Apply Lua-based highlighting spans to a row */
 static int lua_apply_span_table(editor_ctx_t *ctx, t_erow *row, int table_index) {
-    if (!ctx || !ctx->L) return 0;
-    lua_State *L = ctx->L;
+    if (!ctx || !ctx->view.L) return 0;
+    lua_State *L = ctx->view.L;
     if (!lua_istable(L, table_index)) return 0;
 
     int applied = 0;
@@ -174,8 +174,8 @@ static int lua_apply_span_table(editor_ctx_t *ctx, t_erow *row, int table_index)
 
 /* Apply Lua custom highlighting to a row */
 static void lua_apply_highlight_row(editor_ctx_t *ctx, t_erow *row, int default_ran) {
-    if (!ctx || !ctx->L || row == NULL || row->render == NULL) return;
-    lua_State *L = ctx->L;
+    if (!ctx || !ctx->view.L || row == NULL || row->render == NULL) return;
+    lua_State *L = ctx->view.L;
     int top = lua_gettop(L);
 
     lua_getglobal(L, "loki");
@@ -193,8 +193,8 @@ static void lua_apply_highlight_row(editor_ctx_t *ctx, t_erow *row, int default_
     lua_pushinteger(L, row->idx);
     lua_pushlstring(L, row->chars ? row->chars : "", (size_t)row->size);
     lua_pushlstring(L, row->render ? row->render : "", (size_t)row->rsize);
-    if (ctx->syntax) {
-        lua_pushinteger(L, ctx->syntax->type);
+    if (ctx->view.syntax) {
+        lua_pushinteger(L, ctx->view.syntax->type);
     } else {
         lua_pushnil(L);
     }
@@ -267,8 +267,11 @@ static void print_usage(void) {
 }
 
 int loki_editor_main(int argc, char **argv) {
-    /* Local editor context - will be copied into buffer manager */
-    editor_ctx_t E;
+    /* Static editor context - ensures all fields are zero-initialized.
+     * This is critical because init_editor() doesn't initialize all fields
+     * (undo_state, indent_config, language states) and Lua bootstrap
+     * may access these fields before buffers_init() runs. */
+    static editor_ctx_t E;
 
     /* Initialize language bridge system */
     loki_lang_init();
@@ -335,24 +338,24 @@ int loki_editor_main(int argc, char **argv) {
         .reporter_userdata = NULL
     };
 
-    E.L = loki_lua_bootstrap(&E, &opts);
-    if (!E.L) {
+    E.view.L = loki_lua_bootstrap(&E, &opts);
+    if (!E.view.L) {
         fprintf(stderr, "Warning: Failed to initialize Lua runtime (%s)\n", loki_lua_runtime());
     }
 
     /* Re-select syntax now that Lua has registered dynamic languages */
-    if (!E.syntax && E.filename) {
-        syntax_select_for_filename(&E, E.filename);
+    if (!E.view.syntax && E.model.filename) {
+        syntax_select_for_filename(&E, E.model.filename);
         /* If syntax was found, refresh highlighting for all rows */
-        if (E.syntax) {
-            for (int i = 0; i < E.numrows; i++) {
-                syntax_update_row(&E, &E.row[i]);
+        if (E.view.syntax) {
+            for (int i = 0; i < E.model.numrows; i++) {
+                syntax_update_row(&E, &E.model.row[i]);
             }
         }
     }
 
     /* Initialize REPL */
-    lua_repl_init(&E.repl);
+    lua_repl_init(&E.view.repl);
 
     /* Initialize buffer management with the initial editor context */
     if (buffers_init(&E) != 0) {
@@ -369,7 +372,7 @@ int loki_editor_main(int argc, char **argv) {
         if (ctx) {
             int ret = loki_lang_init_for_file(ctx);
             if (ret == 0) {
-                const LokiLangOps *lang = loki_lang_for_file(ctx->filename);
+                const LokiLangOps *lang = loki_lang_for_file(ctx->model.filename);
                 if (lang) {
                     /* Configure audio backend if requested via CLI */
                     int backend_ret = loki_lang_configure_backend(ctx, soundfont_path, csound_path);
@@ -418,13 +421,13 @@ int loki_editor_main(int argc, char **argv) {
         terminal_handle_resize(ctx);
 
         /* Process any pending Link callbacks */
-        if (ctx->L) {
-            loki_link_check_callbacks(ctx, ctx->L);
+        if (ctx->view.L) {
+            loki_link_check_callbacks(ctx, ctx->view.L);
         }
 
         /* Process any pending language callbacks */
-        if (ctx->L) {
-            loki_lang_check_callbacks(ctx, ctx->L);
+        if (ctx->view.L) {
+            loki_lang_check_callbacks(ctx, ctx->view.L);
         }
 
         editor_refresh_screen(ctx);
@@ -442,12 +445,12 @@ void editor_cleanup_resources(editor_ctx_t *ctx) {
     loki_lang_cleanup_all(ctx);
 
     /* Clean up Lua REPL */
-    lua_repl_free(&ctx->repl);
+    lua_repl_free(&ctx->view.repl);
 
     /* Clean up Lua state */
-    if (ctx->L) {
-        lua_close(ctx->L);
-        ctx->L = NULL;
+    if (ctx->view.L) {
+        lua_close(ctx->view.L);
+        ctx->view.L = NULL;
     }
 
 }

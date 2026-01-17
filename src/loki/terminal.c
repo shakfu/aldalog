@@ -280,12 +280,12 @@ void terminal_update_window_size(editor_ctx_t *ctx) {
         rows = 24;
         cols = 80;
     }
-    ctx->screencols = cols;
+    ctx->view.screencols = cols;
     rows -= STATUS_ROWS;
     if (rows < 1) rows = 1;
-    ctx->screenrows_total = rows;
+    ctx->view.screenrows_total = rows;
     /* REPL layout update (editor_update_repl_layout) is in loki_editor.c */
-    ctx->screenrows = ctx->screenrows_total; /* Without REPL, use all available rows */
+    ctx->view.screenrows = ctx->view.screenrows_total; /* Without REPL, use all available rows */
 }
 
 /* ======================= Signal Handling ================================== */
@@ -307,8 +307,8 @@ void terminal_handle_resize(editor_ctx_t *ctx) {
     if (terminal_host_resize_pending(g_terminal_host)) {
         terminal_host_clear_resize(g_terminal_host);
         terminal_update_window_size(ctx);
-        if (ctx->cy > ctx->screenrows) ctx->cy = ctx->screenrows - 1;
-        if (ctx->cx > ctx->screencols) ctx->cx = ctx->screencols - 1;
+        if (ctx->view.cy > ctx->view.screenrows) ctx->view.cy = ctx->view.screenrows - 1;
+        if (ctx->view.cx > ctx->view.screencols) ctx->view.cx = ctx->view.screencols - 1;
     }
 }
 

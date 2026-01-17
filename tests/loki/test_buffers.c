@@ -13,18 +13,18 @@
 /* Helper: Initialize a minimal editor context for testing */
 static void init_test_context(editor_ctx_t *ctx) {
     memset(ctx, 0, sizeof(editor_ctx_t));
-    ctx->cx = 0;
-    ctx->cy = 0;
-    ctx->rowoff = 0;
-    ctx->coloff = 0;
-    ctx->numrows = 0;
-    ctx->row = NULL;
-    ctx->dirty = 0;
-    ctx->filename = NULL;
-    ctx->syntax = NULL;
-    ctx->mode = MODE_NORMAL;
-    ctx->screencols = 80;
-    ctx->screenrows = 24;
+    ctx->view.cx = 0;
+    ctx->view.cy = 0;
+    ctx->view.rowoff = 0;
+    ctx->view.coloff = 0;
+    ctx->model.numrows = 0;
+    ctx->model.row = NULL;
+    ctx->model.dirty = 0;
+    ctx->model.filename = NULL;
+    ctx->view.syntax = NULL;
+    ctx->view.mode = MODE_NORMAL;
+    ctx->view.screencols = 80;
+    ctx->view.screenrows = 24;
 }
 
 /* Test: Buffer initialization */
@@ -147,7 +147,7 @@ TEST(buffer_modified) {
     ASSERT_EQ(buffer_is_modified(id), 0);
 
     /* Mark buffer as modified */
-    buf_ctx->dirty = 1;
+    buf_ctx->model.dirty = 1;
 
     ASSERT_EQ(buffer_is_modified(id), 1);
 

@@ -65,12 +65,12 @@ int cmd_substitute(editor_ctx_t *ctx, const char *pattern) {
     }
 
     /* Perform substitution on current line */
-    if (ctx->cy >= ctx->numrows) {
+    if (ctx->view.cy >= ctx->model.numrows) {
         editor_set_status_msg(ctx, "No line to substitute");
         return 0;
     }
 
-    t_erow *row = &ctx->row[ctx->cy];
+    t_erow *row = &ctx->model.row[ctx->view.cy];
     char *line = row->chars;
     int line_len = row->size;
 
@@ -121,7 +121,7 @@ int cmd_substitute(editor_ctx_t *ctx, const char *pattern) {
     /* Update render */
     editor_update_row(ctx, row);
 
-    ctx->dirty++;
+    ctx->model.dirty++;
     editor_set_status_msg(ctx, "%d substitution%s", count, count > 1 ? "s" : "");
     return 1;
 }

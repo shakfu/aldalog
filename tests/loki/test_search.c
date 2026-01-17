@@ -19,32 +19,32 @@
 static void init_search_buffer(editor_ctx_t *ctx, int num_lines, const char **lines) {
     editor_ctx_init(ctx);
 
-    ctx->numrows = num_lines;
-    ctx->row = calloc(num_lines, sizeof(t_erow));
+    ctx->model.numrows = num_lines;
+    ctx->model.row = calloc(num_lines, sizeof(t_erow));
 
     for (int i = 0; i < num_lines; i++) {
-        ctx->row[i].chars = strdup(lines[i]);
-        ctx->row[i].size = strlen(lines[i]);
-        ctx->row[i].render = strdup(lines[i]);
-        ctx->row[i].rsize = strlen(lines[i]);
-        ctx->row[i].hl = NULL;
-        ctx->row[i].idx = i;
+        ctx->model.row[i].chars = strdup(lines[i]);
+        ctx->model.row[i].size = strlen(lines[i]);
+        ctx->model.row[i].render = strdup(lines[i]);
+        ctx->model.row[i].rsize = strlen(lines[i]);
+        ctx->model.row[i].hl = NULL;
+        ctx->model.row[i].idx = i;
     }
 
-    ctx->screenrows = 24;
-    ctx->screencols = 80;
+    ctx->view.screenrows = 24;
+    ctx->view.screencols = 80;
 }
 
 /* Helper: Free buffer resources */
 static void free_search_buffer(editor_ctx_t *ctx) {
-    for (int i = 0; i < ctx->numrows; i++) {
-        free(ctx->row[i].chars);
-        free(ctx->row[i].render);
-        if (ctx->row[i].hl) free(ctx->row[i].hl);
+    for (int i = 0; i < ctx->model.numrows; i++) {
+        free(ctx->model.row[i].chars);
+        free(ctx->model.row[i].render);
+        if (ctx->model.row[i].hl) free(ctx->model.row[i].hl);
     }
-    free(ctx->row);
-    ctx->row = NULL;
-    ctx->numrows = 0;
+    free(ctx->model.row);
+    ctx->model.row = NULL;
+    ctx->model.numrows = 0;
 }
 
 /* ============================================================================
@@ -126,8 +126,8 @@ TEST(search_empty_query) {
 TEST(search_empty_buffer) {
     editor_ctx_t ctx;
     editor_ctx_init(&ctx);
-    ctx.numrows = 0;
-    ctx.row = NULL;
+    ctx.model.numrows = 0;
+    ctx.model.row = NULL;
 
     int match_offset = 0;
     int result = editor_find_next_match(&ctx, "test", -1, 1, &match_offset);

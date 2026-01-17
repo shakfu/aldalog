@@ -76,7 +76,7 @@ static int is_joy_file(const char *filename) {
  * Checks _loki_keymaps.{mode}[keycode] for a registered function.
  * Returns 1 if handled by Lua, 0 if not (fall through to built-in). */
 static int try_lua_keymap(editor_ctx_t *ctx, const char *mode, int key) {
-    lua_State *L = ctx->L;
+    lua_State *L = ctx->view.L;
     if (!L) return 0;
 
     /* Get _loki_keymaps global table */
@@ -115,8 +115,8 @@ static int try_lua_keymap(editor_ctx_t *ctx, const char *mode, int key) {
 
 /* Helper: Check if a line is empty (blank or whitespace only) */
 static int is_empty_line(editor_ctx_t *ctx, int row) {
-    if (row < 0 || row >= ctx->numrows) return 1;
-    t_erow *line = &ctx->row[row];
+    if (row < 0 || row >= ctx->model.numrows) return 1;
+    t_erow *line = &ctx->model.row[row];
     for (int i = 0; i < line->size; i++) {
         if (line->chars[i] != ' ' && line->chars[i] != '\t') {
             return 0;
@@ -127,42 +127,42 @@ static int is_empty_line(editor_ctx_t *ctx, int row) {
 
 /* Move to next empty line (paragraph motion: }) */
 static void move_to_next_empty_line(editor_ctx_t *ctx) {
-    int filerow = ctx->rowoff + ctx->cy;
+    int filerow = ctx->view.rowoff + ctx->view.cy;
 
     /* Skip current paragraph (non-empty lines) */
     int row = filerow + 1;
-    while (row < ctx->numrows && !is_empty_line(ctx, row)) {
+    while (row < ctx->model.numrows && !is_empty_line(ctx, row)) {
         row++;
     }
 
     /* Skip empty lines to find start of next paragraph or stay at first empty */
-    if (row < ctx->numrows) {
+    if (row < ctx->model.numrows) {
         /* Found an empty line - this is where we stop */
         filerow = row;
     } else {
         /* No empty line found, go to end of file */
-        filerow = ctx->numrows - 1;
+        filerow = ctx->model.numrows - 1;
     }
 
     /* Update cursor position */
-    if (filerow < ctx->rowoff) {
-        ctx->rowoff = filerow;
-        ctx->cy = 0;
-    } else if (filerow >= ctx->rowoff + ctx->screenrows) {
-        ctx->rowoff = filerow - ctx->screenrows + 1;
-        ctx->cy = ctx->screenrows - 1;
+    if (filerow < ctx->view.rowoff) {
+        ctx->view.rowoff = filerow;
+        ctx->view.cy = 0;
+    } else if (filerow >= ctx->view.rowoff + ctx->view.screenrows) {
+        ctx->view.rowoff = filerow - ctx->view.screenrows + 1;
+        ctx->view.cy = ctx->view.screenrows - 1;
     } else {
-        ctx->cy = filerow - ctx->rowoff;
+        ctx->view.cy = filerow - ctx->view.rowoff;
     }
 
     /* Move to start of line */
-    ctx->cx = 0;
-    ctx->coloff = 0;
+    ctx->view.cx = 0;
+    ctx->view.coloff = 0;
 }
 
 /* Move to previous empty line (paragraph motion: {) */
 static void move_to_prev_empty_line(editor_ctx_t *ctx) {
-    int filerow = ctx->rowoff + ctx->cy;
+    int filerow = ctx->view.rowoff + ctx->view.cy;
 
     /* Skip current paragraph (non-empty lines) going backward */
     int row = filerow - 1;
@@ -179,19 +179,19 @@ static void move_to_prev_empty_line(editor_ctx_t *ctx) {
     }
 
     /* Update cursor position */
-    if (filerow < ctx->rowoff) {
-        ctx->rowoff = filerow;
-        ctx->cy = 0;
-    } else if (filerow >= ctx->rowoff + ctx->screenrows) {
-        ctx->rowoff = filerow - ctx->screenrows + 1;
-        ctx->cy = ctx->screenrows - 1;
+    if (filerow < ctx->view.rowoff) {
+        ctx->view.rowoff = filerow;
+        ctx->view.cy = 0;
+    } else if (filerow >= ctx->view.rowoff + ctx->view.screenrows) {
+        ctx->view.rowoff = filerow - ctx->view.screenrows + 1;
+        ctx->view.cy = ctx->view.screenrows - 1;
     } else {
-        ctx->cy = filerow - ctx->rowoff;
+        ctx->view.cy = filerow - ctx->view.rowoff;
     }
 
     /* Move to start of line */
-    ctx->cx = 0;
-    ctx->coloff = 0;
+    ctx->view.cx = 0;
+    ctx->view.coloff = 0;
 }
 
 /* Check if a line is an Alda part declaration (e.g., "piano:", "trumpet/trombone:")
@@ -238,15 +238,15 @@ static int is_part_declaration(const char *line, int len) {
  * and extends until the next part declaration or EOF.
  * Returns newly allocated string, caller must free. Returns NULL on error. */
 static char *get_current_part(editor_ctx_t *ctx) {
-    if (!ctx || ctx->numrows == 0) return NULL;
+    if (!ctx || ctx->model.numrows == 0) return NULL;
 
-    int cursor_row = ctx->rowoff + ctx->cy;
-    if (cursor_row >= ctx->numrows) cursor_row = ctx->numrows - 1;
+    int cursor_row = ctx->view.rowoff + ctx->view.cy;
+    if (cursor_row >= ctx->model.numrows) cursor_row = ctx->model.numrows - 1;
 
     /* Find start of part: scan backward to find part declaration */
     int start_row = cursor_row;
     while (start_row > 0) {
-        t_erow *row = &ctx->row[start_row];
+        t_erow *row = &ctx->model.row[start_row];
         if (is_part_declaration(row->chars, row->size)) {
             break;  /* Found part declaration */
         }
@@ -255,8 +255,8 @@ static char *get_current_part(editor_ctx_t *ctx) {
 
     /* Find end of part: scan forward to find next part declaration */
     int end_row = cursor_row + 1;
-    while (end_row < ctx->numrows) {
-        t_erow *row = &ctx->row[end_row];
+    while (end_row < ctx->model.numrows) {
+        t_erow *row = &ctx->model.row[end_row];
         if (is_part_declaration(row->chars, row->size)) {
             break;  /* Found next part */
         }
@@ -267,7 +267,7 @@ static char *get_current_part(editor_ctx_t *ctx) {
     /* Calculate total length needed */
     size_t total_len = 0;
     for (int i = start_row; i < end_row; i++) {
-        total_len += ctx->row[i].size + 1;  /* +1 for newline */
+        total_len += ctx->model.row[i].size + 1;  /* +1 for newline */
     }
 
     char *result = malloc(total_len + 1);
@@ -276,8 +276,8 @@ static char *get_current_part(editor_ctx_t *ctx) {
     /* Concatenate all lines */
     char *p = result;
     for (int i = start_row; i < end_row; i++) {
-        memcpy(p, ctx->row[i].chars, ctx->row[i].size);
-        p += ctx->row[i].size;
+        memcpy(p, ctx->model.row[i].chars, ctx->model.row[i].size);
+        p += ctx->model.row[i].size;
         *p++ = '\n';
     }
     *p = '\0';
@@ -309,41 +309,41 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
         /* Enter insert mode */
         case 'i':
             undo_break_group(ctx);  /* Break undo group on mode change */
-            ctx->mode = MODE_INSERT;
+            ctx->view.mode = MODE_INSERT;
             break;
         case 'a':
             undo_break_group(ctx);  /* Break undo group on mode change */
             editor_move_cursor(ctx, ARROW_RIGHT);
-            ctx->mode = MODE_INSERT;
+            ctx->view.mode = MODE_INSERT;
             break;
         case 'o':
             /* Insert line below and enter insert mode */
-            if (ctx->numrows > 0) {
-                int filerow = ctx->rowoff + ctx->cy;
-                if (filerow < ctx->numrows) {
-                    ctx->cx = ctx->row[filerow].size; /* Move to end of line */
+            if (ctx->model.numrows > 0) {
+                int filerow = ctx->view.rowoff + ctx->view.cy;
+                if (filerow < ctx->model.numrows) {
+                    ctx->view.cx = ctx->model.row[filerow].size; /* Move to end of line */
                 }
             }
             editor_insert_newline(ctx);
-            ctx->mode = MODE_INSERT;
+            ctx->view.mode = MODE_INSERT;
             break;
         case 'O':
             /* Insert line above and enter insert mode */
-            ctx->cx = 0; /* Move to start of line */
+            ctx->view.cx = 0; /* Move to start of line */
             editor_insert_newline(ctx);
             editor_move_cursor(ctx, ARROW_UP);
-            ctx->mode = MODE_INSERT;
+            ctx->view.mode = MODE_INSERT;
             break;
 
         /* Enter visual mode */
         case 'v':
-            ctx->mode = MODE_VISUAL;
-            ctx->sel_active = 1;
+            ctx->view.mode = MODE_VISUAL;
+            ctx->view.sel_active = 1;
             /* Store selection in file coordinates (not screen coordinates) */
-            ctx->sel_start_x = ctx->coloff + ctx->cx;
-            ctx->sel_start_y = ctx->rowoff + ctx->cy;
-            ctx->sel_end_x = ctx->coloff + ctx->cx;
-            ctx->sel_end_y = ctx->rowoff + ctx->cy;
+            ctx->view.sel_start_x = ctx->view.coloff + ctx->view.cx;
+            ctx->view.sel_start_y = ctx->view.rowoff + ctx->view.cy;
+            ctx->view.sel_end_x = ctx->view.coloff + ctx->view.cx;
+            ctx->view.sel_end_y = ctx->view.rowoff + ctx->view.cy;
             break;
 
         /* Enter command mode */
@@ -377,9 +377,9 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
         case CTRL_F: editor_find(ctx, fd); break;
         case CTRL_L:
             /* Toggle REPL */
-            ctx->repl.active = !ctx->repl.active;
+            ctx->view.repl.active = !ctx->view.repl.active;
             editor_update_repl_layout(ctx);
-            if (ctx->repl.active) {
+            if (ctx->view.repl.active) {
                 editor_set_status_msg(ctx, "Lua REPL active (Ctrl-L or ESC to close)");
             }
             break;
@@ -387,14 +387,14 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
             /* Eval selection (or current part) */
             {
                 /* Handle .csd files - partial playback not supported */
-                if (is_csd_file(ctx->filename)) {
+                if (is_csd_file(ctx->model.filename)) {
                     editor_set_status_msg(ctx, "Partial playback not supported for .csd files (use Ctrl-P)");
                     break;
                 }
 
                 /* Get code to evaluate */
                 char *code = get_selection_text(ctx);
-                if (!code && ctx->numrows > 0 && ctx->cy < ctx->numrows) {
+                if (!code && ctx->model.numrows > 0 && ctx->view.cy < ctx->model.numrows) {
                     /* No selection - use current part/line */
                     code = get_current_part(ctx);
                 }
@@ -405,7 +405,7 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
                 }
 
                 /* Evaluate code with the appropriate language */
-                const LokiLangOps *lang = loki_lang_for_file(ctx->filename);
+                const LokiLangOps *lang = loki_lang_for_file(ctx->model.filename);
                 if (lang) {
                     int ret = loki_lang_eval(ctx, code);
                     if (ret == 0) {
@@ -420,7 +420,7 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
                 }
                 free(code);
                 /* Clear selection after eval */
-                ctx->sel_active = 0;
+                ctx->view.sel_active = 0;
             }
             break;
         case CTRL_P:
@@ -428,21 +428,21 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
             {
 #ifdef BUILD_CSOUND_BACKEND
                 /* Handle .csd files with Csound backend */
-                if (is_csd_file(ctx->filename)) {
-                    if (ctx->dirty) {
+                if (is_csd_file(ctx->model.filename)) {
+                    if (ctx->model.dirty) {
                         editor_set_status_msg(ctx, "Save file first (Ctrl-S) before playing");
                         break;
                     }
-                    if (!ctx->filename) {
+                    if (!ctx->model.filename) {
                         editor_set_status_msg(ctx, "No filename - save file first");
                         break;
                     }
                     /* Stop any existing playback */
                     shared_csound_stop_playback();
                     /* Start async playback */
-                    int result = shared_csound_play_file_async(ctx->filename);
+                    int result = shared_csound_play_file_async(ctx->model.filename);
                     if (result == 0) {
-                        editor_set_status_msg(ctx, "Playing %s (Ctrl-G to stop)", ctx->filename);
+                        editor_set_status_msg(ctx, "Playing %s (Ctrl-G to stop)", ctx->model.filename);
                     } else {
                         const char *err = shared_csound_get_error();
                         editor_set_status_msg(ctx, "Csound error: %s", err ? err : "failed to play");
@@ -452,15 +452,15 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
 #endif
 
                 /* Check for empty file */
-                if (ctx->numrows == 0) {
+                if (ctx->model.numrows == 0) {
                     editor_set_status_msg(ctx, "Empty file");
                     break;
                 }
 
                 /* Build full buffer content */
                 size_t total_len = 0;
-                for (int i = 0; i < ctx->numrows; i++) {
-                    total_len += ctx->row[i].size + 1; /* +1 for newline */
+                for (int i = 0; i < ctx->model.numrows; i++) {
+                    total_len += ctx->model.row[i].size + 1; /* +1 for newline */
                 }
                 char *code = malloc(total_len + 1);
                 if (!code) {
@@ -468,15 +468,15 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
                     break;
                 }
                 char *p = code;
-                for (int i = 0; i < ctx->numrows; i++) {
-                    memcpy(p, ctx->row[i].chars, ctx->row[i].size);
-                    p += ctx->row[i].size;
+                for (int i = 0; i < ctx->model.numrows; i++) {
+                    memcpy(p, ctx->model.row[i].chars, ctx->model.row[i].size);
+                    p += ctx->model.row[i].size;
                     *p++ = '\n';
                 }
                 *p = '\0';
 
                 /* Evaluate full file with the appropriate language */
-                const LokiLangOps *lang = loki_lang_for_file(ctx->filename);
+                const LokiLangOps *lang = loki_lang_for_file(ctx->model.filename);
                 if (lang) {
                     int ret = loki_lang_eval(ctx, code);
                     if (ret == 0) {
@@ -497,7 +497,7 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
             {
 #ifdef BUILD_CSOUND_BACKEND
                 /* Handle CSD file stop separately (Csound backend) */
-                if (is_csd_file(ctx->filename)) {
+                if (is_csd_file(ctx->model.filename)) {
                     if (shared_csound_playback_active()) {
                         shared_csound_stop_playback();
                         editor_set_status_msg(ctx, "Stopped");
@@ -538,9 +538,9 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
 
     switch(c) {
         case ESC:
-            ctx->mode = MODE_NORMAL;
+            ctx->view.mode = MODE_NORMAL;
             /* Move cursor left if not at start of line */
-            if (ctx->cx > 0 || ctx->coloff > 0) {
+            if (ctx->view.cx > 0 || ctx->view.coloff > 0) {
                 editor_move_cursor(ctx, ARROW_LEFT);
             }
             break;
@@ -566,14 +566,14 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
         case CTRL_S: editor_save(ctx); break;
         case CTRL_F: editor_find(ctx, fd); break;
         case CTRL_W:
-            ctx->word_wrap = !ctx->word_wrap;
-            editor_set_status_msg(ctx, "Word wrap %s", ctx->word_wrap ? "enabled" : "disabled");
+            ctx->view.word_wrap = !ctx->view.word_wrap;
+            editor_set_status_msg(ctx, "Word wrap %s", ctx->view.word_wrap ? "enabled" : "disabled");
             break;
         case CTRL_L:
             /* Toggle REPL */
-            ctx->repl.active = !ctx->repl.active;
+            ctx->view.repl.active = !ctx->view.repl.active;
             editor_update_repl_layout(ctx);
-            if (ctx->repl.active) {
+            if (ctx->view.repl.active) {
                 editor_set_status_msg(ctx, "Lua REPL active (Ctrl-L or ESC to close)");
             }
             break;
@@ -588,27 +588,27 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
 
 #ifdef BUILD_CSOUND_BACKEND
                 /* Handle .csd files with Csound backend */
-                if (is_csd_file(ctx->filename)) {
+                if (is_csd_file(ctx->model.filename)) {
                     if (c == CTRL_E) {
                         /* Ctrl-E: partial playback not supported for CSD */
                         editor_set_status_msg(ctx, "Partial playback not supported for .csd files (use Ctrl-P)");
                         break;
                     }
                     /* Ctrl-P: play the entire CSD file */
-                    if (ctx->dirty) {
+                    if (ctx->model.dirty) {
                         editor_set_status_msg(ctx, "Save file first (Ctrl-S) before playing");
                         break;
                     }
-                    if (!ctx->filename) {
+                    if (!ctx->model.filename) {
                         editor_set_status_msg(ctx, "No filename - save file first");
                         break;
                     }
                     /* Stop any existing playback */
                     shared_csound_stop_playback();
                     /* Start async playback */
-                    int result = shared_csound_play_file_async(ctx->filename);
+                    int result = shared_csound_play_file_async(ctx->model.filename);
                     if (result == 0) {
-                        editor_set_status_msg(ctx, "Playing %s (Ctrl-G to stop)", ctx->filename);
+                        editor_set_status_msg(ctx, "Playing %s (Ctrl-G to stop)", ctx->model.filename);
                     } else {
                         const char *err = shared_csound_get_error();
                         editor_set_status_msg(ctx, "Csound error: %s", err ? err : "failed to play");
@@ -622,20 +622,20 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
 
                 if (play_file) {
                     /* Play entire file */
-                    if (ctx->numrows == 0) {
+                    if (ctx->model.numrows == 0) {
                         editor_set_status_msg(ctx, "Empty file");
                         break;
                     }
                     size_t total_len = 0;
-                    for (int i = 0; i < ctx->numrows; i++) {
-                        total_len += ctx->row[i].size + 1;
+                    for (int i = 0; i < ctx->model.numrows; i++) {
+                        total_len += ctx->model.row[i].size + 1;
                     }
                     code = malloc(total_len + 1);
                     if (code) {
                         char *p = code;
-                        for (int i = 0; i < ctx->numrows; i++) {
-                            memcpy(p, ctx->row[i].chars, ctx->row[i].size);
-                            p += ctx->row[i].size;
+                        for (int i = 0; i < ctx->model.numrows; i++) {
+                            memcpy(p, ctx->model.row[i].chars, ctx->model.row[i].size);
+                            p += ctx->model.row[i].size;
                             *p++ = '\n';
                         }
                         *p = '\0';
@@ -643,14 +643,14 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
                 } else {
                     /* Play selection or current part */
                     code = get_selection_text(ctx);
-                    if (!code && ctx->numrows > 0 && ctx->cy < ctx->numrows) {
+                    if (!code && ctx->model.numrows > 0 && ctx->view.cy < ctx->model.numrows) {
                         code = get_current_part(ctx);
                     }
                 }
 
                 if (code && *code) {
                     /* Evaluate code with the appropriate language */
-                    const LokiLangOps *lang = loki_lang_for_file(ctx->filename);
+                    const LokiLangOps *lang = loki_lang_for_file(ctx->model.filename);
                     if (lang) {
                         int ret = loki_lang_eval(ctx, code);
                         if (ret == 0) {
@@ -668,7 +668,7 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
                     editor_set_status_msg(ctx, "No code to evaluate");
                 }
                 free(code);
-                ctx->sel_active = 0;
+                ctx->view.sel_active = 0;
             }
             break;
         case CTRL_G:
@@ -676,7 +676,7 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
             {
 #ifdef BUILD_CSOUND_BACKEND
                 /* Handle CSD file stop separately (Csound backend) */
-                if (is_csd_file(ctx->filename)) {
+                if (is_csd_file(ctx->model.filename)) {
                     if (shared_csound_playback_active()) {
                         shared_csound_stop_playback();
                         editor_set_status_msg(ctx, "Stopped");
@@ -692,12 +692,12 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
 
         case PAGE_UP:
         case PAGE_DOWN:
-            if (c == PAGE_UP && ctx->cy != 0)
-                ctx->cy = 0;
-            else if (c == PAGE_DOWN && ctx->cy != ctx->screenrows-1)
-                ctx->cy = ctx->screenrows-1;
+            if (c == PAGE_UP && ctx->view.cy != 0)
+                ctx->view.cy = 0;
+            else if (c == PAGE_DOWN && ctx->view.cy != ctx->view.screenrows-1)
+                ctx->view.cy = ctx->view.screenrows-1;
             {
-                int times = ctx->screenrows;
+                int times = ctx->view.screenrows;
                 while(times--)
                     editor_move_cursor(ctx, c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
             }
@@ -708,10 +708,10 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
         case SHIFT_ARROW_LEFT:
         case SHIFT_ARROW_RIGHT:
             /* Start selection if not active */
-            if (!ctx->sel_active) {
-                ctx->sel_active = 1;
-                ctx->sel_start_x = ctx->cx;
-                ctx->sel_start_y = ctx->cy;
+            if (!ctx->view.sel_active) {
+                ctx->view.sel_active = 1;
+                ctx->view.sel_start_x = ctx->view.cx;
+                ctx->view.sel_start_y = ctx->view.cy;
             }
             /* Move cursor */
             if (c == SHIFT_ARROW_UP) editor_move_cursor(ctx, ARROW_UP);
@@ -719,8 +719,8 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
             else if (c == SHIFT_ARROW_LEFT) editor_move_cursor(ctx, ARROW_LEFT);
             else if (c == SHIFT_ARROW_RIGHT) editor_move_cursor(ctx, ARROW_RIGHT);
             /* Update selection end */
-            ctx->sel_end_x = ctx->cx;
-            ctx->sel_end_y = ctx->cy;
+            ctx->view.sel_end_x = ctx->view.cx;
+            ctx->view.sel_end_y = ctx->view.cy;
             break;
 
         default:
@@ -739,8 +739,8 @@ static void process_visual_mode(editor_ctx_t *ctx, int fd, int c) {
 
     switch(c) {
         case ESC:
-            ctx->mode = MODE_NORMAL;
-            ctx->sel_active = 0;
+            ctx->view.mode = MODE_NORMAL;
+            ctx->view.sel_active = 0;
             break;
 
         /* Movement extends selection */
@@ -748,39 +748,39 @@ static void process_visual_mode(editor_ctx_t *ctx, int fd, int c) {
         case ARROW_LEFT:
             editor_move_cursor(ctx, ARROW_LEFT);
             /* Update selection end in file coordinates */
-            ctx->sel_end_x = ctx->coloff + ctx->cx;
-            ctx->sel_end_y = ctx->rowoff + ctx->cy;
+            ctx->view.sel_end_x = ctx->view.coloff + ctx->view.cx;
+            ctx->view.sel_end_y = ctx->view.rowoff + ctx->view.cy;
             break;
 
         case 'j':
         case ARROW_DOWN:
             editor_move_cursor(ctx, ARROW_DOWN);
             /* Update selection end in file coordinates */
-            ctx->sel_end_x = ctx->coloff + ctx->cx;
-            ctx->sel_end_y = ctx->rowoff + ctx->cy;
+            ctx->view.sel_end_x = ctx->view.coloff + ctx->view.cx;
+            ctx->view.sel_end_y = ctx->view.rowoff + ctx->view.cy;
             break;
 
         case 'k':
         case ARROW_UP:
             editor_move_cursor(ctx, ARROW_UP);
             /* Update selection end in file coordinates */
-            ctx->sel_end_x = ctx->coloff + ctx->cx;
-            ctx->sel_end_y = ctx->rowoff + ctx->cy;
+            ctx->view.sel_end_x = ctx->view.coloff + ctx->view.cx;
+            ctx->view.sel_end_y = ctx->view.rowoff + ctx->view.cy;
             break;
 
         case 'l':
         case ARROW_RIGHT:
             editor_move_cursor(ctx, ARROW_RIGHT);
             /* Update selection end in file coordinates */
-            ctx->sel_end_x = ctx->coloff + ctx->cx;
-            ctx->sel_end_y = ctx->rowoff + ctx->cy;
+            ctx->view.sel_end_x = ctx->view.coloff + ctx->view.cx;
+            ctx->view.sel_end_y = ctx->view.rowoff + ctx->view.cy;
             break;
 
         /* Copy selection */
         case 'y':
             copy_selection_to_clipboard(ctx);
-            ctx->mode = MODE_NORMAL;
-            ctx->sel_active = 0;
+            ctx->view.mode = MODE_NORMAL;
+            ctx->view.sel_active = 0;
             editor_set_status_msg(ctx, "Yanked selection");
             break;
 
@@ -791,14 +791,14 @@ static void process_visual_mode(editor_ctx_t *ctx, int fd, int c) {
                 int deleted = delete_selection(ctx);
                 editor_set_status_msg(ctx, "Deleted %d characters", deleted);
             }
-            ctx->mode = MODE_NORMAL;
+            ctx->view.mode = MODE_NORMAL;
             break;
         case 'x':
             {
                 int deleted = delete_selection(ctx);
                 editor_set_status_msg(ctx, "Deleted %d characters", deleted);
             }
-            ctx->mode = MODE_NORMAL;
+            ctx->view.mode = MODE_NORMAL;
             break;
 
         /* Global commands */
@@ -825,14 +825,14 @@ void modal_process_keypress(editor_ctx_t *ctx, int fd) {
     int c = terminal_read_key(fd);
 
     /* REPL keypress handling */
-    if (ctx->repl.active) {
+    if (ctx->view.repl.active) {
         lua_repl_handle_keypress(ctx, c);
         return;
     }
 
     /* Handle quit globally (works in all modes) */
     if (c == CTRL_Q) {
-        if (ctx->dirty && quit_times) {
+        if (ctx->model.dirty && quit_times) {
             editor_set_status_msg(ctx, "WARNING!!! File has unsaved changes. "
                 "Press Ctrl-Q %d more times to quit.", quit_times);
             quit_times--;
@@ -908,7 +908,7 @@ void modal_process_keypress(editor_ctx_t *ctx, int fd) {
     }
 
     /* Dispatch to mode-specific handler */
-    switch(ctx->mode) {
+    switch(ctx->view.mode) {
         case MODE_NORMAL:
             process_normal_mode(ctx, fd, c);
             break;

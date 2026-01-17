@@ -72,10 +72,10 @@ TEST(editor_open_loads_simple_file) {
     int result = editor_open(&ctx, path);
 
     ASSERT_EQ(result, 0);
-    ASSERT_EQ(ctx.numrows, 2);
-    ASSERT_STR_EQ(ctx.row[0].chars, "Hello");
-    ASSERT_STR_EQ(ctx.row[1].chars, "World");
-    ASSERT_EQ(ctx.dirty, 0);
+    ASSERT_EQ(ctx.model.numrows, 2);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "Hello");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "World");
+    ASSERT_EQ(ctx.model.dirty, 0);
 
     /* Cleanup */
     editor_ctx_free(&ctx);
@@ -96,11 +96,11 @@ TEST(editor_open_handles_crlf) {
     int result = editor_open(&ctx, path);
 
     ASSERT_EQ(result, 0);
-    ASSERT_EQ(ctx.numrows, 3);
+    ASSERT_EQ(ctx.model.numrows, 3);
     /* Should strip both \r and \n */
-    ASSERT_STR_EQ(ctx.row[0].chars, "Line1");
-    ASSERT_STR_EQ(ctx.row[1].chars, "Line2");
-    ASSERT_STR_EQ(ctx.row[2].chars, "Line3");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "Line1");
+    ASSERT_STR_EQ(ctx.model.row[1].chars, "Line2");
+    ASSERT_STR_EQ(ctx.model.row[2].chars, "Line3");
 
     /* Cleanup */
     editor_ctx_free(&ctx);
@@ -128,7 +128,7 @@ TEST(editor_open_rejects_binary_file) {
 
     /* Should reject binary file */
     ASSERT_NEQ(result, 0);
-    ASSERT_EQ(ctx.numrows, 0);
+    ASSERT_EQ(ctx.model.numrows, 0);
 
     /* Cleanup */
     editor_ctx_free(&ctx);
@@ -149,7 +149,7 @@ TEST(editor_open_handles_empty_file) {
     int result = editor_open(&ctx, path);
 
     ASSERT_EQ(result, 0);
-    ASSERT_EQ(ctx.numrows, 0);
+    ASSERT_EQ(ctx.model.numrows, 0);
 
     /* Cleanup */
     editor_ctx_free(&ctx);
@@ -164,26 +164,26 @@ TEST(editor_save_writes_content) {
     editor_ctx_init(&ctx);
 
     /* Set up context with 2 rows */
-    ctx.numrows = 2;
-    ctx.row = calloc(2, sizeof(t_erow));
+    ctx.model.numrows = 2;
+    ctx.model.row = calloc(2, sizeof(t_erow));
 
-    ctx.row[0].chars = strdup("First line");
-    ctx.row[0].size = 10;
-    ctx.row[0].idx = 0;
+    ctx.model.row[0].chars = strdup("First line");
+    ctx.model.row[0].size = 10;
+    ctx.model.row[0].idx = 0;
 
-    ctx.row[1].chars = strdup("Second line");
-    ctx.row[1].size = 11;
-    ctx.row[1].idx = 1;
+    ctx.model.row[1].chars = strdup("Second line");
+    ctx.model.row[1].size = 11;
+    ctx.model.row[1].idx = 1;
 
     char path[256];
     snprintf(path, sizeof(path), "%s/output.txt", TEST_FILE_DIR);
-    ctx.filename = strdup(path);
-    ctx.dirty = 1;
+    ctx.model.filename = strdup(path);
+    ctx.model.dirty = 1;
 
     int result = editor_save(&ctx);
 
     ASSERT_EQ(result, 0);
-    ASSERT_EQ(ctx.dirty, 0);
+    ASSERT_EQ(ctx.model.dirty, 0);
 
     /* Verify file content */
     char *content = read_test_file("output.txt");
@@ -213,8 +213,8 @@ TEST(editor_open_handles_no_trailing_newline) {
     int result = editor_open(&ctx, path);
 
     ASSERT_EQ(result, 0);
-    ASSERT_EQ(ctx.numrows, 1);
-    ASSERT_STR_EQ(ctx.row[0].chars, "Line without newline");
+    ASSERT_EQ(ctx.model.numrows, 1);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "Line without newline");
 
     /* Cleanup */
     editor_ctx_free(&ctx);
@@ -230,7 +230,7 @@ TEST(editor_open_handles_nonexistent_file) {
 
     /* Should fail gracefully */
     ASSERT_NEQ(result, 0);
-    ASSERT_EQ(ctx.numrows, 0);
+    ASSERT_EQ(ctx.model.numrows, 0);
 
     /* Cleanup */
     editor_ctx_free(&ctx);
@@ -258,8 +258,8 @@ TEST(editor_open_handles_long_lines) {
     int result = editor_open(&ctx, path);
 
     ASSERT_EQ(result, 0);
-    ASSERT_EQ(ctx.numrows, 1);
-    ASSERT_EQ(ctx.row[0].size, 1000);
+    ASSERT_EQ(ctx.model.numrows, 1);
+    ASSERT_EQ(ctx.model.row[0].size, 1000);
 
     /* Cleanup */
     editor_ctx_free(&ctx);

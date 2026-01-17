@@ -38,7 +38,7 @@ int indent_detect_style(editor_ctx_t *ctx);
 /* Apply indentation to current line based on previous line.
  * Called when user presses Enter - copies indentation from previous line.
  * If previous line ends with opening brace/bracket, adds one level.
- * ctx->cy should point to the newly created line. */
+ * ctx->view.cy should point to the newly created line. */
 void indent_apply(editor_ctx_t *ctx);
 
 /* Handle electric dedent when typing closing characters.

@@ -51,9 +51,9 @@ void editor_set_status_msg(editor_ctx_t *ctx, const char *fmt, ...) {
     if (!ctx) return;
     va_list ap;
     va_start(ap,fmt);
-    vsnprintf(ctx->statusmsg,sizeof(ctx->statusmsg),fmt,ap);
+    vsnprintf(ctx->view.statusmsg,sizeof(ctx->view.statusmsg),fmt,ap);
     va_end(ap);
-    ctx->statusmsg_time = time(NULL);
+    ctx->view.statusmsg_time = time(NULL);
 }
 
 /* ======================= Context Management =============================== */
@@ -63,32 +63,32 @@ void editor_set_status_msg(editor_ctx_t *ctx, const char *fmt, ...) {
  * and multiple buffer support. */
 void editor_ctx_init(editor_ctx_t *ctx) {
     memset(ctx, 0, sizeof(editor_ctx_t));
-    ctx->cx = 0;
-    ctx->cy = 0;
-    ctx->rowoff = 0;
-    ctx->coloff = 0;
-    ctx->screenrows = 0;
-    ctx->screencols = 0;
-    ctx->screenrows_total = 0;
-    ctx->numrows = 0;
+    ctx->view.cx = 0;
+    ctx->view.cy = 0;
+    ctx->view.rowoff = 0;
+    ctx->view.coloff = 0;
+    ctx->view.screenrows = 0;
+    ctx->view.screencols = 0;
+    ctx->view.screenrows_total = 0;
+    ctx->model.numrows = 0;
     /* Note: rawmode now lives in TerminalHost, not per-buffer */
-    ctx->row = NULL;
-    ctx->dirty = 0;
-    ctx->filename = NULL;
-    ctx->statusmsg[0] = '\0';
-    ctx->statusmsg_time = 0;
-    ctx->syntax = NULL;
-    ctx->L = NULL;
-    memset(&ctx->repl, 0, sizeof(t_lua_repl));
-    ctx->mode = MODE_NORMAL;
-    ctx->word_wrap = 0;
-    ctx->sel_active = 0;
-    ctx->sel_start_x = 0;
-    ctx->sel_start_y = 0;
-    ctx->sel_end_x = 0;
-    ctx->sel_end_y = 0;
+    ctx->model.row = NULL;
+    ctx->model.dirty = 0;
+    ctx->model.filename = NULL;
+    ctx->view.statusmsg[0] = '\0';
+    ctx->view.statusmsg_time = 0;
+    ctx->view.syntax = NULL;
+    ctx->view.L = NULL;
+    memset(&ctx->view.repl, 0, sizeof(t_lua_repl));
+    ctx->view.mode = MODE_NORMAL;
+    ctx->view.word_wrap = 0;
+    ctx->view.sel_active = 0;
+    ctx->view.sel_start_x = 0;
+    ctx->view.sel_start_y = 0;
+    ctx->view.sel_end_x = 0;
+    ctx->view.sel_end_y = 0;
     /* Note: winsize_changed now lives in TerminalHost, not per-buffer */
-    memset(ctx->colors, 0, sizeof(ctx->colors));
+    memset(ctx->view.colors, 0, sizeof(ctx->view.colors));
     /* Command mode state */
     command_mode_init(ctx);
     /* Undo/redo system (1000 operations, 10MB memory limit) */
@@ -101,17 +101,17 @@ void editor_ctx_init(editor_ctx_t *ctx) {
  * This should be called when a context is no longer needed. */
 void editor_ctx_free(editor_ctx_t *ctx) {
     /* Free all row data */
-    for (int i = 0; i < ctx->numrows; i++) {
-        free(ctx->row[i].chars);
-        free(ctx->row[i].render);
-        free(ctx->row[i].hl);
+    for (int i = 0; i < ctx->model.numrows; i++) {
+        free(ctx->model.row[i].chars);
+        free(ctx->model.row[i].render);
+        free(ctx->model.row[i].hl);
     }
-    free(ctx->row);
+    free(ctx->model.row);
 
     /* Free filename */
-    free(ctx->filename);
+    free(ctx->model.filename);
 
-    /* Note: We don't free ctx->L (Lua state) as it's shared across contexts
+    /* Note: We don't free ctx->view.L (Lua state) as it's shared across contexts
      * and managed separately by the editor instance */
 
     /* Free command mode state */
@@ -121,7 +121,7 @@ void editor_ctx_free(editor_ctx_t *ctx) {
     undo_free(ctx);
 
     /* Free indent configuration */
-    free(ctx->indent_config);
+    free(ctx->model.indent_config);
 
     /* Clear the structure */
     memset(ctx, 0, sizeof(editor_ctx_t));
@@ -200,38 +200,38 @@ void editor_update_row(editor_ctx_t *ctx, t_erow *row) {
 /* Insert a row at the specified position, shifting the other rows on the bottom
  * if required. */
 void editor_insert_row(editor_ctx_t *ctx, int at, char *s, size_t len) {
-    if (at > ctx->numrows) return;
+    if (at > ctx->model.numrows) return;
     /* Check for integer overflow in allocation size calculation */
-    if ((size_t)ctx->numrows >= SIZE_MAX / sizeof(t_erow)) {
+    if ((size_t)ctx->model.numrows >= SIZE_MAX / sizeof(t_erow)) {
         fprintf(stderr, "Too many rows, cannot allocate more memory\n");
         exit(1);
     }
-    t_erow *new_row = realloc(ctx->row,sizeof(t_erow)*(ctx->numrows+1));
+    t_erow *new_row = realloc(ctx->model.row,sizeof(t_erow)*(ctx->model.numrows+1));
     if (new_row == NULL) {
         perror("Out of memory");
         exit(1);
     }
-    ctx->row = new_row;
-    if (at != ctx->numrows) {
-        memmove(ctx->row+at+1,ctx->row+at,sizeof(ctx->row[0])*(ctx->numrows-at));
-        for (int j = at+1; j <= ctx->numrows; j++) ctx->row[j].idx++;
+    ctx->model.row = new_row;
+    if (at != ctx->model.numrows) {
+        memmove(ctx->model.row+at+1,ctx->model.row+at,sizeof(ctx->model.row[0])*(ctx->model.numrows-at));
+        for (int j = at+1; j <= ctx->model.numrows; j++) ctx->model.row[j].idx++;
     }
-    ctx->row[at].size = len;
-    ctx->row[at].chars = malloc(len+1);
-    if (ctx->row[at].chars == NULL) {
+    ctx->model.row[at].size = len;
+    ctx->model.row[at].chars = malloc(len+1);
+    if (ctx->model.row[at].chars == NULL) {
         perror("Out of memory");
         exit(1);
     }
-    memcpy(ctx->row[at].chars,s,len+1);
-    ctx->row[at].hl = NULL;
-    ctx->row[at].hl_oc = 0;
-    ctx->row[at].cb_lang = CB_LANG_NONE;
-    ctx->row[at].render = NULL;
-    ctx->row[at].rsize = 0;
-    ctx->row[at].idx = at;
-    editor_update_row(ctx, ctx->row+at);
-    ctx->numrows++;
-    ctx->dirty++;
+    memcpy(ctx->model.row[at].chars,s,len+1);
+    ctx->model.row[at].hl = NULL;
+    ctx->model.row[at].hl_oc = 0;
+    ctx->model.row[at].cb_lang = CB_LANG_NONE;
+    ctx->model.row[at].render = NULL;
+    ctx->model.row[at].rsize = 0;
+    ctx->model.row[at].idx = at;
+    editor_update_row(ctx, ctx->model.row+at);
+    ctx->model.numrows++;
+    ctx->model.dirty++;
 }
 
 /* Free row's heap allocated stuff. */
@@ -246,13 +246,13 @@ void editor_free_row(t_erow *row) {
 void editor_del_row(editor_ctx_t *ctx, int at) {
     t_erow *row;
 
-    if (at >= ctx->numrows) return;
-    row = ctx->row+at;
+    if (at >= ctx->model.numrows) return;
+    row = ctx->model.row+at;
     editor_free_row(row);
-    memmove(ctx->row+at,ctx->row+at+1,sizeof(ctx->row[0])*(ctx->numrows-at-1));
-    for (int j = at; j < ctx->numrows-1; j++) ctx->row[j].idx++;
-    ctx->numrows--;
-    ctx->dirty++;
+    memmove(ctx->model.row+at,ctx->model.row+at+1,sizeof(ctx->model.row[0])*(ctx->model.numrows-at-1));
+    for (int j = at; j < ctx->model.numrows-1; j++) ctx->model.row[j].idx++;
+    ctx->model.numrows--;
+    ctx->model.dirty++;
 }
 
 /* Turn the editor rows into a single heap-allocated string.
@@ -265,16 +265,16 @@ char *editor_rows_to_string(editor_ctx_t *ctx, int *buflen) {
     int j;
 
     /* Compute count of bytes */
-    for (j = 0; j < ctx->numrows; j++)
-        totlen += ctx->row[j].size+1; /* +1 is for "\n" at end of every row */
+    for (j = 0; j < ctx->model.numrows; j++)
+        totlen += ctx->model.row[j].size+1; /* +1 is for "\n" at end of every row */
     *buflen = totlen;
     totlen++; /* Also make space for nulterm */
 
     p = buf = malloc(totlen);
     if (buf == NULL) return NULL;
-    for (j = 0; j < ctx->numrows; j++) {
-        memcpy(p,ctx->row[j].chars,ctx->row[j].size);
-        p += ctx->row[j].size;
+    for (j = 0; j < ctx->model.numrows; j++) {
+        memcpy(p,ctx->model.row[j].chars,ctx->model.row[j].size);
+        p += ctx->model.row[j].size;
         *p = '\n';
         p++;
     }
@@ -315,7 +315,7 @@ void editor_row_insert_char(editor_ctx_t *ctx, t_erow *row, int at, int c) {
     }
     row->chars[at] = c;
     editor_update_row(ctx, row);
-    ctx->dirty++;
+    ctx->model.dirty++;
 }
 
 /* Append the string 's' at the end of a row */
@@ -330,7 +330,7 @@ void editor_row_append_string(editor_ctx_t *ctx, t_erow *row, char *s, size_t le
     row->size += len;
     row->chars[row->size] = '\0';
     editor_update_row(ctx, row);
-    ctx->dirty++;
+    ctx->model.dirty++;
 }
 
 /* Delete the character at offset 'at' from the specified row. */
@@ -340,31 +340,31 @@ void editor_row_del_char(editor_ctx_t *ctx, t_erow *row, int at) {
     memmove(row->chars+at,row->chars+at+1,row->size-at+1);
     row->size--;
     editor_update_row(ctx, row);
-    ctx->dirty++;
+    ctx->model.dirty++;
 }
 
 /* Insert the specified char at the current prompt position. */
 void editor_insert_char(editor_ctx_t *ctx, int c) {
-    int filerow = ctx->rowoff+ctx->cy;
-    int filecol = ctx->coloff+ctx->cx;
-    t_erow *row = (filerow >= ctx->numrows) ? NULL : &ctx->row[filerow];
+    int filerow = ctx->view.rowoff+ctx->view.cy;
+    int filecol = ctx->view.coloff+ctx->view.cx;
+    t_erow *row = (filerow >= ctx->model.numrows) ? NULL : &ctx->model.row[filerow];
 
     /* If the row where the cursor is currently located does not exist in our
      * logical representaion of the file, add enough empty rows as needed. */
     if (!row) {
-        while(ctx->numrows <= filerow)
-            editor_insert_row(ctx, ctx->numrows,"",0);
+        while(ctx->model.numrows <= filerow)
+            editor_insert_row(ctx, ctx->model.numrows,"",0);
     }
-    row = &ctx->row[filerow];
+    row = &ctx->model.row[filerow];
     editor_row_insert_char(ctx, row,filecol,c);
 
     /* Record undo operation */
     undo_record_insert_char(ctx, filerow, filecol, c);
 
-    if (ctx->cx == ctx->screencols-1)
-        ctx->coloff++;
+    if (ctx->view.cx == ctx->view.screencols-1)
+        ctx->view.coloff++;
     else
-        ctx->cx++;
+        ctx->view.cx++;
     /* Note: dirty already incremented by editor_row_insert_char */
 
     /* Handle electric dedent for closing braces */
@@ -374,12 +374,12 @@ void editor_insert_char(editor_ctx_t *ctx, int c) {
 /* Inserting a newline is slightly complex as we have to handle inserting a
  * newline in the middle of a line, splitting the line as needed. */
 void editor_insert_newline(editor_ctx_t *ctx) {
-    int filerow = ctx->rowoff+ctx->cy;
-    int filecol = ctx->coloff+ctx->cx;
-    t_erow *row = (filerow >= ctx->numrows) ? NULL : &ctx->row[filerow];
+    int filerow = ctx->view.rowoff+ctx->view.cy;
+    int filecol = ctx->view.coloff+ctx->view.cx;
+    t_erow *row = (filerow >= ctx->model.numrows) ? NULL : &ctx->model.row[filerow];
 
     if (!row) {
-        if (filerow == ctx->numrows) {
+        if (filerow == ctx->model.numrows) {
             editor_insert_row(ctx, filerow,"",0);
             undo_record_insert_line(ctx, filerow, filecol, "", 0);
             goto fixcursor;
@@ -398,19 +398,19 @@ void editor_insert_newline(editor_ctx_t *ctx) {
         int split_length = row->size - filecol;
         editor_insert_row(ctx, filerow+1, split_content, split_length);
         undo_record_insert_line(ctx, filerow, filecol, split_content, split_length);
-        row = &ctx->row[filerow];
+        row = &ctx->model.row[filerow];
         row->chars[filecol] = '\0';
         row->size = filecol;
         editor_update_row(ctx, row);
     }
 fixcursor:
-    if (ctx->cy == ctx->screenrows-1) {
-        ctx->rowoff++;
+    if (ctx->view.cy == ctx->view.screenrows-1) {
+        ctx->view.rowoff++;
     } else {
-        ctx->cy++;
+        ctx->view.cy++;
     }
-    ctx->cx = 0;
-    ctx->coloff = 0;
+    ctx->view.cx = 0;
+    ctx->view.coloff = 0;
 
     /* Apply auto-indentation */
     indent_apply(ctx);
@@ -418,39 +418,39 @@ fixcursor:
 
 /* Delete the char at the current prompt position. */
 void editor_del_char(editor_ctx_t *ctx) {
-    int filerow = ctx->rowoff+ctx->cy;
-    int filecol = ctx->coloff+ctx->cx;
-    t_erow *row = (filerow >= ctx->numrows) ? NULL : &ctx->row[filerow];
+    int filerow = ctx->view.rowoff+ctx->view.cy;
+    int filecol = ctx->view.coloff+ctx->view.cx;
+    t_erow *row = (filerow >= ctx->model.numrows) ? NULL : &ctx->model.row[filerow];
 
     if (!row || (filecol == 0 && filerow == 0)) return;
     if (filecol == 0) {
         /* Handle the case of column 0, we need to move the current line
          * on the right of the previous one. */
-        filecol = ctx->row[filerow-1].size;
+        filecol = ctx->model.row[filerow-1].size;
         /* Record deleting the newline (merging lines) */
         undo_record_delete_line(ctx, filerow - 1, filecol, row->chars, row->size);
-        editor_row_append_string(ctx, &ctx->row[filerow-1],row->chars,row->size);
+        editor_row_append_string(ctx, &ctx->model.row[filerow-1],row->chars,row->size);
         editor_del_row(ctx, filerow);
         row = NULL;
-        if (ctx->cy == 0)
-            ctx->rowoff--;
+        if (ctx->view.cy == 0)
+            ctx->view.rowoff--;
         else
-            ctx->cy--;
-        ctx->cx = filecol;
-        if (ctx->cx >= ctx->screencols) {
-            int shift = (ctx->cx-ctx->screencols)+1;
-            ctx->cx -= shift;
-            ctx->coloff += shift;
+            ctx->view.cy--;
+        ctx->view.cx = filecol;
+        if (ctx->view.cx >= ctx->view.screencols) {
+            int shift = (ctx->view.cx-ctx->view.screencols)+1;
+            ctx->view.cx -= shift;
+            ctx->view.coloff += shift;
         }
     } else {
         /* Record deleting the character */
         char deleted_char = row->chars[filecol-1];
         undo_record_delete_char(ctx, filerow, filecol-1, deleted_char);
         editor_row_del_char(ctx, row,filecol-1);
-        if (ctx->cx == 0 && ctx->coloff)
-            ctx->coloff--;
+        if (ctx->view.cx == 0 && ctx->view.coloff)
+            ctx->view.coloff--;
         else
-            ctx->cx--;
+            ctx->view.cx--;
     }
     if (row) editor_update_row(ctx, row);
     /* Note: dirty already incremented by editor_row_del_char or editor_del_row */
@@ -461,15 +461,15 @@ void editor_del_char(editor_ctx_t *ctx) {
 int editor_open(editor_ctx_t *ctx, char *filename) {
     FILE *fp;
 
-    ctx->dirty = 0;
-    free(ctx->filename);
+    ctx->model.dirty = 0;
+    free(ctx->model.filename);
     size_t fnlen = strlen(filename)+1;
-    ctx->filename = malloc(fnlen);
-    if (ctx->filename == NULL) {
+    ctx->model.filename = malloc(fnlen);
+    if (ctx->model.filename == NULL) {
         perror("Out of memory");
         exit(1);
     }
-    memcpy(ctx->filename,filename,fnlen);
+    memcpy(ctx->model.filename,filename,fnlen);
 
     fp = fopen(filename,"r");
     if (!fp) {
@@ -498,11 +498,11 @@ int editor_open(editor_ctx_t *ctx, char *filename) {
     while((linelen = getline(&line,&linecap,fp)) != -1) {
         while (linelen > 0 && (line[linelen-1] == '\n' || line[linelen-1] == '\r'))
             line[--linelen] = '\0';
-        editor_insert_row(ctx, ctx->numrows,line,linelen);
+        editor_insert_row(ctx, ctx->model.numrows,line,linelen);
     }
     free(line);
     fclose(fp);
-    ctx->dirty = 0;
+    ctx->model.dirty = 0;
 
     return 0;
 }
@@ -517,13 +517,13 @@ int editor_save(editor_ctx_t *ctx) {
     }
 
     /* Check if buffer has a filename */
-    if (ctx->filename == NULL) {
+    if (ctx->model.filename == NULL) {
         free(buf);
         editor_set_status_msg(ctx, "No file name (use :w <filename> to save)");
         return 1;
     }
 
-    int fd = open(ctx->filename,O_RDWR|O_CREAT,0644);
+    int fd = open(ctx->model.filename,O_RDWR|O_CREAT,0644);
     if (fd == -1) goto writeerr;
 
     /* Use truncate + a single write(2) call in order to make saving
@@ -533,7 +533,7 @@ int editor_save(editor_ctx_t *ctx) {
 
     close(fd);
     free(buf);
-    ctx->dirty = 0;
+    ctx->model.dirty = 0;
     editor_set_status_msg(ctx, "%d bytes written on disk", len);
     return 0;
 
@@ -561,16 +561,16 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
 
     /* Render buffer tabs at top if multiple buffers open */
     int tabs_showing = (buffer_count() > 1) ? 1 : 0;
-    buffers_render_tabs(&ab, ctx->screencols);
+    buffers_render_tabs(&ab, ctx->view.screencols);
 
     /* Reduce available rows if tabs are showing */
-    int available_rows = ctx->screenrows - tabs_showing;
+    int available_rows = ctx->view.screenrows - tabs_showing;
 
     /* Calculate gutter width for line numbers */
     int gutter_width = 0;
-    if (ctx->line_numbers && ctx->numrows > 0) {
+    if (ctx->view.line_numbers && ctx->model.numrows > 0) {
         /* Width = digits needed for max line number + 1 for separator */
-        int max_line = ctx->numrows;
+        int max_line = ctx->model.numrows;
         gutter_width = 1; /* At least 1 digit */
         while (max_line >= 10) {
             gutter_width++;
@@ -580,18 +580,18 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
     }
 
     /* Available cols for text after gutter */
-    int text_cols = ctx->screencols - gutter_width;
+    int text_cols = ctx->view.screencols - gutter_width;
     if (text_cols < 1) text_cols = 1;
 
     for (y = 0; y < available_rows; y++) {
-        int filerow = ctx->rowoff+y;
+        int filerow = ctx->view.rowoff+y;
 
-        if (filerow >= ctx->numrows) {
-            if (ctx->numrows == 0 && y == available_rows/3) {
+        if (filerow >= ctx->model.numrows) {
+            if (ctx->model.numrows == 0 && y == available_rows/3) {
                 char welcome[80];
                 int welcomelen = snprintf(welcome,sizeof(welcome),
                     "Loki editor -- version %s\x1b[0K\r\n", PSND_VERSION);
-                int padding = (ctx->screencols-welcomelen)/2;
+                int padding = (ctx->view.screencols-welcomelen)/2;
                 if (padding) {
                     terminal_buffer_append(&ab,"~",1);
                     padding--;
@@ -600,7 +600,7 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
                 terminal_buffer_append(&ab,welcome,welcomelen);
             } else {
                 /* Empty lines: show gutter filler if line numbers enabled */
-                if (ctx->line_numbers && gutter_width > 0) {
+                if (ctx->view.line_numbers && gutter_width > 0) {
                     terminal_buffer_append(&ab,"\x1b[90m",5); /* Dark gray */
                     for (int i = 0; i < gutter_width - 1; i++)
                         terminal_buffer_append(&ab," ",1);
@@ -615,7 +615,7 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
         }
 
         /* Render line number gutter */
-        if (ctx->line_numbers && gutter_width > 0) {
+        if (ctx->view.line_numbers && gutter_width > 0) {
             char line_num_buf[16];
             int line_num_len = snprintf(line_num_buf, sizeof(line_num_buf),
                 "%*d ", gutter_width - 1, filerow + 1);
@@ -624,18 +624,18 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
             terminal_buffer_append(&ab,"\x1b[39m",5); /* Reset foreground */
         }
 
-        r = &ctx->row[filerow];
+        r = &ctx->model.row[filerow];
 
-        int len = r->rsize - ctx->coloff;
+        int len = r->rsize - ctx->view.coloff;
         int current_color = -1;
 
         /* Word wrap: clamp to screen width and find word boundary */
-        if (ctx->word_wrap && len > text_cols && r->cb_lang == CB_LANG_NONE) {
+        if (ctx->view.word_wrap && len > text_cols && r->cb_lang == CB_LANG_NONE) {
             len = text_cols;
             /* Find last space/separator to break at word boundary */
             int last_space = -1;
             for (int k = 0; k < len; k++) {
-                if (isspace(r->render[ctx->coloff + k])) {
+                if (isspace(r->render[ctx->view.coloff + k])) {
                     last_space = k;
                 }
             }
@@ -646,11 +646,11 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
 
         if (len > 0) {
             if (len > text_cols) len = text_cols;
-            char *c = r->render+ctx->coloff;
-            unsigned char *hl = r->hl+ctx->coloff;
+            char *c = r->render+ctx->view.coloff;
+            unsigned char *hl = r->hl+ctx->view.coloff;
             int j;
             for (j = 0; j < len; j++) {
-                int selected = is_selected(ctx, filerow, ctx->coloff + j);
+                int selected = is_selected(ctx, filerow, ctx->view.coloff + j);
 
                 /* Apply selection background */
                 if (selected) {
@@ -714,7 +714,7 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
     const char *mode_str = "";
     int link_active = loki_link_is_initialized(ctx) && loki_link_is_enabled(ctx);
 
-    switch(ctx->mode) {
+    switch(ctx->view.mode) {
         case MODE_NORMAL: mode_str = link_active ? "LINK" : "NORMAL"; break;
         case MODE_INSERT: mode_str = "INSERT"; break;
         case MODE_VISUAL: mode_str = "VISUAL"; break;
@@ -722,7 +722,7 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
     }
 
     /* Show language indicator if a language is active for this file */
-    const LokiLangOps *lang = loki_lang_for_file(ctx->filename);
+    const LokiLangOps *lang = loki_lang_for_file(ctx->model.filename);
     const char *lang_str = "";
     char lang_buf[16] = "";
     if (lang && lang->is_initialized && lang->is_initialized(ctx)) {
@@ -737,16 +737,16 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
     }
 
     int len = snprintf(status, sizeof(status), " %s%s  %.20s - %d lines %s",
-        lang_str, mode_str, ctx->filename, ctx->numrows, ctx->dirty ? "(modified)" : "");
+        lang_str, mode_str, ctx->model.filename, ctx->model.numrows, ctx->model.dirty ? "(modified)" : "");
 
     /* Show playing indicator if any language is playing */
     const char *playing = loki_lang_is_playing(ctx) ? "[PLAYING] " : "";
     int rlen = snprintf(rstatus, sizeof(rstatus),
-        "%s%d/%d", playing, ctx->rowoff+ctx->cy+1, ctx->numrows);
-    if (len > ctx->screencols) len = ctx->screencols;
+        "%s%d/%d", playing, ctx->view.rowoff+ctx->view.cy+1, ctx->model.numrows);
+    if (len > ctx->view.screencols) len = ctx->view.screencols;
     terminal_buffer_append(&ab,status,len);
-    while(len < ctx->screencols) {
-        if (ctx->screencols - len == rlen) {
+    while(len < ctx->view.screencols) {
+        if (ctx->view.screencols - len == rlen) {
             terminal_buffer_append(&ab,rstatus,rlen);
             break;
         } else {
@@ -760,58 +760,58 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
     /* Note: buffer tabs are rendered in a separate line above the status bar */
     /* This is done by the buffers module */
 
-    /* Second row depends on ctx->statusmsg and the status message update time. */
+    /* Second row depends on ctx->view.statusmsg and the status message update time. */
     terminal_buffer_append(&ab,"\x1b[0K",4);
-    int msglen = strlen(ctx->statusmsg);
-    if (msglen && time(NULL)-ctx->statusmsg_time < 5)
-        terminal_buffer_append(&ab,ctx->statusmsg,msglen <= ctx->screencols ? msglen : ctx->screencols);
+    int msglen = strlen(ctx->view.statusmsg);
+    if (msglen && time(NULL)-ctx->view.statusmsg_time < 5)
+        terminal_buffer_append(&ab,ctx->view.statusmsg,msglen <= ctx->view.screencols ? msglen : ctx->view.screencols);
 
     /* Render REPL if active */
-    if (ctx->repl.active) lua_repl_render(ctx, &ab);
+    if (ctx->view.repl.active) lua_repl_render(ctx, &ab);
 
     /* Put cursor at its current position. Note that the horizontal position
-     * at which the cursor is displayed may be different compared to 'ctx->cx'
+     * at which the cursor is displayed may be different compared to 'ctx->view.cx'
      * because of TABs. */
     int cursor_row = 1;
     int cursor_col = 1;
 
     /* Calculate cursor position - different for REPL vs editor mode */
-    if (ctx->repl.active) {
+    if (ctx->view.repl.active) {
         /* REPL mode: cursor is on the REPL prompt line */
         int prompt_len = (int)strlen(LUA_REPL_PROMPT);
-        int visible = ctx->repl.input_len;
-        if (prompt_len + visible >= ctx->screencols) {
-            visible = ctx->screencols > prompt_len ? ctx->screencols - prompt_len : 0;
+        int visible = ctx->view.repl.input_len;
+        if (prompt_len + visible >= ctx->view.screencols) {
+            visible = ctx->view.screencols > prompt_len ? ctx->view.screencols - prompt_len : 0;
         }
-        cursor_row = ctx->screenrows + STATUS_ROWS + LUA_REPL_OUTPUT_ROWS + 1;
+        cursor_row = ctx->view.screenrows + STATUS_ROWS + LUA_REPL_OUTPUT_ROWS + 1;
         cursor_col = prompt_len + visible + 1;
         if (cursor_col < 1) cursor_col = 1;
-        if (cursor_col > ctx->screencols) cursor_col = ctx->screencols;
+        if (cursor_col > ctx->view.screencols) cursor_col = ctx->view.screencols;
     } else {
         /* Editor mode: cursor is in the text area */
         int cx = 1;
-        int filerow = ctx->rowoff+ctx->cy;
-        t_erow *row = (filerow >= ctx->numrows) ? NULL : &ctx->row[filerow];
+        int filerow = ctx->view.rowoff+ctx->view.cy;
+        t_erow *row = (filerow >= ctx->model.numrows) ? NULL : &ctx->model.row[filerow];
         if (row) {
-            for (int j = ctx->coloff; j < (ctx->cx+ctx->coloff); j++) {
+            for (int j = ctx->view.coloff; j < (ctx->view.cx+ctx->view.coloff); j++) {
                 if (j < row->size && row->chars[j] == TAB)
                     cx += 7-((cx)%8);
                 cx++;
             }
         }
         /* Account for line numbers gutter */
-        if (ctx->line_numbers && ctx->numrows > 0) {
+        if (ctx->view.line_numbers && ctx->model.numrows > 0) {
             int gw = 1;
-            int max_ln = ctx->numrows;
+            int max_ln = ctx->model.numrows;
             while (max_ln >= 10) { gw++; max_ln /= 10; }
             gw += 1; /* Space separator */
             cx += gw;
         }
         /* Account for tab bar at top if multiple buffers are open */
         int tab_offset = (buffer_count() > 1) ? 1 : 0;
-        cursor_row = ctx->cy + 1 + tab_offset;
+        cursor_row = ctx->view.cy + 1 + tab_offset;
         cursor_col = cx;
-        if (cursor_col > ctx->screencols) cursor_col = ctx->screencols;
+        if (cursor_col > ctx->view.screencols) cursor_col = ctx->view.screencols;
     }
 
     snprintf(buf,sizeof(buf),"\x1b[%d;%dH",cursor_row,cursor_col);
@@ -829,74 +829,74 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
 
 /* Handle cursor position change because arrow keys were pressed. */
 void editor_move_cursor(editor_ctx_t *ctx, int key) {
-    int filerow = ctx->rowoff+ctx->cy;
-    int filecol = ctx->coloff+ctx->cx;
+    int filerow = ctx->view.rowoff+ctx->view.cy;
+    int filecol = ctx->view.coloff+ctx->view.cx;
     int rowlen;
-    t_erow *row = (filerow >= ctx->numrows) ? NULL : &ctx->row[filerow];
+    t_erow *row = (filerow >= ctx->model.numrows) ? NULL : &ctx->model.row[filerow];
 
     switch(key) {
     case ARROW_LEFT:
-        if (ctx->cx == 0) {
-            if (ctx->coloff) {
-                ctx->coloff--;
+        if (ctx->view.cx == 0) {
+            if (ctx->view.coloff) {
+                ctx->view.coloff--;
             } else {
                 if (filerow > 0) {
-                    ctx->cy--;
-                    ctx->cx = ctx->row[filerow-1].size;
-                    if (ctx->cx > ctx->screencols-1) {
-                        ctx->coloff = ctx->cx-ctx->screencols+1;
-                        ctx->cx = ctx->screencols-1;
+                    ctx->view.cy--;
+                    ctx->view.cx = ctx->model.row[filerow-1].size;
+                    if (ctx->view.cx > ctx->view.screencols-1) {
+                        ctx->view.coloff = ctx->view.cx-ctx->view.screencols+1;
+                        ctx->view.cx = ctx->view.screencols-1;
                     }
                 }
             }
         } else {
-            ctx->cx -= 1;
+            ctx->view.cx -= 1;
         }
         break;
     case ARROW_RIGHT:
         if (row && filecol < row->size) {
-            if (ctx->cx == ctx->screencols-1) {
-                ctx->coloff++;
+            if (ctx->view.cx == ctx->view.screencols-1) {
+                ctx->view.coloff++;
             } else {
-                ctx->cx += 1;
+                ctx->view.cx += 1;
             }
         } else if (row && filecol == row->size) {
-            ctx->cx = 0;
-            ctx->coloff = 0;
-            if (ctx->cy == ctx->screenrows-1) {
-                ctx->rowoff++;
+            ctx->view.cx = 0;
+            ctx->view.coloff = 0;
+            if (ctx->view.cy == ctx->view.screenrows-1) {
+                ctx->view.rowoff++;
             } else {
-                ctx->cy += 1;
+                ctx->view.cy += 1;
             }
         }
         break;
     case ARROW_UP:
-        if (ctx->cy == 0) {
-            if (ctx->rowoff) ctx->rowoff--;
+        if (ctx->view.cy == 0) {
+            if (ctx->view.rowoff) ctx->view.rowoff--;
         } else {
-            ctx->cy -= 1;
+            ctx->view.cy -= 1;
         }
         break;
     case ARROW_DOWN:
-        if (filerow < ctx->numrows) {
-            if (ctx->cy == ctx->screenrows-1) {
-                ctx->rowoff++;
+        if (filerow < ctx->model.numrows) {
+            if (ctx->view.cy == ctx->view.screenrows-1) {
+                ctx->view.rowoff++;
             } else {
-                ctx->cy += 1;
+                ctx->view.cy += 1;
             }
         }
         break;
     }
     /* Fix cx if the current line has not enough chars. */
-    filerow = ctx->rowoff+ctx->cy;
-    filecol = ctx->coloff+ctx->cx;
-    row = (filerow >= ctx->numrows) ? NULL : &ctx->row[filerow];
+    filerow = ctx->view.rowoff+ctx->view.cy;
+    filecol = ctx->view.coloff+ctx->view.cx;
+    row = (filerow >= ctx->model.numrows) ? NULL : &ctx->model.row[filerow];
     rowlen = row ? row->size : 0;
     if (filecol > rowlen) {
-        ctx->cx -= filecol-rowlen;
-        if (ctx->cx < 0) {
-            ctx->coloff += ctx->cx;
-            ctx->cx = 0;
+        ctx->view.cx -= filecol-rowlen;
+        if (ctx->view.cx < 0) {
+            ctx->view.coloff += ctx->view.cx;
+            ctx->view.cx = 0;
         }
     }
 }
@@ -910,20 +910,20 @@ void editor_process_keypress(editor_ctx_t *ctx, int fd) {
 }
 
 void init_editor(editor_ctx_t *ctx) {
-    ctx->cx = 0;
-    ctx->cy = 0;
-    ctx->rowoff = 0;
-    ctx->coloff = 0;
-    ctx->numrows = 0;
-    ctx->row = NULL;
-    ctx->dirty = 0;
-    ctx->filename = NULL;
-    ctx->syntax = NULL;
-    ctx->mode = MODE_NORMAL;  /* Start in normal mode (vim-like) */
-    ctx->word_wrap = 1;  /* Word wrap enabled by default */
-    ctx->sel_active = 0;
-    ctx->sel_start_x = ctx->sel_start_y = 0;
-    ctx->sel_end_x = ctx->sel_end_y = 0;
+    ctx->view.cx = 0;
+    ctx->view.cy = 0;
+    ctx->view.rowoff = 0;
+    ctx->view.coloff = 0;
+    ctx->model.numrows = 0;
+    ctx->model.row = NULL;
+    ctx->model.dirty = 0;
+    ctx->model.filename = NULL;
+    ctx->view.syntax = NULL;
+    ctx->view.mode = MODE_NORMAL;  /* Start in normal mode (vim-like) */
+    ctx->view.word_wrap = 1;  /* Word wrap enabled by default */
+    ctx->view.sel_active = 0;
+    ctx->view.sel_start_x = ctx->view.sel_start_y = 0;
+    ctx->view.sel_end_x = ctx->view.sel_end_y = 0;
     syntax_init_default_colors(ctx);
     /* Lua REPL init and Lua initialization are in loki_editor.c */
     terminal_update_window_size(ctx);

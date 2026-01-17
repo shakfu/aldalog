@@ -31,7 +31,7 @@ static void free_test_ctx(editor_ctx_t *ctx) {
 
 /* Helper: Insert a line of text at the end of the buffer */
 static void insert_line(editor_ctx_t *ctx, const char *text) {
-    editor_insert_row(ctx, ctx->numrows, (char *)text, strlen(text));
+    editor_insert_row(ctx, ctx->model.numrows, (char *)text, strlen(text));
 }
 
 /* Test: indent_get_level() correctly counts leading spaces */
@@ -195,8 +195,8 @@ TEST(indent_apply_basic) {
 
     /* Create a new empty line and apply indent */
     editor_insert_row(ctx, 1, "", 0);
-    ctx->cy = 1;
-    ctx->cx = 0;
+    ctx->view.cy = 1;
+    ctx->view.cx = 0;
 
     indent_apply(ctx);
 
@@ -215,8 +215,8 @@ TEST(indent_apply_after_brace) {
 
     /* Create a new line and apply indent */
     editor_insert_row(ctx, 1, "", 0);
-    ctx->cy = 1;
-    ctx->cx = 0;
+    ctx->view.cy = 1;
+    ctx->view.cx = 0;
 
     indent_apply(ctx);
 
@@ -233,8 +233,8 @@ TEST(indent_apply_after_bracket) {
     insert_line(ctx, "  array = [");
 
     editor_insert_row(ctx, 1, "", 0);
-    ctx->cy = 1;
-    ctx->cx = 0;
+    ctx->view.cy = 1;
+    ctx->view.cx = 0;
 
     indent_apply(ctx);
 
@@ -251,8 +251,8 @@ TEST(indent_apply_after_paren) {
     insert_line(ctx, "  function(");
 
     editor_insert_row(ctx, 1, "", 0);
-    ctx->cy = 1;
-    ctx->cx = 0;
+    ctx->view.cy = 1;
+    ctx->view.cx = 0;
 
     indent_apply(ctx);
 
@@ -269,8 +269,8 @@ TEST(indent_apply_brace_with_trailing_space) {
     insert_line(ctx, "    if (condition) {  ");  /* Trailing spaces after { */
 
     editor_insert_row(ctx, 1, "", 0);
-    ctx->cy = 1;
-    ctx->cx = 0;
+    ctx->view.cy = 1;
+    ctx->view.cx = 0;
 
     indent_apply(ctx);
 
@@ -286,8 +286,8 @@ TEST(indent_apply_first_line) {
 
     /* Create first line */
     editor_insert_row(ctx, 0, "", 0);
-    ctx->cy = 0;
-    ctx->cx = 0;
+    ctx->view.cy = 0;
+    ctx->view.cx = 0;
 
     indent_apply(ctx);
 
@@ -307,8 +307,8 @@ TEST(indent_apply_disabled) {
     indent_set_enabled(ctx, 0);
 
     editor_insert_row(ctx, 1, "", 0);
-    ctx->cy = 1;
-    ctx->cx = 0;
+    ctx->view.cy = 1;
+    ctx->view.cx = 0;
 
     indent_apply(ctx);
 
@@ -328,8 +328,8 @@ TEST(indent_electric_dedent_brace) {
 
     /* User is on a new line with 8 spaces, about to type } */
     editor_insert_row(ctx, 2, "        ", 8);
-    ctx->cy = 2;
-    ctx->cx = 8;
+    ctx->view.cy = 2;
+    ctx->view.cx = 8;
 
     /* Typing } should trigger dedent */
     int dedented = indent_electric_char(ctx, '}');
@@ -351,8 +351,8 @@ TEST(indent_electric_dedent_bracket) {
     insert_line(ctx, "      1, 2, 3");
     insert_line(ctx, "      ");  /* 6 spaces, about to type ] */
 
-    ctx->cy = 2;
-    ctx->cx = 6;
+    ctx->view.cy = 2;
+    ctx->view.cx = 6;
 
     int dedented = indent_electric_char(ctx, ']');
 
@@ -370,8 +370,8 @@ TEST(indent_electric_dedent_paren) {
     insert_line(ctx, "    arg1,");
     insert_line(ctx, "    ");  /* About to type ) */
 
-    ctx->cy = 2;
-    ctx->cx = 4;
+    ctx->view.cy = 2;
+    ctx->view.cx = 4;
 
     int dedented = indent_electric_char(ctx, ')');
 
@@ -388,8 +388,8 @@ TEST(indent_electric_no_dedent_with_content) {
     insert_line(ctx, "{");
     insert_line(ctx, "    code}");  /* Has content before } */
 
-    ctx->cy = 1;
-    ctx->cx = 9;
+    ctx->view.cy = 1;
+    ctx->view.cx = 9;
 
     int dedented = indent_electric_char(ctx, '}');
 
@@ -407,8 +407,8 @@ TEST(indent_electric_disabled) {
     insert_line(ctx, "{");
     insert_line(ctx, "    ");
 
-    ctx->cy = 1;
-    ctx->cx = 4;
+    ctx->view.cy = 1;
+    ctx->view.cx = 4;
 
     /* Disable electric dedent - need to access via helper */
     /* Note: electric_enabled is part of indent_config opaque structure,
@@ -431,8 +431,8 @@ TEST(indent_electric_only_closing_chars) {
     insert_line(ctx, "{");
     insert_line(ctx, "    ");
 
-    ctx->cy = 1;
-    ctx->cx = 4;
+    ctx->view.cy = 1;
+    ctx->view.cx = 4;
 
     /* Typing regular character should not trigger dedent */
     int dedented = indent_electric_char(ctx, 'a');
@@ -453,8 +453,8 @@ TEST(indent_electric_nested_braces) {
     insert_line(ctx, "        code");
     insert_line(ctx, "        ");  /* About to type first } */
 
-    ctx->cy = 3;
-    ctx->cx = 8;
+    ctx->view.cy = 3;
+    ctx->view.cx = 8;
 
     /* First closing brace should dedent to match "inner {" */
     int dedented = indent_electric_char(ctx, '}');
@@ -474,8 +474,8 @@ TEST(indent_electric_mismatched_brackets) {
     insert_line(ctx, "    1, 2, 3");
     insert_line(ctx, "    ");
 
-    ctx->cy = 2;
-    ctx->cx = 4;
+    ctx->view.cy = 2;
+    ctx->view.cx = 4;
 
     /* Should still dedent even if brackets don't match perfectly */
     int dedented = indent_electric_char(ctx, '}');

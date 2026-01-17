@@ -31,50 +31,50 @@ void indent_init(editor_ctx_t *ctx) {
     config->width = 4;    /* 4 spaces per indent level */
     config->electric_enabled = 1;  /* Electric dedent on by default */
 
-    ctx->indent_config = config;
+    ctx->model.indent_config = config;
 }
 
 /* Enable or disable auto-indent */
 void indent_set_enabled(editor_ctx_t *ctx, int enabled) {
-    if (!ctx->indent_config) return;
-    ctx->indent_config->enabled = enabled;
+    if (!ctx->model.indent_config) return;
+    ctx->model.indent_config->enabled = enabled;
 }
 
 /* Set indentation width */
 void indent_set_width(editor_ctx_t *ctx, int width) {
-    if (!ctx->indent_config) return;
+    if (!ctx->model.indent_config) return;
     if (width < 1) width = 1;
     if (width > 8) width = 8;
-    ctx->indent_config->width = width;
+    ctx->model.indent_config->width = width;
 }
 
 /* Test-only accessor: get indentation width */
 int indent_get_width(editor_ctx_t *ctx) {
-    if (!ctx->indent_config) return 0;
-    return ctx->indent_config->width;
+    if (!ctx->model.indent_config) return 0;
+    return ctx->model.indent_config->width;
 }
 
 /* Test-only accessor: get enabled state */
 int indent_get_enabled(editor_ctx_t *ctx) {
-    if (!ctx->indent_config) return 0;
-    return ctx->indent_config->enabled;
+    if (!ctx->model.indent_config) return 0;
+    return ctx->model.indent_config->enabled;
 }
 
 /* Test-only accessor: get electric dedent enabled state */
 int indent_get_electric_enabled(editor_ctx_t *ctx) {
-    if (!ctx->indent_config) return 0;
-    return ctx->indent_config->electric_enabled;
+    if (!ctx->model.indent_config) return 0;
+    return ctx->model.indent_config->electric_enabled;
 }
 
 /* Get the indentation level of a row in spaces.
  * Counts leading whitespace, converting tabs to spaces based on width. */
 int indent_get_level(editor_ctx_t *ctx, int row) {
-    if (row < 0 || row >= ctx->numrows) return 0;
-    if (!ctx->indent_config) return 0;
+    if (row < 0 || row >= ctx->model.numrows) return 0;
+    if (!ctx->model.indent_config) return 0;
 
-    t_erow *erow = &ctx->row[row];
+    t_erow *erow = &ctx->model.row[row];
     int level = 0;
-    int width = ctx->indent_config->width;
+    int width = ctx->model.indent_config->width;
 
     for (int i = 0; i < erow->size; i++) {
         if (erow->chars[i] == ' ') {
@@ -97,10 +97,10 @@ int indent_detect_style(editor_ctx_t *ctx) {
     int space_count = 0;
 
     /* Sample up to 100 lines to detect style */
-    int sample_size = ctx->numrows < 100 ? ctx->numrows : 100;
+    int sample_size = ctx->model.numrows < 100 ? ctx->model.numrows : 100;
 
     for (int i = 0; i < sample_size; i++) {
-        t_erow *row = &ctx->row[i];
+        t_erow *row = &ctx->model.row[i];
         if (row->size == 0) continue;
 
         /* Check first character - if it's whitespace, count it */
@@ -149,11 +149,11 @@ static int line_ends_with_opening(t_erow *row) {
 /* Insert indentation at the current cursor position.
  * Respects the configured indentation style (tabs or spaces). */
 static void insert_indentation(editor_ctx_t *ctx, int level) {
-    if (!ctx->indent_config) return;
+    if (!ctx->model.indent_config) return;
     if (level <= 0) return;
 
-    int width = ctx->indent_config->width;
-    int style = ctx->indent_config->style;
+    int width = ctx->model.indent_config->width;
+    int style = ctx->model.indent_config->style;
 
     if (style == INDENT_STYLE_TABS) {
         /* Use tabs: convert level to tab count */
@@ -176,20 +176,20 @@ static void insert_indentation(editor_ctx_t *ctx, int level) {
 
 /* Apply indentation to current line based on previous line.
  * Called after editor_insert_newline() creates a new line.
- * ctx->cy should point to the new (empty) line. */
+ * ctx->view.cy should point to the new (empty) line. */
 void indent_apply(editor_ctx_t *ctx) {
-    if (!ctx->indent_config) return;
-    if (!ctx->indent_config->enabled) return;
-    if (ctx->cy == 0) return;  /* No previous line */
+    if (!ctx->model.indent_config) return;
+    if (!ctx->model.indent_config->enabled) return;
+    if (ctx->view.cy == 0) return;  /* No previous line */
 
     /* Get indentation from previous line */
-    int prev_row = ctx->cy - 1;
+    int prev_row = ctx->view.cy - 1;
     int base_indent = indent_get_level(ctx, prev_row);
 
     /* Check if previous line ends with opening brace/bracket */
     int extra_indent = 0;
-    if (line_ends_with_opening(&ctx->row[prev_row])) {
-        extra_indent = ctx->indent_config->width;
+    if (line_ends_with_opening(&ctx->model.row[prev_row])) {
+        extra_indent = ctx->model.indent_config->width;
     }
 
     /* Insert the indentation */
@@ -201,16 +201,16 @@ void indent_apply(editor_ctx_t *ctx) {
  * If the current line has only whitespace + the closing char, dedent by one level.
  * Returns 1 if dedent was applied, 0 otherwise. */
 int indent_electric_char(editor_ctx_t *ctx, int c) {
-    if (!ctx->indent_config) return 0;
-    if (!ctx->indent_config->enabled) return 0;  /* Respect general enabled flag */
-    if (!ctx->indent_config->electric_enabled) return 0;
+    if (!ctx->model.indent_config) return 0;
+    if (!ctx->model.indent_config->enabled) return 0;  /* Respect general enabled flag */
+    if (!ctx->model.indent_config->electric_enabled) return 0;
     if (!is_closing_char(c)) return 0;
-    if (ctx->cy < 0 || ctx->cy >= ctx->numrows) return 0;
+    if (ctx->view.cy < 0 || ctx->view.cy >= ctx->model.numrows) return 0;
 
-    t_erow *row = &ctx->row[ctx->cy];
+    t_erow *row = &ctx->model.row[ctx->view.cy];
 
     /* Check if line contains only whitespace before cursor */
-    for (int i = 0; i < ctx->cx; i++) {
+    for (int i = 0; i < ctx->view.cx; i++) {
         if (!isspace(row->chars[i])) {
             return 0;  /* Non-whitespace before cursor - no dedent */
         }
@@ -222,8 +222,8 @@ int indent_electric_char(editor_ctx_t *ctx, int c) {
     int depth = 1;  /* We're looking for the matching opening */
 
     /* Scan backwards from previous line */
-    for (int r = ctx->cy - 1; r >= 0; r--) {
-        t_erow *scan_row = &ctx->row[r];
+    for (int r = ctx->view.cy - 1; r >= 0; r--) {
+        t_erow *scan_row = &ctx->model.row[r];
         for (int i = scan_row->size - 1; i >= 0; i--) {
             char ch = scan_row->chars[i];
             if (ch == c) {
@@ -242,20 +242,20 @@ int indent_electric_char(editor_ctx_t *ctx, int c) {
 found_match:
     /* If we didn't find a match, just dedent by one level */
     if (target_indent < 0) {
-        int current_indent = indent_get_level(ctx, ctx->cy);
-        target_indent = current_indent - ctx->indent_config->width;
+        int current_indent = indent_get_level(ctx, ctx->view.cy);
+        target_indent = current_indent - ctx->model.indent_config->width;
         if (target_indent < 0) target_indent = 0;
     }
 
     /* Calculate how much to dedent */
-    int current_indent = indent_get_level(ctx, ctx->cy);
+    int current_indent = indent_get_level(ctx, ctx->view.cy);
     int dedent_amount = current_indent - target_indent;
 
     if (dedent_amount <= 0) return 0;  /* Already at or past target */
 
     /* Delete leading whitespace characters */
     int deleted = 0;
-    while (deleted < dedent_amount && ctx->cx > 0) {
+    while (deleted < dedent_amount && ctx->view.cx > 0) {
         /* Delete character before cursor (backspace) */
         editor_del_char(ctx);
         deleted++;

@@ -30,12 +30,12 @@ static const char base64_table[] =
  * Returns 1 if selected, 0 otherwise.
  * Handles both single-line and multi-line selections. */
 int is_selected(editor_ctx_t *ctx, int row, int col) {
-    if (!ctx->sel_active) return 0;
+    if (!ctx->view.sel_active) return 0;
 
-    int start_y = ctx->sel_start_y;
-    int start_x = ctx->sel_start_x;
-    int end_y = ctx->sel_end_y;
-    int end_x = ctx->sel_end_x;
+    int start_y = ctx->view.sel_start_y;
+    int start_x = ctx->view.sel_start_x;
+    int end_y = ctx->view.sel_end_y;
+    int end_x = ctx->view.sel_end_x;
 
     /* Ensure start comes before end */
     if (start_y > end_y || (start_y == end_y && start_x > end_x)) {
@@ -95,16 +95,16 @@ char *base64_encode(const char *input, size_t len) {
  * This works over SSH and doesn't require X11 or platform-specific clipboard APIs.
  * Clears the selection after successful copy. */
 void copy_selection_to_clipboard(editor_ctx_t *ctx) {
-    if (!ctx->sel_active) {
+    if (!ctx->view.sel_active) {
         editor_set_status_msg(ctx, "No selection");
         return;
     }
 
     /* Ensure start comes before end */
-    int start_y = ctx->sel_start_y;
-    int start_x = ctx->sel_start_x;
-    int end_y = ctx->sel_end_y;
-    int end_x = ctx->sel_end_x;
+    int start_y = ctx->view.sel_start_y;
+    int start_x = ctx->view.sel_start_x;
+    int end_y = ctx->view.sel_end_y;
+    int end_x = ctx->view.sel_end_x;
 
     if (start_y > end_y || (start_y == end_y && start_x > end_x)) {
         int tmp;
@@ -119,10 +119,10 @@ void copy_selection_to_clipboard(editor_ctx_t *ctx) {
     text = malloc(text_capacity);
     if (!text) return;
 
-    for (int y = start_y; y <= end_y && y < ctx->numrows; y++) {
+    for (int y = start_y; y <= end_y && y < ctx->model.numrows; y++) {
         int x_start = (y == start_y) ? start_x : 0;
-        int x_end = (y == end_y) ? end_x : ctx->row[y].size;
-        if (x_end > ctx->row[y].size) x_end = ctx->row[y].size;
+        int x_end = (y == end_y) ? end_x : ctx->model.row[y].size;
+        if (x_end > ctx->model.row[y].size) x_end = ctx->model.row[y].size;
 
         int len = x_end - x_start;
         if (len > 0) {
@@ -132,7 +132,7 @@ void copy_selection_to_clipboard(editor_ctx_t *ctx) {
                 if (!new_text) { free(text); return; }
                 text = new_text;
             }
-            memcpy(text + text_len, ctx->row[y].chars + x_start, len);
+            memcpy(text + text_len, ctx->model.row[y].chars + x_start, len);
             text_len += len;
         }
         if (y < end_y) {
@@ -152,7 +152,7 @@ void copy_selection_to_clipboard(editor_ctx_t *ctx) {
     free(encoded);
 
     editor_set_status_msg(ctx, "Copied %d bytes to clipboard", (int)text_len);
-    ctx->sel_active = 0;  /* Clear selection after copy */
+    ctx->view.sel_active = 0;  /* Clear selection after copy */
 }
 
 /* Forward declarations for row operations */
@@ -165,15 +165,15 @@ void editor_update_row(editor_ctx_t *ctx, t_erow *row);
  * Caller must free the returned string.
  * Returns NULL if no selection or allocation failure. */
 char *get_selection_text(editor_ctx_t *ctx) {
-    if (!ctx->sel_active) {
+    if (!ctx->view.sel_active) {
         return NULL;
     }
 
     /* Ensure start comes before end */
-    int start_y = ctx->sel_start_y;
-    int start_x = ctx->sel_start_x;
-    int end_y = ctx->sel_end_y;
-    int end_x = ctx->sel_end_x;
+    int start_y = ctx->view.sel_start_y;
+    int start_x = ctx->view.sel_start_x;
+    int end_y = ctx->view.sel_end_y;
+    int end_x = ctx->view.sel_end_x;
 
     if (start_y > end_y || (start_y == end_y && start_x > end_x)) {
         int tmp;
@@ -188,10 +188,10 @@ char *get_selection_text(editor_ctx_t *ctx) {
     text = malloc(text_capacity);
     if (!text) return NULL;
 
-    for (int y = start_y; y <= end_y && y < ctx->numrows; y++) {
+    for (int y = start_y; y <= end_y && y < ctx->model.numrows; y++) {
         int x_start = (y == start_y) ? start_x : 0;
-        int x_end = (y == end_y) ? end_x : ctx->row[y].size;
-        if (x_end > ctx->row[y].size) x_end = ctx->row[y].size;
+        int x_end = (y == end_y) ? end_x : ctx->model.row[y].size;
+        if (x_end > ctx->model.row[y].size) x_end = ctx->model.row[y].size;
 
         int len = x_end - x_start;
         if (len > 0) {
@@ -201,7 +201,7 @@ char *get_selection_text(editor_ctx_t *ctx) {
                 if (!new_text) { free(text); return NULL; }
                 text = new_text;
             }
-            memcpy(text + text_len, ctx->row[y].chars + x_start, len);
+            memcpy(text + text_len, ctx->model.row[y].chars + x_start, len);
             text_len += len;
         }
         if (y < end_y) {
@@ -218,15 +218,15 @@ char *get_selection_text(editor_ctx_t *ctx) {
  * Clears selection and positions cursor at selection start.
  * Returns number of characters deleted, or 0 if no selection. */
 int delete_selection(editor_ctx_t *ctx) {
-    if (!ctx->sel_active || ctx->numrows == 0) {
+    if (!ctx->view.sel_active || ctx->model.numrows == 0) {
         return 0;
     }
 
     /* Normalize selection: ensure start comes before end */
-    int start_y = ctx->sel_start_y;
-    int start_x = ctx->sel_start_x;
-    int end_y = ctx->sel_end_y;
-    int end_x = ctx->sel_end_x;
+    int start_y = ctx->view.sel_start_y;
+    int start_x = ctx->view.sel_start_x;
+    int end_y = ctx->view.sel_end_y;
+    int end_x = ctx->view.sel_end_x;
 
     if (start_y > end_y || (start_y == end_y && start_x > end_x)) {
         int tmp;
@@ -235,13 +235,13 @@ int delete_selection(editor_ctx_t *ctx) {
     }
 
     /* Bounds checking */
-    if (start_y >= ctx->numrows) start_y = ctx->numrows - 1;
-    if (end_y >= ctx->numrows) end_y = ctx->numrows - 1;
+    if (start_y >= ctx->model.numrows) start_y = ctx->model.numrows - 1;
+    if (end_y >= ctx->model.numrows) end_y = ctx->model.numrows - 1;
     if (start_y < 0) start_y = 0;
     if (end_y < 0) end_y = 0;
 
-    t_erow *start_row = &ctx->row[start_y];
-    t_erow *end_row = &ctx->row[end_y];
+    t_erow *start_row = &ctx->model.row[start_y];
+    t_erow *end_row = &ctx->model.row[end_y];
 
     if (start_x > start_row->size) start_x = start_row->size;
     if (end_x > end_row->size) end_x = end_row->size;
@@ -251,11 +251,11 @@ int delete_selection(editor_ctx_t *ctx) {
     int deleted_chars = 0;
 
     /* Clear selection before modifying buffer */
-    ctx->sel_active = 0;
+    ctx->view.sel_active = 0;
 
     if (start_y == end_y) {
         /* Single line selection: delete characters from start_x to end_x */
-        t_erow *row = &ctx->row[start_y];
+        t_erow *row = &ctx->model.row[start_y];
 
         /* Delete characters from end to start to avoid index shifting issues */
         for (int i = end_x - 1; i >= start_x; i--) {
@@ -287,36 +287,36 @@ int delete_selection(editor_ctx_t *ctx) {
 
         /* 3. Delete middle rows and end row (from end to start to avoid index shifting) */
         for (int y = end_y; y > start_y; y--) {
-            deleted_chars += ctx->row[y].size + 1; /* +1 for newline */
+            deleted_chars += ctx->model.row[y].size + 1; /* +1 for newline */
             editor_del_row(ctx, y);
         }
 
         /* 4. Append remaining text from end row to start row */
         if (remaining && remaining_len > 0) {
             /* Refresh start_row pointer after possible reallocation */
-            start_row = &ctx->row[start_y];
+            start_row = &ctx->model.row[start_y];
             editor_row_append_string(ctx, start_row, remaining, remaining_len);
         }
         free(remaining);
     }
 
     /* Position cursor at start of deleted region */
-    ctx->cy = start_y - ctx->rowoff;
-    if (ctx->cy < 0) {
-        ctx->rowoff = start_y;
-        ctx->cy = 0;
-    } else if (ctx->cy >= ctx->screenrows) {
-        ctx->rowoff = start_y - ctx->screenrows + 1;
-        ctx->cy = ctx->screenrows - 1;
+    ctx->view.cy = start_y - ctx->view.rowoff;
+    if (ctx->view.cy < 0) {
+        ctx->view.rowoff = start_y;
+        ctx->view.cy = 0;
+    } else if (ctx->view.cy >= ctx->view.screenrows) {
+        ctx->view.rowoff = start_y - ctx->view.screenrows + 1;
+        ctx->view.cy = ctx->view.screenrows - 1;
     }
 
-    ctx->cx = start_x - ctx->coloff;
-    if (ctx->cx < 0) {
-        ctx->coloff = start_x;
-        ctx->cx = 0;
+    ctx->view.cx = start_x - ctx->view.coloff;
+    if (ctx->view.cx < 0) {
+        ctx->view.coloff = start_x;
+        ctx->view.cx = 0;
     }
 
-    ctx->dirty++;
+    ctx->model.dirty++;
 
     return deleted_chars;
 }

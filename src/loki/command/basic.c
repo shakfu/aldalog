@@ -9,7 +9,7 @@
 int cmd_quit(editor_ctx_t *ctx, const char *args) {
     (void)args;
 
-    if (ctx->dirty) {
+    if (ctx->model.dirty) {
         editor_set_status_msg(ctx, "Unsaved changes! Use :q! to force quit");
         return 0;
     }
@@ -78,9 +78,9 @@ int cmd_set(editor_ctx_t *ctx, const char *args) {
     } else if (sscanf(args, "%63s", option) == 1) {
         /* Toggle boolean option or show value */
         if (strcmp(option, "wrap") == 0) {
-            ctx->word_wrap = !ctx->word_wrap;
+            ctx->view.word_wrap = !ctx->view.word_wrap;
             editor_set_status_msg(ctx, "Word wrap: %s",
-                                 ctx->word_wrap ? "on" : "off");
+                                 ctx->view.word_wrap ? "on" : "off");
             return 1;
         } else {
             editor_set_status_msg(ctx, "Unknown option: %s", option);

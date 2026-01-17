@@ -19,37 +19,37 @@
 static void init_single_line_ctx(editor_ctx_t *ctx, const char *text) {
     editor_ctx_init(ctx);
 
-    ctx->numrows = 1;
-    ctx->row = calloc(1, sizeof(t_erow));
-    ctx->row[0].chars = strdup(text);
-    ctx->row[0].size = strlen(text);
-    ctx->row[0].render = strdup(text);
-    ctx->row[0].rsize = strlen(text);
-    ctx->row[0].hl = NULL;
-    ctx->row[0].idx = 0;
+    ctx->model.numrows = 1;
+    ctx->model.row = calloc(1, sizeof(t_erow));
+    ctx->model.row[0].chars = strdup(text);
+    ctx->model.row[0].size = strlen(text);
+    ctx->model.row[0].render = strdup(text);
+    ctx->model.row[0].rsize = strlen(text);
+    ctx->model.row[0].hl = NULL;
+    ctx->model.row[0].idx = 0;
 
-    ctx->screenrows = 24;
-    ctx->screencols = 80;
+    ctx->view.screenrows = 24;
+    ctx->view.screencols = 80;
 }
 
 /* Helper: Create multi-line test context */
 static void init_multiline_ctx(editor_ctx_t *ctx, int num_lines, const char **lines) {
     editor_ctx_init(ctx);
 
-    ctx->numrows = num_lines;
-    ctx->row = calloc(num_lines, sizeof(t_erow));
+    ctx->model.numrows = num_lines;
+    ctx->model.row = calloc(num_lines, sizeof(t_erow));
 
     for (int i = 0; i < num_lines; i++) {
-        ctx->row[i].chars = strdup(lines[i]);
-        ctx->row[i].size = strlen(lines[i]);
-        ctx->row[i].render = strdup(lines[i]);
-        ctx->row[i].rsize = strlen(lines[i]);
-        ctx->row[i].hl = NULL;
-        ctx->row[i].idx = i;
+        ctx->model.row[i].chars = strdup(lines[i]);
+        ctx->model.row[i].size = strlen(lines[i]);
+        ctx->model.row[i].render = strdup(lines[i]);
+        ctx->model.row[i].rsize = strlen(lines[i]);
+        ctx->model.row[i].hl = NULL;
+        ctx->model.row[i].idx = i;
     }
 
-    ctx->screenrows = 24;
-    ctx->screencols = 80;
+    ctx->view.screenrows = 24;
+    ctx->view.screencols = 80;
 }
 
 /* ============================================================================
@@ -61,11 +61,11 @@ TEST(selection_single_line_in_range) {
     init_single_line_ctx(&ctx, "hello world");
 
     /* Selection from column 2 to 6: "llo w" */
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 2;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 7;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 2;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 7;
+    ctx.view.sel_end_y = 0;
 
     /* Positions within selection */
     ASSERT_TRUE(is_selected(&ctx, 0, 2));   /* Start */
@@ -86,11 +86,11 @@ TEST(selection_inactive_returns_false) {
     init_single_line_ctx(&ctx, "hello world");
 
     /* Selection inactive */
-    ctx.sel_active = 0;
-    ctx.sel_start_x = 2;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 7;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 0;
+    ctx.view.sel_start_x = 2;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 7;
+    ctx.view.sel_end_y = 0;
 
     /* Should return false for any position when inactive */
     ASSERT_FALSE(is_selected(&ctx, 0, 2));
@@ -105,11 +105,11 @@ TEST(selection_reversed_single_line) {
     init_single_line_ctx(&ctx, "hello world");
 
     /* Selection reversed (end before start) */
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 7;  /* End actually first */
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 2;    /* Start actually last */
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 7;  /* End actually first */
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 2;    /* Start actually last */
+    ctx.view.sel_end_y = 0;
 
     /* Should still detect correctly (normalized internally) */
     ASSERT_TRUE(is_selected(&ctx, 0, 2));
@@ -129,11 +129,11 @@ TEST(selection_multiline_first_row) {
     init_multiline_ctx(&ctx, 3, lines);
 
     /* Selection from row 0 col 3 to row 2 col 5 */
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 3;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 5;
-    ctx.sel_end_y = 2;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 3;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 5;
+    ctx.view.sel_end_y = 2;
 
     /* First row: positions from start_x to end of line */
     ASSERT_FALSE(is_selected(&ctx, 0, 0));
@@ -151,11 +151,11 @@ TEST(selection_multiline_middle_row) {
     init_multiline_ctx(&ctx, 3, lines);
 
     /* Selection from row 0 col 3 to row 2 col 5 */
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 3;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 5;
-    ctx.sel_end_y = 2;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 3;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 5;
+    ctx.view.sel_end_y = 2;
 
     /* Middle row: entire line selected */
     ASSERT_TRUE(is_selected(&ctx, 1, 0));
@@ -171,11 +171,11 @@ TEST(selection_multiline_last_row) {
     init_multiline_ctx(&ctx, 3, lines);
 
     /* Selection from row 0 col 3 to row 2 col 5 */
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 3;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 5;
-    ctx.sel_end_y = 2;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 3;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 5;
+    ctx.view.sel_end_y = 2;
 
     /* Last row: positions from start to end_x (exclusive) */
     ASSERT_TRUE(is_selected(&ctx, 2, 0));
@@ -192,11 +192,11 @@ TEST(selection_multiline_reversed) {
     init_multiline_ctx(&ctx, 3, lines);
 
     /* Selection reversed: end before start */
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 4;
-    ctx.sel_start_y = 2;  /* Start at row 2 (will be normalized to end) */
-    ctx.sel_end_x = 2;
-    ctx.sel_end_y = 0;    /* End at row 0 (will be normalized to start) */
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 4;
+    ctx.view.sel_start_y = 2;  /* Start at row 2 (will be normalized to end) */
+    ctx.view.sel_end_x = 2;
+    ctx.view.sel_end_y = 0;    /* End at row 0 (will be normalized to start) */
 
     /* Should normalize and work correctly */
     ASSERT_TRUE(is_selected(&ctx, 0, 2));
@@ -212,11 +212,11 @@ TEST(selection_row_out_of_range) {
     const char *lines[] = {"line one", "line two"};
     init_multiline_ctx(&ctx, 2, lines);
 
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 0;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 5;
-    ctx.sel_end_y = 1;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 0;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 5;
+    ctx.view.sel_end_y = 1;
 
     /* Row outside selection range */
     ASSERT_FALSE(is_selected(&ctx, 3, 0));
@@ -286,11 +286,11 @@ TEST(get_selection_text_single_line) {
     editor_ctx_t ctx;
     init_single_line_ctx(&ctx, "hello world");
 
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 0;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 5;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 0;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 5;
+    ctx.view.sel_end_y = 0;
 
     char *text = get_selection_text(&ctx);
     ASSERT_NOT_NULL(text);
@@ -304,11 +304,11 @@ TEST(get_selection_text_middle_of_line) {
     editor_ctx_t ctx;
     init_single_line_ctx(&ctx, "hello world");
 
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 6;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 11;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 6;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 11;
+    ctx.view.sel_end_y = 0;
 
     char *text = get_selection_text(&ctx);
     ASSERT_NOT_NULL(text);
@@ -324,11 +324,11 @@ TEST(get_selection_text_multiline) {
     init_multiline_ctx(&ctx, 3, lines);
 
     /* Select from row 0 col 5 to row 2 col 4 */
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 5;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 4;
-    ctx.sel_end_y = 2;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 5;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 4;
+    ctx.view.sel_end_y = 2;
 
     char *text = get_selection_text(&ctx);
     ASSERT_NOT_NULL(text);
@@ -343,7 +343,7 @@ TEST(get_selection_text_no_selection) {
     editor_ctx_t ctx;
     init_single_line_ctx(&ctx, "hello world");
 
-    ctx.sel_active = 0;
+    ctx.view.sel_active = 0;
 
     char *text = get_selection_text(&ctx);
     ASSERT_NULL(text);
@@ -355,11 +355,11 @@ TEST(get_selection_text_entire_line) {
     editor_ctx_t ctx;
     init_single_line_ctx(&ctx, "hello");
 
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 0;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 5;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 0;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 5;
+    ctx.view.sel_end_y = 0;
 
     char *text = get_selection_text(&ctx);
     ASSERT_NOT_NULL(text);
@@ -377,17 +377,17 @@ TEST(delete_selection_single_line_middle) {
     editor_ctx_t ctx;
     init_single_line_ctx(&ctx, "hello world");
 
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 5;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 6;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 5;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 6;
+    ctx.view.sel_end_y = 0;
 
     int deleted = delete_selection(&ctx);
 
     ASSERT_TRUE(deleted > 0);
-    ASSERT_FALSE(ctx.sel_active);
-    ASSERT_STR_EQ(ctx.row[0].chars, "helloworld");
+    ASSERT_FALSE(ctx.view.sel_active);
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "helloworld");
 
     editor_ctx_free(&ctx);
 }
@@ -396,16 +396,16 @@ TEST(delete_selection_single_line_start) {
     editor_ctx_t ctx;
     init_single_line_ctx(&ctx, "hello world");
 
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 0;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 6;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 0;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 6;
+    ctx.view.sel_end_y = 0;
 
     int deleted = delete_selection(&ctx);
 
     ASSERT_TRUE(deleted > 0);
-    ASSERT_STR_EQ(ctx.row[0].chars, "world");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "world");
 
     editor_ctx_free(&ctx);
 }
@@ -414,12 +414,12 @@ TEST(delete_selection_no_selection) {
     editor_ctx_t ctx;
     init_single_line_ctx(&ctx, "hello world");
 
-    ctx.sel_active = 0;
+    ctx.view.sel_active = 0;
 
     int deleted = delete_selection(&ctx);
 
     ASSERT_EQ(deleted, 0);
-    ASSERT_STR_EQ(ctx.row[0].chars, "hello world");
+    ASSERT_STR_EQ(ctx.model.row[0].chars, "hello world");
 
     editor_ctx_free(&ctx);
 }
@@ -428,15 +428,15 @@ TEST(delete_selection_clears_selection) {
     editor_ctx_t ctx;
     init_single_line_ctx(&ctx, "hello");
 
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 0;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 2;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 0;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 2;
+    ctx.view.sel_end_y = 0;
 
     delete_selection(&ctx);
 
-    ASSERT_FALSE(ctx.sel_active);
+    ASSERT_FALSE(ctx.view.sel_active);
 
     editor_ctx_free(&ctx);
 }
@@ -445,16 +445,16 @@ TEST(delete_selection_sets_dirty_flag) {
     editor_ctx_t ctx;
     init_single_line_ctx(&ctx, "hello");
 
-    ctx.dirty = 0;
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 0;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 2;
-    ctx.sel_end_y = 0;
+    ctx.model.dirty = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 0;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 2;
+    ctx.view.sel_end_y = 0;
 
     delete_selection(&ctx);
 
-    ASSERT_TRUE(ctx.dirty > 0);
+    ASSERT_TRUE(ctx.model.dirty > 0);
 
     editor_ctx_free(&ctx);
 }
@@ -466,14 +466,14 @@ TEST(delete_selection_sets_dirty_flag) {
 TEST(selection_empty_buffer) {
     editor_ctx_t ctx;
     editor_ctx_init(&ctx);
-    ctx.numrows = 0;
-    ctx.row = NULL;
+    ctx.model.numrows = 0;
+    ctx.model.row = NULL;
 
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 0;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 5;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 0;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 5;
+    ctx.view.sel_end_y = 0;
 
     /* Should not crash - is_selected checks sel_active and row range.
      * Row 0 is within start_y to end_y range even if buffer is empty,
@@ -492,11 +492,11 @@ TEST(selection_single_character) {
     editor_ctx_t ctx;
     init_single_line_ctx(&ctx, "a");
 
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 0;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 1;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 0;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 1;
+    ctx.view.sel_end_y = 0;
 
     char *text = get_selection_text(&ctx);
     ASSERT_NOT_NULL(text);
@@ -511,11 +511,11 @@ TEST(selection_zero_width) {
     init_single_line_ctx(&ctx, "hello");
 
     /* Start and end at same position */
-    ctx.sel_active = 1;
-    ctx.sel_start_x = 2;
-    ctx.sel_start_y = 0;
-    ctx.sel_end_x = 2;
-    ctx.sel_end_y = 0;
+    ctx.view.sel_active = 1;
+    ctx.view.sel_start_x = 2;
+    ctx.view.sel_start_y = 0;
+    ctx.view.sel_end_x = 2;
+    ctx.view.sel_end_y = 0;
 
     /* Zero-width selection - nothing should be selected */
     ASSERT_FALSE(is_selected(&ctx, 0, 2));

@@ -32,27 +32,27 @@
  * Sets match_offset to the column position of the match.
  * This function is exposed for testing purposes. */
 int editor_find_next_match(editor_ctx_t *ctx, const char *query, int start_row, int direction, int *match_offset) {
-    if (!ctx || !query || !match_offset || ctx->numrows == 0 || query[0] == '\0') {
+    if (!ctx || !query || !match_offset || ctx->model.numrows == 0 || query[0] == '\0') {
         return -1;
     }
 
     int current = start_row;
 
     /* Search through all rows */
-    for (int i = 0; i < ctx->numrows; i++) {
+    for (int i = 0; i < ctx->model.numrows; i++) {
         current += direction;
 
         /* Wrap around */
         if (current == -1) {
-            current = ctx->numrows - 1;
-        } else if (current == ctx->numrows) {
+            current = ctx->model.numrows - 1;
+        } else if (current == ctx->model.numrows) {
             current = 0;
         }
 
         /* Search for query in this row */
-        char *match = strstr(ctx->row[current].render, query);
+        char *match = strstr(ctx->model.row[current].render, query);
         if (match) {
-            *match_offset = match - ctx->row[current].render;
+            *match_offset = match - ctx->model.row[current].render;
             return current;
         }
     }
@@ -74,15 +74,15 @@ void editor_find(editor_ctx_t *ctx, int fd) {
 
 #define FIND_RESTORE_HL do { \
     if (saved_hl) { \
-        memcpy(ctx->row[saved_hl_line].hl,saved_hl, ctx->row[saved_hl_line].rsize); \
+        memcpy(ctx->model.row[saved_hl_line].hl,saved_hl, ctx->model.row[saved_hl_line].rsize); \
         free(saved_hl); \
         saved_hl = NULL; \
     } \
 } while (0)
 
     /* Save the cursor position in order to restore it later. */
-    int saved_cx = ctx->cx, saved_cy = ctx->cy;
-    int saved_coloff = ctx->coloff, saved_rowoff = ctx->rowoff;
+    int saved_cx = ctx->view.cx, saved_cy = ctx->view.cy;
+    int saved_coloff = ctx->view.coloff, saved_rowoff = ctx->view.rowoff;
 
     while(1) {
         editor_set_status_msg(ctx,
@@ -95,8 +95,8 @@ void editor_find(editor_ctx_t *ctx, int fd) {
             last_match = -1;
         } else if (c == ESC || c == ENTER) {
             if (c == ESC) {
-                ctx->cx = saved_cx; ctx->cy = saved_cy;
-                ctx->coloff = saved_coloff; ctx->rowoff = saved_rowoff;
+                ctx->view.cx = saved_cx; ctx->view.cy = saved_cy;
+                ctx->view.coloff = saved_coloff; ctx->view.rowoff = saved_rowoff;
             }
             FIND_RESTORE_HL;
             editor_set_status_msg(ctx, "");
@@ -120,13 +120,13 @@ void editor_find(editor_ctx_t *ctx, int fd) {
             int match_offset = 0;
             int i, current = last_match;
 
-            for (i = 0; i < ctx->numrows; i++) {
+            for (i = 0; i < ctx->model.numrows; i++) {
                 current += find_next;
-                if (current == -1) current = ctx->numrows-1;
-                else if (current == ctx->numrows) current = 0;
-                match = strstr(ctx->row[current].render,query);
+                if (current == -1) current = ctx->model.numrows-1;
+                else if (current == ctx->model.numrows) current = 0;
+                match = strstr(ctx->model.row[current].render,query);
                 if (match) {
-                    match_offset = match-ctx->row[current].render;
+                    match_offset = match-ctx->model.row[current].render;
                     break;
                 }
             }
@@ -136,7 +136,7 @@ void editor_find(editor_ctx_t *ctx, int fd) {
             FIND_RESTORE_HL;
 
             if (match) {
-                t_erow *row = &ctx->row[current];
+                t_erow *row = &ctx->model.row[current];
                 last_match = current;
                 if (row->hl) {
                     saved_hl_line = current;
@@ -146,15 +146,15 @@ void editor_find(editor_ctx_t *ctx, int fd) {
                     }
                     memset(row->hl+match_offset,HL_MATCH,qlen);
                 }
-                ctx->cy = 0;
-                ctx->cx = match_offset;
-                ctx->rowoff = current;
-                ctx->coloff = 0;
+                ctx->view.cy = 0;
+                ctx->view.cx = match_offset;
+                ctx->view.rowoff = current;
+                ctx->view.coloff = 0;
                 /* Scroll horizontally as needed. */
-                if (ctx->cx > ctx->screencols) {
-                    int diff = ctx->cx - ctx->screencols;
-                    ctx->cx -= diff;
-                    ctx->coloff += diff;
+                if (ctx->view.cx > ctx->view.screencols) {
+                    int diff = ctx->view.cx - ctx->view.screencols;
+                    ctx->view.cx -= diff;
+                    ctx->view.coloff += diff;
                 }
             }
         }

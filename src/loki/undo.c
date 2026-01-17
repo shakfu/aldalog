@@ -68,13 +68,13 @@ void undo_init(editor_ctx_t *ctx, int capacity, size_t memory_limit) {
     undo->memory_used = 0;
     undo->memory_limit = memory_limit;
 
-    ctx->undo_state = undo;
+    ctx->model.undo_state = undo;
 }
 
 void undo_free(editor_ctx_t *ctx) {
-    if (!ctx->undo_state) return;
+    if (!ctx->model.undo_state) return;
 
-    struct undo_state *undo = ctx->undo_state;
+    struct undo_state *undo = ctx->model.undo_state;
 
     /* Free all line_op content strings */
     for (int i = 0; i < undo->count; i++) {
@@ -87,7 +87,7 @@ void undo_free(editor_ctx_t *ctx) {
 
     free(undo->entries);
     free(undo);
-    ctx->undo_state = NULL;
+    ctx->model.undo_state = NULL;
 }
 
 /* ======================== Grouping Logic ======================== */
@@ -120,9 +120,9 @@ static int should_break_group(struct undo_state *undo, undo_op_type_t op,
 }
 
 void undo_break_group(editor_ctx_t *ctx) {
-    if (!ctx->undo_state) return;
+    if (!ctx->model.undo_state) return;
 
-    struct undo_state *undo = ctx->undo_state;
+    struct undo_state *undo = ctx->model.undo_state;
     if (undo->count > 0) {
         int last_idx = (undo->head - 1 + undo->capacity) % undo->capacity;
         undo->entries[last_idx].group_break = 1;
@@ -142,7 +142,7 @@ static void free_entry_data(undo_entry_t *entry, struct undo_state *undo) {
 }
 
 static void record_operation(editor_ctx_t *ctx, undo_entry_t *entry) {
-    struct undo_state *undo = ctx->undo_state;
+    struct undo_state *undo = ctx->model.undo_state;
     if (!undo) return;
 
     /* Check if we should start new group */
@@ -190,34 +190,34 @@ static void record_operation(editor_ctx_t *ctx, undo_entry_t *entry) {
 }
 
 void undo_record_insert_char(editor_ctx_t *ctx, int row, int col, char ch) {
-    if (!ctx->undo_state) return;
+    if (!ctx->model.undo_state) return;
 
     undo_entry_t entry = {
         .type = UNDO_INSERT_CHAR,
         .row = row,
         .col = col,
         .data.char_op.ch = ch,
-        .cursor_row = ctx->cy,
-        .cursor_col = ctx->cx,
-        .cursor_rowoff = ctx->rowoff,
-        .cursor_coloff = ctx->coloff
+        .cursor_row = ctx->view.cy,
+        .cursor_col = ctx->view.cx,
+        .cursor_rowoff = ctx->view.rowoff,
+        .cursor_coloff = ctx->view.coloff
     };
 
     record_operation(ctx, &entry);
 }
 
 void undo_record_delete_char(editor_ctx_t *ctx, int row, int col, char ch) {
-    if (!ctx->undo_state) return;
+    if (!ctx->model.undo_state) return;
 
     undo_entry_t entry = {
         .type = UNDO_DELETE_CHAR,
         .row = row,
         .col = col,
         .data.char_op.ch = ch,
-        .cursor_row = ctx->cy,
-        .cursor_col = ctx->cx,
-        .cursor_rowoff = ctx->rowoff,
-        .cursor_coloff = ctx->coloff
+        .cursor_row = ctx->view.cy,
+        .cursor_col = ctx->view.cx,
+        .cursor_rowoff = ctx->view.rowoff,
+        .cursor_coloff = ctx->view.coloff
     };
 
     record_operation(ctx, &entry);
@@ -225,7 +225,7 @@ void undo_record_delete_char(editor_ctx_t *ctx, int row, int col, char ch) {
 
 void undo_record_insert_line(editor_ctx_t *ctx, int row, int col,
                               const char *content, int length) {
-    if (!ctx->undo_state) return;
+    if (!ctx->model.undo_state) return;
 
     undo_entry_t entry = {
         .type = UNDO_INSERT_LINE,
@@ -233,10 +233,10 @@ void undo_record_insert_line(editor_ctx_t *ctx, int row, int col,
         .col = col,
         .data.line_op.content = strndup(content, length),
         .data.line_op.length = length,
-        .cursor_row = ctx->cy,
-        .cursor_col = ctx->cx,
-        .cursor_rowoff = ctx->rowoff,
-        .cursor_coloff = ctx->coloff
+        .cursor_row = ctx->view.cy,
+        .cursor_col = ctx->view.cx,
+        .cursor_rowoff = ctx->view.rowoff,
+        .cursor_coloff = ctx->view.coloff
     };
 
     record_operation(ctx, &entry);
@@ -244,7 +244,7 @@ void undo_record_insert_line(editor_ctx_t *ctx, int row, int col,
 
 void undo_record_delete_line(editor_ctx_t *ctx, int row, int col,
                               const char *content, int length) {
-    if (!ctx->undo_state) return;
+    if (!ctx->model.undo_state) return;
 
     undo_entry_t entry = {
         .type = UNDO_DELETE_LINE,
@@ -252,10 +252,10 @@ void undo_record_delete_line(editor_ctx_t *ctx, int row, int col,
         .col = col,
         .data.line_op.content = strndup(content, length),
         .data.line_op.length = length,
-        .cursor_row = ctx->cy,
-        .cursor_col = ctx->cx,
-        .cursor_rowoff = ctx->rowoff,
-        .cursor_coloff = ctx->coloff
+        .cursor_row = ctx->view.cy,
+        .cursor_col = ctx->view.cx,
+        .cursor_rowoff = ctx->view.rowoff,
+        .cursor_coloff = ctx->view.coloff
     };
 
     record_operation(ctx, &entry);
@@ -266,16 +266,16 @@ void undo_record_delete_line(editor_ctx_t *ctx, int row, int col,
 /* Apply single undo operation (reverse the operation) */
 static void apply_undo(editor_ctx_t *ctx, undo_entry_t *entry) {
     /* Suppress undo recording while applying undo */
-    struct undo_state *saved_state = ctx->undo_state;
-    ctx->undo_state = NULL;
+    struct undo_state *saved_state = ctx->model.undo_state;
+    ctx->model.undo_state = NULL;
 
     t_erow *row;
 
     switch (entry->type) {
         case UNDO_INSERT_CHAR:
             /* Undo insert = delete the character */
-            if (entry->row >= 0 && entry->row < ctx->numrows) {
-                row = &ctx->row[entry->row];
+            if (entry->row >= 0 && entry->row < ctx->model.numrows) {
+                row = &ctx->model.row[entry->row];
                 if (entry->col >= 0 && entry->col < row->size) {
                     editor_row_del_char(ctx, row, entry->col);
                 }
@@ -284,15 +284,15 @@ static void apply_undo(editor_ctx_t *ctx, undo_entry_t *entry) {
 
         case UNDO_DELETE_CHAR:
             /* Undo delete = re-insert the character */
-            if (entry->row >= 0 && entry->row < ctx->numrows) {
-                row = &ctx->row[entry->row];
+            if (entry->row >= 0 && entry->row < ctx->model.numrows) {
+                row = &ctx->model.row[entry->row];
                 editor_row_insert_char(ctx, row, entry->col, entry->data.char_op.ch);
             }
             break;
 
         case UNDO_INSERT_LINE:
             /* Undo line insert = delete the line (merge with previous) */
-            if (entry->row >= 0 && entry->row < ctx->numrows) {
+            if (entry->row >= 0 && entry->row < ctx->model.numrows) {
                 /* Delete the newline that was inserted */
                 editor_del_row(ctx, entry->row + 1);
             }
@@ -300,7 +300,7 @@ static void apply_undo(editor_ctx_t *ctx, undo_entry_t *entry) {
 
         case UNDO_DELETE_LINE:
             /* Undo line delete = re-insert the line (split) */
-            if (entry->row >= 0 && entry->row < ctx->numrows) {
+            if (entry->row >= 0 && entry->row < ctx->model.numrows) {
                 editor_insert_row(ctx, entry->row + 1,
                                  entry->data.line_op.content,
                                  entry->data.line_op.length);
@@ -309,36 +309,36 @@ static void apply_undo(editor_ctx_t *ctx, undo_entry_t *entry) {
     }
 
     /* Restore cursor position from before the operation */
-    ctx->cy = entry->cursor_row;
-    ctx->cx = entry->cursor_col;
-    ctx->rowoff = entry->cursor_rowoff;
-    ctx->coloff = entry->cursor_coloff;
+    ctx->view.cy = entry->cursor_row;
+    ctx->view.cx = entry->cursor_col;
+    ctx->view.rowoff = entry->cursor_rowoff;
+    ctx->view.coloff = entry->cursor_coloff;
 
     /* Restore undo state */
-    ctx->undo_state = saved_state;
+    ctx->model.undo_state = saved_state;
 }
 
 /* Apply single redo operation (replay the operation) */
 static void apply_redo(editor_ctx_t *ctx, undo_entry_t *entry) {
     /* Suppress undo recording while applying redo */
-    struct undo_state *saved_state = ctx->undo_state;
-    ctx->undo_state = NULL;
+    struct undo_state *saved_state = ctx->model.undo_state;
+    ctx->model.undo_state = NULL;
 
     t_erow *row;
 
     switch (entry->type) {
         case UNDO_INSERT_CHAR:
             /* Redo insert = insert the character again */
-            if (entry->row >= 0 && entry->row < ctx->numrows) {
-                row = &ctx->row[entry->row];
+            if (entry->row >= 0 && entry->row < ctx->model.numrows) {
+                row = &ctx->model.row[entry->row];
                 editor_row_insert_char(ctx, row, entry->col, entry->data.char_op.ch);
             }
             break;
 
         case UNDO_DELETE_CHAR:
             /* Redo delete = delete the character again */
-            if (entry->row >= 0 && entry->row < ctx->numrows) {
-                row = &ctx->row[entry->row];
+            if (entry->row >= 0 && entry->row < ctx->model.numrows) {
+                row = &ctx->model.row[entry->row];
                 if (entry->col >= 0 && entry->col < row->size) {
                     editor_row_del_char(ctx, row, entry->col);
                 }
@@ -347,7 +347,7 @@ static void apply_redo(editor_ctx_t *ctx, undo_entry_t *entry) {
 
         case UNDO_INSERT_LINE:
             /* Redo line insert = split line again */
-            if (entry->row >= 0 && entry->row < ctx->numrows) {
+            if (entry->row >= 0 && entry->row < ctx->model.numrows) {
                 editor_insert_row(ctx, entry->row + 1,
                                  entry->data.line_op.content,
                                  entry->data.line_op.length);
@@ -356,18 +356,18 @@ static void apply_redo(editor_ctx_t *ctx, undo_entry_t *entry) {
 
         case UNDO_DELETE_LINE:
             /* Redo line delete = merge lines again */
-            if (entry->row >= 0 && entry->row + 1 < ctx->numrows) {
+            if (entry->row >= 0 && entry->row + 1 < ctx->model.numrows) {
                 editor_del_row(ctx, entry->row + 1);
             }
             break;
     }
 
     /* Restore undo state */
-    ctx->undo_state = saved_state;
+    ctx->model.undo_state = saved_state;
 }
 
 int undo_perform(editor_ctx_t *ctx) {
-    struct undo_state *undo = ctx->undo_state;
+    struct undo_state *undo = ctx->model.undo_state;
     if (!undo || undo->current == 0) return 0;  /* Nothing to undo */
 
     /* Find start of current group */
@@ -393,12 +393,12 @@ int undo_perform(editor_ctx_t *ctx) {
     }
 
     undo->current = undo_idx;
-    ctx->dirty++;
+    ctx->model.dirty++;
     return 1;
 }
 
 int redo_perform(editor_ctx_t *ctx) {
-    struct undo_state *undo = ctx->undo_state;
+    struct undo_state *undo = ctx->model.undo_state;
     if (!undo || undo->current >= undo->count) return 0;  /* Nothing to redo */
 
     /* Find end of next group */
@@ -425,26 +425,26 @@ int redo_perform(editor_ctx_t *ctx) {
     }
 
     undo->current = redo_end;
-    ctx->dirty++;
+    ctx->model.dirty++;
     return 1;
 }
 
 /* ======================== Query Functions ======================== */
 
 int undo_can_undo(editor_ctx_t *ctx) {
-    struct undo_state *undo = ctx->undo_state;
+    struct undo_state *undo = ctx->model.undo_state;
     return undo && undo->current > 0;
 }
 
 int undo_can_redo(editor_ctx_t *ctx) {
-    struct undo_state *undo = ctx->undo_state;
+    struct undo_state *undo = ctx->model.undo_state;
     return undo && undo->current < undo->count;
 }
 
 void undo_clear(editor_ctx_t *ctx) {
-    if (!ctx->undo_state) return;
+    if (!ctx->model.undo_state) return;
 
-    struct undo_state *undo = ctx->undo_state;
+    struct undo_state *undo = ctx->model.undo_state;
 
     /* Free all line content */
     for (int i = 0; i < undo->count; i++) {
@@ -460,7 +460,7 @@ void undo_clear(editor_ctx_t *ctx) {
 
 void undo_get_stats(editor_ctx_t *ctx, int *undo_levels,
                      int *redo_levels, size_t *memory) {
-    struct undo_state *undo = ctx->undo_state;
+    struct undo_state *undo = ctx->model.undo_state;
     if (!undo) {
         if (undo_levels) *undo_levels = 0;
         if (redo_levels) *redo_levels = 0;

@@ -71,10 +71,10 @@ static command_def_t builtin_commands[] = {
 
 void command_mode_init(editor_ctx_t *ctx) {
     /* Command state is part of editor_ctx_t, just reset it */
-    memset(ctx->cmd_buffer, 0, sizeof(ctx->cmd_buffer));
-    ctx->cmd_length = 0;
-    ctx->cmd_cursor_pos = 0;
-    ctx->cmd_history_index = 0;
+    memset(ctx->view.cmd_buffer, 0, sizeof(ctx->view.cmd_buffer));
+    ctx->view.cmd_length = 0;
+    ctx->view.cmd_cursor_pos = 0;
+    ctx->view.cmd_history_index = 0;
 }
 
 void command_mode_free(editor_ctx_t *ctx) {
@@ -83,20 +83,20 @@ void command_mode_free(editor_ctx_t *ctx) {
 }
 
 void command_mode_enter(editor_ctx_t *ctx) {
-    ctx->mode = MODE_COMMAND;
-    ctx->cmd_buffer[0] = ':';
-    ctx->cmd_buffer[1] = '\0';
-    ctx->cmd_length = 1;
-    ctx->cmd_cursor_pos = 1;
-    ctx->cmd_history_index = command_history_count;  /* Start at end of history */
+    ctx->view.mode = MODE_COMMAND;
+    ctx->view.cmd_buffer[0] = ':';
+    ctx->view.cmd_buffer[1] = '\0';
+    ctx->view.cmd_length = 1;
+    ctx->view.cmd_cursor_pos = 1;
+    ctx->view.cmd_history_index = command_history_count;  /* Start at end of history */
     editor_set_status_msg(ctx, ":");
 }
 
 void command_mode_exit(editor_ctx_t *ctx) {
-    ctx->mode = MODE_NORMAL;
-    ctx->cmd_length = 0;
-    ctx->cmd_cursor_pos = 0;
-    memset(ctx->cmd_buffer, 0, sizeof(ctx->cmd_buffer));
+    ctx->view.mode = MODE_NORMAL;
+    ctx->view.cmd_length = 0;
+    ctx->view.cmd_cursor_pos = 0;
+    memset(ctx->view.cmd_buffer, 0, sizeof(ctx->view.cmd_buffer));
     editor_set_status_msg(ctx, "");
 }
 
@@ -270,8 +270,8 @@ int command_execute(editor_ctx_t *ctx, const char *cmdline) {
     }
 
     /* Store command name for Lua handlers (they need to know which command was called) */
-    if (ctx->L) {
-        lua_State *L = ctx->L;
+    if (ctx->view.L) {
+        lua_State *L = ctx->view.L;
         lua_pushstring(L, cmd_name);
         lua_setglobal(L, "_loki_ex_command_executing");
     }
@@ -280,8 +280,8 @@ int command_execute(editor_ctx_t *ctx, const char *cmdline) {
     int result = cmd->handler(ctx, args);
 
     /* Clear the command name */
-    if (ctx->L) {
-        lua_State *L = ctx->L;
+    if (ctx->view.L) {
+        lua_State *L = ctx->view.L;
         lua_pushnil(L);
         lua_setglobal(L, "_loki_ex_command_executing");
     }
@@ -303,8 +303,8 @@ void command_mode_handle_key(editor_ctx_t *ctx, int fd, int key) {
 
         case ENTER:
             /* Execute command */
-            if (ctx->cmd_length > 1) {  /* More than just ':' */
-                command_execute(ctx, ctx->cmd_buffer);
+            if (ctx->view.cmd_length > 1) {  /* More than just ':' */
+                command_execute(ctx, ctx->view.cmd_buffer);
             }
             command_mode_exit(ctx);
             break;
@@ -312,14 +312,14 @@ void command_mode_handle_key(editor_ctx_t *ctx, int fd, int key) {
         case BACKSPACE:
         case CTRL_H:
         case DEL_KEY:
-            if (ctx->cmd_cursor_pos > 1) {  /* Can't delete ':' */
+            if (ctx->view.cmd_cursor_pos > 1) {  /* Can't delete ':' */
                 /* Remove character before cursor */
-                memmove(ctx->cmd_buffer + ctx->cmd_cursor_pos - 1,
-                        ctx->cmd_buffer + ctx->cmd_cursor_pos,
-                        ctx->cmd_length - ctx->cmd_cursor_pos + 1);
-                ctx->cmd_cursor_pos--;
-                ctx->cmd_length--;
-                editor_set_status_msg(ctx, "%s", ctx->cmd_buffer);
+                memmove(ctx->view.cmd_buffer + ctx->view.cmd_cursor_pos - 1,
+                        ctx->view.cmd_buffer + ctx->view.cmd_cursor_pos,
+                        ctx->view.cmd_length - ctx->view.cmd_cursor_pos + 1);
+                ctx->view.cmd_cursor_pos--;
+                ctx->view.cmd_length--;
+                editor_set_status_msg(ctx, "%s", ctx->view.cmd_buffer);
             } else {
                 /* Backspace on empty command exits command mode */
                 command_mode_exit(ctx);
@@ -327,79 +327,79 @@ void command_mode_handle_key(editor_ctx_t *ctx, int fd, int key) {
             break;
 
         case ARROW_LEFT:
-            if (ctx->cmd_cursor_pos > 1) {
-                ctx->cmd_cursor_pos--;
+            if (ctx->view.cmd_cursor_pos > 1) {
+                ctx->view.cmd_cursor_pos--;
             }
             break;
 
         case ARROW_RIGHT:
-            if (ctx->cmd_cursor_pos < ctx->cmd_length) {
-                ctx->cmd_cursor_pos++;
+            if (ctx->view.cmd_cursor_pos < ctx->view.cmd_length) {
+                ctx->view.cmd_cursor_pos++;
             }
             break;
 
         case ARROW_UP:
             /* Previous command in history */
-            if (ctx->cmd_history_index > 0) {
-                ctx->cmd_history_index--;
-                const char *hist = command_history_get(ctx->cmd_history_index);
+            if (ctx->view.cmd_history_index > 0) {
+                ctx->view.cmd_history_index--;
+                const char *hist = command_history_get(ctx->view.cmd_history_index);
                 if (hist) {
-                    ctx->cmd_buffer[0] = ':';
-                    strncpy(ctx->cmd_buffer + 1, hist,
-                            sizeof(ctx->cmd_buffer) - 2);
-                    ctx->cmd_buffer[sizeof(ctx->cmd_buffer) - 1] = '\0';
-                    ctx->cmd_length = strlen(ctx->cmd_buffer);
-                    ctx->cmd_cursor_pos = ctx->cmd_length;
-                    editor_set_status_msg(ctx, "%s", ctx->cmd_buffer);
+                    ctx->view.cmd_buffer[0] = ':';
+                    strncpy(ctx->view.cmd_buffer + 1, hist,
+                            sizeof(ctx->view.cmd_buffer) - 2);
+                    ctx->view.cmd_buffer[sizeof(ctx->view.cmd_buffer) - 1] = '\0';
+                    ctx->view.cmd_length = strlen(ctx->view.cmd_buffer);
+                    ctx->view.cmd_cursor_pos = ctx->view.cmd_length;
+                    editor_set_status_msg(ctx, "%s", ctx->view.cmd_buffer);
                 }
             }
             break;
 
         case ARROW_DOWN:
             /* Next command in history */
-            if (ctx->cmd_history_index < command_history_count - 1) {
-                ctx->cmd_history_index++;
-                const char *hist = command_history_get(ctx->cmd_history_index);
+            if (ctx->view.cmd_history_index < command_history_count - 1) {
+                ctx->view.cmd_history_index++;
+                const char *hist = command_history_get(ctx->view.cmd_history_index);
                 if (hist) {
-                    ctx->cmd_buffer[0] = ':';
-                    strncpy(ctx->cmd_buffer + 1, hist,
-                            sizeof(ctx->cmd_buffer) - 2);
-                    ctx->cmd_buffer[sizeof(ctx->cmd_buffer) - 1] = '\0';
-                    ctx->cmd_length = strlen(ctx->cmd_buffer);
-                    ctx->cmd_cursor_pos = ctx->cmd_length;
-                    editor_set_status_msg(ctx, "%s", ctx->cmd_buffer);
+                    ctx->view.cmd_buffer[0] = ':';
+                    strncpy(ctx->view.cmd_buffer + 1, hist,
+                            sizeof(ctx->view.cmd_buffer) - 2);
+                    ctx->view.cmd_buffer[sizeof(ctx->view.cmd_buffer) - 1] = '\0';
+                    ctx->view.cmd_length = strlen(ctx->view.cmd_buffer);
+                    ctx->view.cmd_cursor_pos = ctx->view.cmd_length;
+                    editor_set_status_msg(ctx, "%s", ctx->view.cmd_buffer);
                 }
             } else {
                 /* At end of history, clear command */
-                ctx->cmd_buffer[0] = ':';
-                ctx->cmd_buffer[1] = '\0';
-                ctx->cmd_length = 1;
-                ctx->cmd_cursor_pos = 1;
-                ctx->cmd_history_index = command_history_count;
+                ctx->view.cmd_buffer[0] = ':';
+                ctx->view.cmd_buffer[1] = '\0';
+                ctx->view.cmd_length = 1;
+                ctx->view.cmd_cursor_pos = 1;
+                ctx->view.cmd_history_index = command_history_count;
                 editor_set_status_msg(ctx, ":");
             }
             break;
 
         case CTRL_U:
             /* Clear command line */
-            ctx->cmd_buffer[0] = ':';
-            ctx->cmd_buffer[1] = '\0';
-            ctx->cmd_length = 1;
-            ctx->cmd_cursor_pos = 1;
+            ctx->view.cmd_buffer[0] = ':';
+            ctx->view.cmd_buffer[1] = '\0';
+            ctx->view.cmd_length = 1;
+            ctx->view.cmd_cursor_pos = 1;
             editor_set_status_msg(ctx, ":");
             break;
 
         default:
             /* Regular character input */
-            if (isprint(key) && ctx->cmd_length < COMMAND_BUFFER_SIZE - 1) {
+            if (isprint(key) && ctx->view.cmd_length < COMMAND_BUFFER_SIZE - 1) {
                 /* Insert character at cursor */
-                memmove(ctx->cmd_buffer + ctx->cmd_cursor_pos + 1,
-                        ctx->cmd_buffer + ctx->cmd_cursor_pos,
-                        ctx->cmd_length - ctx->cmd_cursor_pos + 1);
-                ctx->cmd_buffer[ctx->cmd_cursor_pos] = key;
-                ctx->cmd_cursor_pos++;
-                ctx->cmd_length++;
-                editor_set_status_msg(ctx, "%s", ctx->cmd_buffer);
+                memmove(ctx->view.cmd_buffer + ctx->view.cmd_cursor_pos + 1,
+                        ctx->view.cmd_buffer + ctx->view.cmd_cursor_pos,
+                        ctx->view.cmd_length - ctx->view.cmd_cursor_pos + 1);
+                ctx->view.cmd_buffer[ctx->view.cmd_cursor_pos] = key;
+                ctx->view.cmd_cursor_pos++;
+                ctx->view.cmd_length++;
+                editor_set_status_msg(ctx, "%s", ctx->view.cmd_buffer);
             }
             break;
     }

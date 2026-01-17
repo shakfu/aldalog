@@ -108,7 +108,7 @@ const LokiLangOps **loki_lang_all(int *count);
 
 /**
  * Initialize language for current file.
- * Dispatches to appropriate language based on ctx->filename.
+ * Dispatches to appropriate language based on ctx->model.filename.
  *
  * @param ctx Editor context
  * @return 0 on success, -1 on error, 1 if no language for file
@@ -180,7 +180,7 @@ const char *loki_lang_get_error(editor_ctx_t *ctx);
 
 /**
  * Configure audio backend for language.
- * Dispatches to appropriate language based on ctx->filename.
+ * Dispatches to appropriate language based on ctx->model.filename.
  *
  * @param ctx Editor context
  * @param sf_path Soundfont path (NULL if not specified)

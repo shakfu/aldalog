@@ -608,7 +608,7 @@ int alda_repl_main(int argc, char **argv) {
             .load_config = 1,
             .reporter = NULL
         };
-        syntax_ctx.L = loki_lua_bootstrap(&syntax_ctx, &lua_opts);
+        syntax_ctx.view.L = loki_lua_bootstrap(&syntax_ctx, &lua_opts);
 
         /* Initialize Link callbacks for REPL notifications */
         shared_repl_link_init_callbacks(ctx.shared);
@@ -619,8 +619,8 @@ int alda_repl_main(int argc, char **argv) {
         shared_repl_link_cleanup_callbacks();
 
         /* Cleanup Lua */
-        if (syntax_ctx.L) {
-            lua_close(syntax_ctx.L);
+        if (syntax_ctx.view.L) {
+            lua_close(syntax_ctx.view.L);
         }
     }
 

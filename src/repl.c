@@ -141,7 +141,7 @@ static int repl_is_separator(int c, const char *separators) {
 }
 
 void repl_highlight_line(editor_ctx_t *syntax_ctx, ReplLineEditor *ed) {
-    struct t_editor_syntax *syn = syntax_ctx->syntax;
+    struct t_editor_syntax *syn = syntax_ctx->view.syntax;
 
     memset(ed->hl, HL_NORMAL, ed->len);
 

@@ -58,7 +58,7 @@ struct LokiAldaState {
 
 /* Get alda state from editor context, returning NULL if not initialized */
 static LokiAldaState* get_alda_state(editor_ctx_t *ctx) {
-    return ctx ? ctx->alda_state : NULL;
+    return ctx ? ctx->model.alda_state : NULL;
 }
 
 /* Global scale storage for Scala microtuning */
@@ -102,24 +102,24 @@ int loki_alda_init(editor_ctx_t *ctx, const char *port_name) {
     if (!ctx) return -1;
 
     /* Check if already initialized for this context */
-    if (ctx->alda_state && ctx->alda_state->initialized) {
-        set_state_error(ctx->alda_state, "Alda already initialized");
+    if (ctx->model.alda_state && ctx->model.alda_state->initialized) {
+        set_state_error(ctx->model.alda_state, "Alda already initialized");
         return -1;
     }
 
     /* Allocate state if needed */
-    LokiAldaState *state = ctx->alda_state;
+    LokiAldaState *state = ctx->model.alda_state;
     if (!state) {
         state = (LokiAldaState *)calloc(1, sizeof(LokiAldaState));
         if (!state) return -1;
-        ctx->alda_state = state;
+        ctx->model.alda_state = state;
     }
 
     /* Initialize mutex */
     if (pthread_mutex_init(&state->mutex, NULL) != 0) {
         set_state_error(state, "Failed to initialize mutex");
         free(state);
-        ctx->alda_state = NULL;
+        ctx->model.alda_state = NULL;
         return -1;
     }
 
@@ -132,7 +132,7 @@ int loki_alda_init(editor_ctx_t *ctx, const char *port_name) {
         alda_context_cleanup(&state->alda_ctx);
         pthread_mutex_destroy(&state->mutex);
         free(state);
-        ctx->alda_state = NULL;
+        ctx->model.alda_state = NULL;
         return -1;
     }
 
@@ -147,7 +147,7 @@ int loki_alda_init(editor_ctx_t *ctx, const char *port_name) {
         alda_context_cleanup(&state->alda_ctx);
         pthread_mutex_destroy(&state->mutex);
         free(state);
-        ctx->alda_state = NULL;
+        ctx->model.alda_state = NULL;
         return -1;
     }
 
@@ -196,7 +196,7 @@ void loki_alda_cleanup(editor_ctx_t *ctx) {
 
     /* Free the state structure */
     free(state);
-    ctx->alda_state = NULL;
+    ctx->model.alda_state = NULL;
 }
 
 int loki_alda_is_initialized(editor_ctx_t *ctx) {
@@ -1261,7 +1261,13 @@ static void alda_register_scala_module(lua_State *L) {
 
 /* Register alda module as loki.alda subtable */
 static void alda_register_lua_api(lua_State *L) {
-    /* Assumes loki table is on top of stack */
+    /* Get loki global table */
+    lua_getglobal(L, "loki");
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        return;
+    }
+
     lua_newtable(L);
     lua_pushcfunction(L, lua_alda_init);
     lua_setfield(L, -2, "init");
@@ -1313,6 +1319,8 @@ static void alda_register_lua_api(lua_State *L) {
 
     /* Also register scala module */
     alda_register_scala_module(L);
+
+    lua_pop(L, 1); /* pop loki */
 }
 
 /* ======================= Language Bridge Registration ======================= */

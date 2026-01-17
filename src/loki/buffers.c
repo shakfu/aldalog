@@ -58,10 +58,10 @@ static buffer_entry_t *find_free_slot(void) {
 static void update_display_name(buffer_entry_t *buf) {
     if (!buf) return;
 
-    if (buf->ctx.filename && buf->ctx.filename[0] != '\0') {
+    if (buf->ctx.model.filename && buf->ctx.model.filename[0] != '\0') {
         /* Extract basename from path */
-        const char *basename = strrchr(buf->ctx.filename, '/');
-        basename = basename ? basename + 1 : buf->ctx.filename;
+        const char *basename = strrchr(buf->ctx.model.filename, '/');
+        basename = basename ? basename + 1 : buf->ctx.model.filename;
 
         /* Truncate if too long */
         if (strlen(basename) > 50) {
@@ -96,27 +96,27 @@ int buffers_init(editor_ctx_t *initial_ctx) {
     editor_ctx_init(&first->ctx);
 
     /* Copy display state (rawmode now lives in TerminalHost, not per-buffer) */
-    first->ctx.screencols = initial_ctx->screencols;
-    first->ctx.screenrows = initial_ctx->screenrows;
-    first->ctx.screenrows_total = initial_ctx->screenrows_total;
-    first->ctx.L = initial_ctx->L;
-    memcpy(first->ctx.colors, initial_ctx->colors, sizeof(first->ctx.colors));
+    first->ctx.view.screencols = initial_ctx->view.screencols;
+    first->ctx.view.screenrows = initial_ctx->view.screenrows;
+    first->ctx.view.screenrows_total = initial_ctx->view.screenrows_total;
+    first->ctx.view.L = initial_ctx->view.L;
+    memcpy(first->ctx.view.colors, initial_ctx->view.colors, sizeof(first->ctx.view.colors));
 
     /* Copy display settings */
-    first->ctx.line_numbers = initial_ctx->line_numbers;
+    first->ctx.view.line_numbers = initial_ctx->view.line_numbers;
 
     /* Copy buffer content (rows) */
-    first->ctx.numrows = initial_ctx->numrows;
-    first->ctx.row = initial_ctx->row;
-    first->ctx.filename = initial_ctx->filename;
-    first->ctx.syntax = initial_ctx->syntax;
-    first->ctx.dirty = initial_ctx->dirty;
+    first->ctx.model.numrows = initial_ctx->model.numrows;
+    first->ctx.model.row = initial_ctx->model.row;
+    first->ctx.model.filename = initial_ctx->model.filename;
+    first->ctx.view.syntax = initial_ctx->view.syntax;
+    first->ctx.model.dirty = initial_ctx->model.dirty;
 
     /* Copy cursor state */
-    first->ctx.cx = initial_ctx->cx;
-    first->ctx.cy = initial_ctx->cy;
-    first->ctx.rowoff = initial_ctx->rowoff;
-    first->ctx.coloff = initial_ctx->coloff;
+    first->ctx.view.cx = initial_ctx->view.cx;
+    first->ctx.view.cy = initial_ctx->view.cy;
+    first->ctx.view.rowoff = initial_ctx->view.rowoff;
+    first->ctx.view.coloff = initial_ctx->view.coloff;
 
     update_display_name(first);
     buffer_state.current_buffer_id = first->id;
@@ -162,14 +162,14 @@ int buffer_create(const char *filename) {
 
     /* Copy display state from template buffer (rawmode now in TerminalHost) */
     if (template_ctx) {
-        buf->ctx.screencols = template_ctx->screencols;
-        buf->ctx.screenrows = template_ctx->screenrows;
-        buf->ctx.screenrows_total = template_ctx->screenrows_total;
-        buf->ctx.L = template_ctx->L;  /* Share Lua state */
+        buf->ctx.view.screencols = template_ctx->view.screencols;
+        buf->ctx.view.screenrows = template_ctx->view.screenrows;
+        buf->ctx.view.screenrows_total = template_ctx->view.screenrows_total;
+        buf->ctx.view.L = template_ctx->view.L;  /* Share Lua state */
         /* Copy color scheme */
-        memcpy(buf->ctx.colors, template_ctx->colors, sizeof(buf->ctx.colors));
+        memcpy(buf->ctx.view.colors, template_ctx->view.colors, sizeof(buf->ctx.view.colors));
         /* Copy display settings */
-        buf->ctx.line_numbers = template_ctx->line_numbers;
+        buf->ctx.view.line_numbers = template_ctx->view.line_numbers;
     }
 
     /* Initialize undo system for new buffer */
@@ -187,7 +187,7 @@ int buffer_create(const char *filename) {
         /* Empty buffer - insert one empty row so it displays properly */
         editor_insert_row(&buf->ctx, 0, "", 0);
         /* Reset dirty flag - empty buffer shouldn't be marked as modified */
-        buf->ctx.dirty = 0;
+        buf->ctx.model.dirty = 0;
     }
 
     update_display_name(buf);
@@ -202,7 +202,7 @@ int buffer_close(int buffer_id, int force) {
     if (!buf) return -1;
 
     /* Check for unsaved changes */
-    if (!force && buf->ctx.dirty) {
+    if (!force && buf->ctx.model.dirty) {
         return 1;  /* Has unsaved changes */
     }
 
@@ -361,7 +361,7 @@ const char *buffer_get_display_name(int buffer_id) {
 int buffer_is_modified(int buffer_id) {
     buffer_entry_t *buf = find_buffer(buffer_id);
     if (!buf) return -1;
-    return buf->ctx.dirty ? 1 : 0;
+    return buf->ctx.model.dirty ? 1 : 0;
 }
 
 /* ======================== State Management ======================== */

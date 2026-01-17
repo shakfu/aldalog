@@ -28,7 +28,7 @@ static void init_c_syntax_row(editor_ctx_t *ctx, t_erow *row, const char *text) 
 
     /* Set C syntax for context */
     extern struct t_editor_syntax HLDB[];
-    ctx->syntax = &HLDB[0];  /* C is first in HLDB */
+    ctx->view.syntax = &HLDB[0];  /* C is first in HLDB */
 
     syntax_update_row(ctx, row);
 }
@@ -264,52 +264,52 @@ TEST(syntax_c_multiline_comment_continuation) {
     editor_ctx_init(&ctx);
 
     /* Setup multi-line buffer */
-    ctx.numrows = 2;
-    ctx.row = calloc(2, sizeof(t_erow));
+    ctx.model.numrows = 2;
+    ctx.model.row = calloc(2, sizeof(t_erow));
 
     /* First line: start of multiline comment */
-    ctx.row[0].chars = strdup("/* comment");
-    ctx.row[0].size = strlen(ctx.row[0].chars);
-    ctx.row[0].render = strdup(ctx.row[0].chars);
-    ctx.row[0].rsize = ctx.row[0].size;
-    ctx.row[0].hl = calloc(ctx.row[0].rsize, 1);
-    ctx.row[0].idx = 0;
+    ctx.model.row[0].chars = strdup("/* comment");
+    ctx.model.row[0].size = strlen(ctx.model.row[0].chars);
+    ctx.model.row[0].render = strdup(ctx.model.row[0].chars);
+    ctx.model.row[0].rsize = ctx.model.row[0].size;
+    ctx.model.row[0].hl = calloc(ctx.model.row[0].rsize, 1);
+    ctx.model.row[0].idx = 0;
 
     /* Second line: continuation */
-    ctx.row[1].chars = strdup("still comment */");
-    ctx.row[1].size = strlen(ctx.row[1].chars);
-    ctx.row[1].render = strdup(ctx.row[1].chars);
-    ctx.row[1].rsize = ctx.row[1].size;
-    ctx.row[1].hl = calloc(ctx.row[1].rsize, 1);
-    ctx.row[1].idx = 1;
+    ctx.model.row[1].chars = strdup("still comment */");
+    ctx.model.row[1].size = strlen(ctx.model.row[1].chars);
+    ctx.model.row[1].render = strdup(ctx.model.row[1].chars);
+    ctx.model.row[1].rsize = ctx.model.row[1].size;
+    ctx.model.row[1].hl = calloc(ctx.model.row[1].rsize, 1);
+    ctx.model.row[1].idx = 1;
 
     extern struct t_editor_syntax HLDB[];
-    ctx.syntax = &HLDB[0];  /* C syntax */
+    ctx.view.syntax = &HLDB[0];  /* C syntax */
 
     /* Update syntax for both rows */
-    syntax_update_row(&ctx, &ctx.row[0]);
-    syntax_update_row(&ctx, &ctx.row[1]);
+    syntax_update_row(&ctx, &ctx.model.row[0]);
+    syntax_update_row(&ctx, &ctx.model.row[1]);
 
     /* First row should have open comment */
-    ASSERT_TRUE(ctx.row[0].hl_oc);
+    ASSERT_TRUE(ctx.model.row[0].hl_oc);
 
     /* Second row should continue comment */
-    for (int i = 0; i < ctx.row[1].rsize; i++) {
-        ASSERT_EQ(ctx.row[1].hl[i], HL_MLCOMMENT);
+    for (int i = 0; i < ctx.model.row[1].rsize; i++) {
+        ASSERT_EQ(ctx.model.row[1].hl[i], HL_MLCOMMENT);
     }
 
     /* Second row should NOT have open comment (it's closed) */
-    ASSERT_FALSE(ctx.row[1].hl_oc);
+    ASSERT_FALSE(ctx.model.row[1].hl_oc);
 
     /* Free manually created buffer */
-    for (int i = 0; i < ctx.numrows; i++) {
-        free(ctx.row[i].chars);
-        free(ctx.row[i].render);
-        free(ctx.row[i].hl);
+    for (int i = 0; i < ctx.model.numrows; i++) {
+        free(ctx.model.row[i].chars);
+        free(ctx.model.row[i].render);
+        free(ctx.model.row[i].hl);
     }
-    free(ctx.row);
-    ctx.row = NULL;
-    ctx.numrows = 0;
+    free(ctx.model.row);
+    ctx.model.row = NULL;
+    ctx.model.numrows = 0;
 
     editor_ctx_free(&ctx);
 }
@@ -436,7 +436,7 @@ TEST(syntax_python_comment) {
 
     /* Set Python syntax */
     extern struct t_editor_syntax HLDB[];
-    ctx.syntax = &HLDB[1];  /* Python is second in HLDB */
+    ctx.view.syntax = &HLDB[1];  /* Python is second in HLDB */
 
     syntax_update_row(&ctx, &row);
 
@@ -464,7 +464,7 @@ TEST(syntax_lua_comment) {
 
     /* Set Lua syntax */
     extern struct t_editor_syntax HLDB[];
-    ctx.syntax = &HLDB[2];  /* Lua is third in HLDB */
+    ctx.view.syntax = &HLDB[2];  /* Lua is third in HLDB */
 
     syntax_update_row(&ctx, &row);
 
@@ -492,7 +492,7 @@ TEST(syntax_python_keyword) {
 
     /* Set Python syntax */
     extern struct t_editor_syntax HLDB[];
-    ctx.syntax = &HLDB[1];  /* Python */
+    ctx.view.syntax = &HLDB[1];  /* Python */
 
     syntax_update_row(&ctx, &row);
 
@@ -520,7 +520,7 @@ TEST(syntax_lua_keyword) {
 
     /* Set Lua syntax */
     extern struct t_editor_syntax HLDB[];
-    ctx.syntax = &HLDB[2];  /* Lua */
+    ctx.view.syntax = &HLDB[2];  /* Lua */
 
     syntax_update_row(&ctx, &row);
 

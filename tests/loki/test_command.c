@@ -37,22 +37,22 @@ static void init_cmd_ctx(editor_ctx_t *ctx) {
     buffers_init(ctx);
     command_mode_init(ctx);
 
-    ctx->screenrows = 24;
-    ctx->screencols = 80;
+    ctx->view.screenrows = 24;
+    ctx->view.screencols = 80;
 }
 
 /* Helper: Create context with content */
 static void init_cmd_ctx_with_content(editor_ctx_t *ctx, const char *content) {
     init_cmd_ctx(ctx);
 
-    ctx->numrows = 1;
-    ctx->row = calloc(1, sizeof(t_erow));
-    ctx->row[0].chars = strdup(content);
-    ctx->row[0].size = strlen(content);
-    ctx->row[0].render = strdup(content);
-    ctx->row[0].rsize = strlen(content);
-    ctx->row[0].hl = NULL;
-    ctx->row[0].idx = 0;
+    ctx->model.numrows = 1;
+    ctx->model.row = calloc(1, sizeof(t_erow));
+    ctx->model.row[0].chars = strdup(content);
+    ctx->model.row[0].size = strlen(content);
+    ctx->model.row[0].render = strdup(content);
+    ctx->model.row[0].rsize = strlen(content);
+    ctx->model.row[0].hl = NULL;
+    ctx->model.row[0].idx = 0;
 }
 
 /* Helper: Free command test context */
@@ -70,11 +70,11 @@ TEST(cmd_mode_enter_sets_mode) {
     editor_ctx_t ctx;
     init_cmd_ctx(&ctx);
 
-    ctx.mode = MODE_NORMAL;
+    ctx.view.mode = MODE_NORMAL;
 
     command_mode_enter(&ctx);
 
-    ASSERT_EQ(ctx.mode, MODE_COMMAND);
+    ASSERT_EQ(ctx.view.mode, MODE_COMMAND);
 
     free_cmd_ctx(&ctx);
 }
@@ -86,9 +86,9 @@ TEST(cmd_mode_enter_initializes_buffer) {
     command_mode_enter(&ctx);
 
     /* Buffer should start with ':' */
-    ASSERT_EQ(ctx.cmd_buffer[0], ':');
-    ASSERT_EQ(ctx.cmd_length, 1);
-    ASSERT_EQ(ctx.cmd_cursor_pos, 1);
+    ASSERT_EQ(ctx.view.cmd_buffer[0], ':');
+    ASSERT_EQ(ctx.view.cmd_length, 1);
+    ASSERT_EQ(ctx.view.cmd_cursor_pos, 1);
 
     free_cmd_ctx(&ctx);
 }
@@ -98,10 +98,10 @@ TEST(cmd_mode_exit_returns_to_normal) {
     init_cmd_ctx(&ctx);
 
     command_mode_enter(&ctx);
-    ASSERT_EQ(ctx.mode, MODE_COMMAND);
+    ASSERT_EQ(ctx.view.mode, MODE_COMMAND);
 
     command_mode_exit(&ctx);
-    ASSERT_EQ(ctx.mode, MODE_NORMAL);
+    ASSERT_EQ(ctx.view.mode, MODE_NORMAL);
 
     free_cmd_ctx(&ctx);
 }
@@ -111,13 +111,13 @@ TEST(cmd_mode_exit_clears_buffer) {
     init_cmd_ctx(&ctx);
 
     command_mode_enter(&ctx);
-    ctx.cmd_buffer[1] = 'w';
-    ctx.cmd_buffer[2] = '\0';
-    ctx.cmd_length = 2;
+    ctx.view.cmd_buffer[1] = 'w';
+    ctx.view.cmd_buffer[2] = '\0';
+    ctx.view.cmd_length = 2;
 
     command_mode_exit(&ctx);
 
-    ASSERT_EQ(ctx.cmd_length, 0);
+    ASSERT_EQ(ctx.view.cmd_length, 0);
 
     free_cmd_ctx(&ctx);
 }
@@ -135,9 +135,9 @@ TEST(cmd_mode_regular_char_appends) {
     /* Type 'w' */
     command_mode_handle_key(&ctx, 0, 'w');
 
-    ASSERT_EQ(ctx.cmd_buffer[1], 'w');
-    ASSERT_EQ(ctx.cmd_length, 2);
-    ASSERT_EQ(ctx.cmd_cursor_pos, 2);
+    ASSERT_EQ(ctx.view.cmd_buffer[1], 'w');
+    ASSERT_EQ(ctx.view.cmd_length, 2);
+    ASSERT_EQ(ctx.view.cmd_cursor_pos, 2);
 
     free_cmd_ctx(&ctx);
 }
@@ -153,8 +153,8 @@ TEST(cmd_mode_multiple_chars) {
     command_mode_handle_key(&ctx, 0, 'e');
     command_mode_handle_key(&ctx, 0, 't');
 
-    ASSERT_STR_EQ(ctx.cmd_buffer, ":set");
-    ASSERT_EQ(ctx.cmd_length, 4);
+    ASSERT_STR_EQ(ctx.view.cmd_buffer, ":set");
+    ASSERT_EQ(ctx.view.cmd_length, 4);
 
     free_cmd_ctx(&ctx);
 }
@@ -167,13 +167,13 @@ TEST(cmd_mode_backspace_deletes_char) {
     command_mode_handle_key(&ctx, 0, 'w');
     command_mode_handle_key(&ctx, 0, 'q');
 
-    ASSERT_STR_EQ(ctx.cmd_buffer, ":wq");
+    ASSERT_STR_EQ(ctx.view.cmd_buffer, ":wq");
 
     /* Backspace */
     command_mode_handle_key(&ctx, 0, BACKSPACE);
 
-    ASSERT_STR_EQ(ctx.cmd_buffer, ":w");
-    ASSERT_EQ(ctx.cmd_length, 2);
+    ASSERT_STR_EQ(ctx.view.cmd_buffer, ":w");
+    ASSERT_EQ(ctx.view.cmd_length, 2);
 
     free_cmd_ctx(&ctx);
 }
@@ -183,12 +183,12 @@ TEST(cmd_mode_backspace_on_empty_exits) {
     init_cmd_ctx(&ctx);
 
     command_mode_enter(&ctx);
-    ASSERT_EQ(ctx.mode, MODE_COMMAND);
+    ASSERT_EQ(ctx.view.mode, MODE_COMMAND);
 
     /* Backspace on ':' should exit command mode */
     command_mode_handle_key(&ctx, 0, BACKSPACE);
 
-    ASSERT_EQ(ctx.mode, MODE_NORMAL);
+    ASSERT_EQ(ctx.view.mode, MODE_NORMAL);
 
     free_cmd_ctx(&ctx);
 }
@@ -200,11 +200,11 @@ TEST(cmd_mode_escape_exits) {
     command_mode_enter(&ctx);
     command_mode_handle_key(&ctx, 0, 'w');
 
-    ASSERT_EQ(ctx.mode, MODE_COMMAND);
+    ASSERT_EQ(ctx.view.mode, MODE_COMMAND);
 
     command_mode_handle_key(&ctx, 0, ESC);
 
-    ASSERT_EQ(ctx.mode, MODE_NORMAL);
+    ASSERT_EQ(ctx.view.mode, MODE_NORMAL);
 
     free_cmd_ctx(&ctx);
 }
@@ -217,13 +217,13 @@ TEST(cmd_mode_ctrl_u_clears_line) {
     command_mode_handle_key(&ctx, 0, 'w');
     command_mode_handle_key(&ctx, 0, 'q');
 
-    ASSERT_STR_EQ(ctx.cmd_buffer, ":wq");
+    ASSERT_STR_EQ(ctx.view.cmd_buffer, ":wq");
 
     /* Ctrl-U clears */
     command_mode_handle_key(&ctx, 0, CTRL_U);
 
-    ASSERT_STR_EQ(ctx.cmd_buffer, ":");
-    ASSERT_EQ(ctx.cmd_length, 1);
+    ASSERT_STR_EQ(ctx.view.cmd_buffer, ":");
+    ASSERT_EQ(ctx.view.cmd_length, 1);
 
     free_cmd_ctx(&ctx);
 }
@@ -236,11 +236,11 @@ TEST(cmd_mode_arrow_left_moves_cursor) {
     command_mode_handle_key(&ctx, 0, 'w');
     command_mode_handle_key(&ctx, 0, 'q');
 
-    ASSERT_EQ(ctx.cmd_cursor_pos, 3);
+    ASSERT_EQ(ctx.view.cmd_cursor_pos, 3);
 
     command_mode_handle_key(&ctx, 0, ARROW_LEFT);
 
-    ASSERT_EQ(ctx.cmd_cursor_pos, 2);
+    ASSERT_EQ(ctx.view.cmd_cursor_pos, 2);
 
     free_cmd_ctx(&ctx);
 }
@@ -255,11 +255,11 @@ TEST(cmd_mode_arrow_right_moves_cursor) {
     command_mode_handle_key(&ctx, 0, ARROW_LEFT);
     command_mode_handle_key(&ctx, 0, ARROW_LEFT);
 
-    ASSERT_EQ(ctx.cmd_cursor_pos, 1);
+    ASSERT_EQ(ctx.view.cmd_cursor_pos, 1);
 
     command_mode_handle_key(&ctx, 0, ARROW_RIGHT);
 
-    ASSERT_EQ(ctx.cmd_cursor_pos, 2);
+    ASSERT_EQ(ctx.view.cmd_cursor_pos, 2);
 
     free_cmd_ctx(&ctx);
 }
@@ -276,7 +276,7 @@ TEST(cmd_mode_cursor_stops_at_colon) {
     command_mode_handle_key(&ctx, 0, ARROW_LEFT);
     command_mode_handle_key(&ctx, 0, ARROW_LEFT);
 
-    ASSERT_EQ(ctx.cmd_cursor_pos, 1);  /* Stays after ':' */
+    ASSERT_EQ(ctx.view.cmd_cursor_pos, 1);  /* Stays after ':' */
 
     free_cmd_ctx(&ctx);
 }
@@ -293,8 +293,8 @@ TEST(cmd_execute_unknown_command) {
 
     ASSERT_EQ(result, 0);
     /* Status message should indicate unknown command */
-    ASSERT_TRUE(strstr(ctx.statusmsg, "Unknown") != NULL ||
-                strstr(ctx.statusmsg, "unknown") != NULL);
+    ASSERT_TRUE(strstr(ctx.view.statusmsg, "Unknown") != NULL ||
+                strstr(ctx.view.statusmsg, "unknown") != NULL);
 
     free_cmd_ctx(&ctx);
 }
@@ -318,7 +318,7 @@ TEST(cmd_execute_help_shows_message) {
 
     ASSERT_EQ(result, 1);
     /* Status message should contain help info */
-    ASSERT_TRUE(strlen(ctx.statusmsg) > 0);
+    ASSERT_TRUE(strlen(ctx.view.statusmsg) > 0);
 
     free_cmd_ctx(&ctx);
 }
@@ -331,9 +331,9 @@ TEST(cmd_execute_help_specific_command) {
 
     ASSERT_EQ(result, 1);
     /* Should show help for :w */
-    ASSERT_TRUE(strstr(ctx.statusmsg, "write") != NULL ||
-                strstr(ctx.statusmsg, "Write") != NULL ||
-                strstr(ctx.statusmsg, "save") != NULL);
+    ASSERT_TRUE(strstr(ctx.view.statusmsg, "write") != NULL ||
+                strstr(ctx.view.statusmsg, "Write") != NULL ||
+                strstr(ctx.view.statusmsg, "save") != NULL);
 
     free_cmd_ctx(&ctx);
 }
@@ -342,18 +342,18 @@ TEST(cmd_execute_set_wrap) {
     editor_ctx_t ctx;
     init_cmd_ctx(&ctx);
 
-    ctx.word_wrap = 0;
+    ctx.view.word_wrap = 0;
 
     int result = command_execute(&ctx, ":set wrap");
 
     ASSERT_EQ(result, 1);
-    ASSERT_EQ(ctx.word_wrap, 1);
+    ASSERT_EQ(ctx.view.word_wrap, 1);
 
     /* Toggle again */
     result = command_execute(&ctx, ":set wrap");
 
     ASSERT_EQ(result, 1);
-    ASSERT_EQ(ctx.word_wrap, 0);
+    ASSERT_EQ(ctx.view.word_wrap, 0);
 
     free_cmd_ctx(&ctx);
 }
@@ -373,13 +373,13 @@ TEST(cmd_write_requires_filename_when_new) {
     editor_ctx_t ctx;
     init_cmd_ctx(&ctx);
 
-    ctx.filename = NULL;
+    ctx.model.filename = NULL;
 
     int result = command_execute(&ctx, ":w");
 
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(strstr(ctx.statusmsg, "filename") != NULL ||
-                strstr(ctx.statusmsg, "No") != NULL);
+    ASSERT_TRUE(strstr(ctx.view.statusmsg, "filename") != NULL ||
+                strstr(ctx.view.statusmsg, "No") != NULL);
 
     free_cmd_ctx(&ctx);
 }
@@ -396,11 +396,11 @@ TEST(cmd_write_saves_file) {
     char cmd[300];
     snprintf(cmd, sizeof(cmd), ":w %s", path);
 
-    ctx.dirty = 1;
+    ctx.model.dirty = 1;
     int result = command_execute(&ctx, cmd);
 
     ASSERT_EQ(result, 1);
-    ASSERT_EQ(ctx.dirty, 0);
+    ASSERT_EQ(ctx.model.dirty, 0);
 
     /* Verify file exists */
     FILE *f = fopen(path, "r");
@@ -418,8 +418,8 @@ TEST(cmd_edit_requires_filename) {
     int result = command_execute(&ctx, ":e");
 
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(strstr(ctx.statusmsg, "require") != NULL ||
-                strstr(ctx.statusmsg, "Filename") != NULL);
+    ASSERT_TRUE(strstr(ctx.view.statusmsg, "require") != NULL ||
+                strstr(ctx.view.statusmsg, "Filename") != NULL);
 
     free_cmd_ctx(&ctx);
 }
@@ -508,14 +508,14 @@ TEST(cmd_execute_alias_q) {
     editor_ctx_t ctx;
     init_cmd_ctx(&ctx);
 
-    ctx.dirty = 1;
+    ctx.model.dirty = 1;
 
     /* :q should fail if dirty */
     int result = command_execute(&ctx, ":q");
 
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(strstr(ctx.statusmsg, "Unsaved") != NULL ||
-                strstr(ctx.statusmsg, "unsaved") != NULL);
+    ASSERT_TRUE(strstr(ctx.view.statusmsg, "Unsaved") != NULL ||
+                strstr(ctx.view.statusmsg, "unsaved") != NULL);
 
     free_cmd_ctx(&ctx);
 }
@@ -524,14 +524,14 @@ TEST(cmd_execute_alias_quit) {
     editor_ctx_t ctx;
     init_cmd_ctx(&ctx);
 
-    ctx.dirty = 1;
+    ctx.model.dirty = 1;
 
     /* :quit is alias for :q */
     int result = command_execute(&ctx, ":quit");
 
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(strstr(ctx.statusmsg, "Unsaved") != NULL ||
-                strstr(ctx.statusmsg, "unsaved") != NULL);
+    ASSERT_TRUE(strstr(ctx.view.statusmsg, "Unsaved") != NULL ||
+                strstr(ctx.view.statusmsg, "unsaved") != NULL);
 
     free_cmd_ctx(&ctx);
 }
@@ -564,7 +564,7 @@ TEST(cmd_execute_alias_h_for_help) {
     int result = command_execute(&ctx, ":h");
 
     ASSERT_EQ(result, 1);
-    ASSERT_TRUE(strlen(ctx.statusmsg) > 0);
+    ASSERT_TRUE(strlen(ctx.view.statusmsg) > 0);
 
     free_cmd_ctx(&ctx);
 }
@@ -591,7 +591,7 @@ TEST(cmd_register_custom_command) {
     /* Execute custom command */
     result = command_execute(&ctx, ":testcmd");
     ASSERT_EQ(result, 1);
-    ASSERT_STR_EQ(ctx.statusmsg, "Test handler called");
+    ASSERT_STR_EQ(ctx.view.statusmsg, "Test handler called");
 
     command_unregister_all_dynamic();
     free_cmd_ctx(&ctx);

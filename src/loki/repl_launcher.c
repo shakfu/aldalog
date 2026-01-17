@@ -89,13 +89,13 @@ static void setup_syntax_context(editor_ctx_t *syntax_ctx, const char *file_ext)
         .load_config = 1,
         .reporter = NULL
     };
-    syntax_ctx->L = loki_lua_bootstrap(syntax_ctx, &lua_opts);
+    syntax_ctx->view.L = loki_lua_bootstrap(syntax_ctx, &lua_opts);
 }
 
 static void cleanup_syntax_context(editor_ctx_t *syntax_ctx) {
-    if (syntax_ctx->L) {
-        lua_close(syntax_ctx->L);
-        syntax_ctx->L = NULL;
+    if (syntax_ctx->view.L) {
+        lua_close(syntax_ctx->view.L);
+        syntax_ctx->view.L = NULL;
     }
 }
 
