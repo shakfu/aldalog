@@ -35,6 +35,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <time.h>
 
 /* ============================================================================
  * Bog Usage and Help
@@ -127,14 +128,24 @@ static int vel_to_midi(double velocity) {
     return v;
 }
 
+/* Track start time for audio clock */
+static double g_bog_start_time = 0.0;
+
+static double get_wall_time(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
+}
+
 static void repl_audio_init(void *userdata) {
     (void)userdata;
+    /* Initialize start time for the audio clock */
+    g_bog_start_time = get_wall_time();
 }
 
 static double repl_audio_time(void *userdata) {
     (void)userdata;
-    if (!g_bog_repl_scheduler) return 0.0;
-    return bog_scheduler_now(g_bog_repl_scheduler);
+    return get_wall_time() - g_bog_start_time;
 }
 
 static void repl_audio_kick(void *userdata, double time, double velocity) {
