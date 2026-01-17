@@ -31,6 +31,7 @@ if(LANG_BOG)
     list(APPEND PSND_LANG_SOURCES
         ${PSND_ROOT_DIR}/src/lang/bog/repl.c
         ${PSND_ROOT_DIR}/src/lang/bog/dispatch.c
+        ${PSND_ROOT_DIR}/src/lang/bog/bog_async.c
     )
 endif()
 
@@ -52,6 +53,7 @@ target_include_directories(psnd_bin PRIVATE
     ${PSND_ROOT_DIR}
     ${PSND_ROOT_DIR}/include
     ${PSND_ROOT_DIR}/src
+    ${PSND_ROOT_DIR}/src/lang/bog
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

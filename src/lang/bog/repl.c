@@ -9,6 +9,7 @@
  */
 
 #include "bog_repl.h"
+#include "bog_async.h"
 #include "repl.h"
 #include "psnd.h"
 #include "loki/core.h"
@@ -21,6 +22,8 @@
 #include "shared/midi/midi.h"
 #include "shared/audio/audio.h"
 
+#include <lua.h>
+
 /* Bog library headers */
 #include "bog.h"
 #include "scheduler.h"
@@ -31,7 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <time.h>
+#include <signal.h>
 
 /* ============================================================================
  * Bog Usage and Help
@@ -205,6 +208,9 @@ static void repl_audio_noise(void *userdata, double time, double velocity) {
 
 /* Stop callback for Bog REPL */
 static void bog_stop_playback(void) {
+    /* Stop async thread first */
+    bog_async_stop();
+
     if (g_bog_repl_scheduler && g_bog_repl_running) {
         bog_scheduler_stop(g_bog_repl_scheduler);
         g_bog_repl_running = 0;
@@ -320,16 +326,16 @@ static int bog_process_command(const char *input) {
     return 2; /* evaluate as Bog */
 }
 
-/* Tick scheduler and process transitions */
-static void bog_repl_tick(void) {
-    if (!g_bog_repl_scheduler || !g_bog_repl_running) return;
-
-    bog_scheduler_tick(g_bog_repl_scheduler);
-
-    if (g_bog_repl_transition) {
-        double now = bog_scheduler_now(g_bog_repl_scheduler);
-        bog_transition_manager_process(g_bog_repl_transition, now);
+/* Start async tick thread */
+static void bog_start_async(void) {
+    if (g_bog_repl_scheduler && g_bog_repl_running) {
+        bog_async_start(g_bog_repl_scheduler, g_bog_repl_transition);
     }
+}
+
+/* Stop async tick thread */
+static void bog_stop_async(void) {
+    bog_async_stop();
 }
 
 /* Non-interactive Bog REPL loop for piped input */
@@ -346,11 +352,10 @@ static void bog_repl_loop_pipe(void) {
         if (len == 0) continue;
 
         int result = bog_process_command(line);
-        if (result == 1) break;      /* quit */
-        if (result == 0) {
-            bog_repl_tick();
-            continue;   /* command handled */
+        if (result == 1) {
+            break;      /* quit */
         }
+        if (result == 0) continue;   /* command handled */
 
         /* Evaluate as Bog code */
         char *error = NULL;
@@ -360,13 +365,13 @@ static void bog_repl_loop_pipe(void) {
                 if (!g_bog_repl_running && g_bog_repl_scheduler) {
                     bog_scheduler_start(g_bog_repl_scheduler);
                     g_bog_repl_running = 1;
+                    bog_start_async();
                 }
             } else {
                 printf("Error: %s\n", error ? error : "Parse error");
                 if (error) free(error);
             }
         }
-        bog_repl_tick();
         fflush(stdout);
     }
 }
@@ -376,9 +381,13 @@ static void bog_repl_loop(editor_ctx_t *syntax_ctx) {
     char *input;
     char history_path[512] = {0};
 
+    /* Start async thread if scheduler is running */
+    bog_start_async();
+
     /* Use non-interactive mode for piped input */
     if (!isatty(STDIN_FILENO)) {
         bog_repl_loop_pipe();
+        bog_async_stop();
         return;
     }
 
@@ -403,14 +412,13 @@ static void bog_repl_loop(editor_ctx_t *syntax_ctx) {
     }
 
     printf("Bog REPL %s (type :h for help, :q to quit)\n", PSND_VERSION);
+    fflush(stdout);
 
     /* Enable raw mode for syntax-highlighted input */
     repl_enable_raw_mode();
 
     while (1) {
-        /* Tick scheduler while waiting for input */
-        bog_repl_tick();
-
+        /* Use standard blocking readline - async thread handles scheduler ticking */
         input = repl_readline(syntax_ctx, &ed, "bog> ");
 
         if (input == NULL) {
@@ -428,7 +436,6 @@ static void bog_repl_loop(editor_ctx_t *syntax_ctx) {
         int result = bog_process_command(input);
         if (result == 1) break;      /* quit */
         if (result == 0) {
-            bog_repl_tick();
             shared_repl_link_check();
             continue;   /* command handled */
         }
@@ -441,15 +448,18 @@ static void bog_repl_loop(editor_ctx_t *syntax_ctx) {
                 if (!g_bog_repl_running && g_bog_repl_scheduler) {
                     bog_scheduler_start(g_bog_repl_scheduler);
                     g_bog_repl_running = 1;
+                    bog_start_async();
                 }
             } else {
                 printf("Error: %s\n", error ? error : "Parse error");
                 if (error) free(error);
             }
         }
-        bog_repl_tick();
         shared_repl_link_check();
     }
+
+    /* Stop async thread before cleanup */
+    bog_async_stop();
 
     /* Disable raw mode before exit */
     repl_disable_raw_mode();
@@ -476,6 +486,9 @@ static void bog_cb_list_ports(void) {
 
 /* Initialize Bog context and MIDI/audio */
 static void *bog_cb_init(const SharedReplArgs *args) {
+    /* Initialize async system */
+    bog_async_init();
+
     /* Create arena */
     g_bog_repl_arena = bog_arena_create();
     if (!g_bog_repl_arena) {
@@ -645,6 +658,10 @@ static void bog_cb_cleanup(void *lang_ctx) {
     /* Cleanup Link callbacks */
     shared_repl_link_cleanup_callbacks();
 
+    /* Stop async thread first */
+    bog_async_stop();
+    bog_async_cleanup();
+
     /* Stop scheduler */
     if (g_bog_repl_scheduler && g_bog_repl_running) {
         bog_scheduler_stop(g_bog_repl_scheduler);
@@ -686,15 +703,12 @@ static void bog_cb_cleanup(void *lang_ctx) {
     }
 }
 
-/* Execute a Bog file */
-static int bog_cb_exec_file(void *lang_ctx, const char *path, int verbose) {
-    (void)lang_ctx;
-    (void)verbose;
-
+/* Load and evaluate a Bog file (non-blocking - just loads, doesn't run loop) */
+static int bog_load_file(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) {
         fprintf(stderr, "Error: Cannot open file: %s\n", path);
-        return 1;
+        return -1;
     }
 
     /* Read file contents */
@@ -706,11 +720,11 @@ static int bog_cb_exec_file(void *lang_ctx, const char *path, int verbose) {
     if (!code) {
         fclose(f);
         fprintf(stderr, "Error: Out of memory\n");
-        return 1;
+        return -1;
     }
 
-    size_t read = fread(code, 1, size, f);
-    code[read] = '\0';
+    size_t read_bytes = fread(code, 1, size, f);
+    code[read_bytes] = '\0';
     fclose(f);
 
     /* Evaluate */
@@ -724,23 +738,70 @@ static int bog_cb_exec_file(void *lang_ctx, const char *path, int verbose) {
     if (!success) {
         fprintf(stderr, "Error: %s\n", error ? error : "Parse error");
         if (error) free(error);
+        return -1;
+    }
+
+    /* Start scheduler if not already running */
+    if (g_bog_repl_scheduler && !g_bog_repl_running) {
+        bog_scheduler_start(g_bog_repl_scheduler);
+        g_bog_repl_running = 1;
+        /* NOTE: async thread will be started when entering REPL loop */
+    }
+
+    return 0;
+}
+
+/* Execute a Bog file - for headless 'play' mode with signal handler */
+static volatile sig_atomic_t g_bog_interrupted = 0;
+
+static void bog_sigint_handler(int sig) {
+    (void)sig;
+    g_bog_interrupted = 1;
+    g_bog_repl_running = 0;
+}
+
+static int bog_cb_exec_file(void *lang_ctx, const char *path, int verbose) {
+    (void)lang_ctx;
+    (void)verbose;
+
+    if (bog_load_file(path) != 0) {
         return 1;
     }
 
-    /* Start scheduler and run until interrupted */
-    if (g_bog_repl_scheduler) {
-        bog_scheduler_start(g_bog_repl_scheduler);
-        g_bog_repl_running = 1;
+    /* Install signal handler for Ctrl-C */
+    struct sigaction sa, old_sa;
+    sa.sa_handler = bog_sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, &old_sa);
 
-        /* Run scheduler loop */
-        while (g_bog_repl_running) {
-            bog_scheduler_tick(g_bog_repl_scheduler);
-            if (g_bog_repl_transition) {
-                double now = bog_scheduler_now(g_bog_repl_scheduler);
-                bog_transition_manager_process(g_bog_repl_transition, now);
-            }
-            usleep(10000);  /* 10ms tick */
+    /* Reset interrupt flag */
+    g_bog_interrupted = 0;
+
+    printf("Playing %s (press Ctrl-C to stop)...\n", path);
+    fflush(stdout);
+
+    /* Run scheduler loop until interrupted */
+    while (g_bog_repl_running && !g_bog_interrupted) {
+        bog_scheduler_tick(g_bog_repl_scheduler);
+        if (g_bog_repl_transition) {
+            double now = bog_scheduler_now(g_bog_repl_scheduler);
+            bog_transition_manager_process(g_bog_repl_transition, now);
         }
+        usleep(10000);  /* 10ms tick */
+    }
+
+    /* Stop scheduler */
+    if (g_bog_repl_scheduler) {
+        bog_scheduler_stop(g_bog_repl_scheduler);
+        g_bog_repl_running = 0;
+    }
+
+    /* Restore original signal handler */
+    sigaction(SIGINT, &old_sa, NULL);
+
+    if (g_bog_interrupted) {
+        printf("\nStopped.\n");
     }
 
     return 0;
@@ -769,10 +830,99 @@ static const SharedReplCallbacks bog_repl_callbacks = {
  * Bog REPL Main Entry Points
  * ============================================================================ */
 
+/**
+ * Custom bog_repl_main that supports file+REPL mode:
+ * - `psnd bog` -> start REPL
+ * - `psnd bog file.bog` -> load file, then start REPL (scheduler runs in background)
+ */
 int bog_repl_main(int argc, char **argv) {
-    return shared_lang_repl_main(&bog_repl_callbacks, argc, argv);
+    const char *input_file = NULL;
+    SharedReplArgs args = {0, -1, NULL, NULL};
+    int i;
+
+    /* Parse arguments - skip argv[0] which is the language name ("bog") */
+    for (i = 1; i < argc; i++) {
+        const char *arg = argv[i];
+
+        if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
+            print_bog_repl_usage(PSND_NAME);
+            return 0;
+        }
+        if (strcmp(arg, "-l") == 0 || strcmp(arg, "--list") == 0) {
+            bog_cb_list_ports();
+            return 0;
+        }
+        if (strcmp(arg, "-v") == 0 || strcmp(arg, "--verbose") == 0) {
+            args.verbose = 1;
+            continue;
+        }
+        if ((strcmp(arg, "-p") == 0 || strcmp(arg, "--port") == 0) && i + 1 < argc) {
+            args.port_index = atoi(argv[++i]);
+            continue;
+        }
+        if (strcmp(arg, "--virtual") == 0 && i + 1 < argc) {
+            args.virtual_name = argv[++i];
+            continue;
+        }
+        if ((strcmp(arg, "-sf") == 0 || strcmp(arg, "--soundfont") == 0) && i + 1 < argc) {
+            args.soundfont_path = argv[++i];
+            continue;
+        }
+        /* Non-option argument is input file */
+        if (arg[0] != '-' && !input_file) {
+            input_file = arg;
+        }
+    }
+
+    /* Initialize bog */
+    void *lang_ctx = bog_cb_init(&args);
+    if (!lang_ctx) {
+        fprintf(stderr, "Error: Failed to initialize Bog\n");
+        return 1;
+    }
+
+    /* If file provided, load it (starts scheduler) */
+    if (input_file) {
+        if (args.verbose) {
+            printf("Loading: %s\n", input_file);
+        }
+        if (bog_load_file(input_file) != 0) {
+            bog_cb_cleanup(lang_ctx);
+            return 1;
+        }
+        printf("Loaded: %s\n", input_file);
+    }
+
+    /* Setup syntax highlighting context */
+    editor_ctx_t syntax_ctx;
+    editor_ctx_init(&syntax_ctx);
+    syntax_init_default_colors(&syntax_ctx);
+    syntax_select_for_filename(&syntax_ctx, "input.bog");
+
+    /* Load Lua for syntax highlighting */
+    struct loki_lua_opts lua_opts = {
+        .bind_editor = 1,
+        .load_config = 1,
+        .reporter = NULL
+    };
+    syntax_ctx.view.L = loki_lua_bootstrap(&syntax_ctx, &lua_opts);
+
+    /* Enter REPL loop */
+    bog_repl_loop(&syntax_ctx);
+
+    /* Cleanup */
+    if (syntax_ctx.view.L) {
+        lua_close(syntax_ctx.view.L);
+        syntax_ctx.view.L = NULL;
+    }
+    bog_cb_cleanup(lang_ctx);
+
+    return 0;
 }
 
+/**
+ * Headless play mode - runs until Ctrl-C
+ */
 int bog_play_main(int argc, char **argv) {
     return shared_lang_play_main(&bog_repl_callbacks, argc, argv);
 }
