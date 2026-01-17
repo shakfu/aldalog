@@ -7,6 +7,22 @@
 The following tasks enable replacing the terminal editor with a web-based editor.
 Order reflects dependency chain - earlier tasks unblock later ones.
 
+```text
+┌───────────────────────┬────────────┬───────────┬──────────────┬───────────┐
+│         Phase         │ Complexity │  Effort   │ Dependencies │   Risk    │
+├───────────────────────┼────────────┼───────────┼──────────────┼───────────┤
+│ 3: Input Abstraction  │ Medium     │ 2-3 days  │ None         │ Low       │
+├───────────────────────┼────────────┼───────────┼──────────────┼───────────┤
+│ 4: Renderer Interface │ High       │ 4-6 days  │ None         │ Medium    │
+├───────────────────────┼────────────┼───────────┼──────────────┼───────────┤
+│ 5: Session API        │ Medium     │ 2-3 days  │ 3, 4         │ Low       │
+├───────────────────────┼────────────┼───────────┼──────────────┼───────────┤
+│ 6: RPC Service        │ High       │ 5-8 days  │ 5            │ High      │
+├───────────────────────┼────────────┼───────────┼──────────────┼───────────┤
+│ 7: Web Front-End      │ Very High  │ 2-4 weeks │ 6            │ Very High │
+└───────────────────────┴────────────┴───────────┴──────────────┴───────────┘
+```
+
 #### Phase 1: Eliminate Global State & Singletons
 
 - [x] Remove global `signal_context` in `terminal.c:28`
@@ -26,12 +42,12 @@ Order reflects dependency chain - earlier tasks unblock later ones.
 
 #### Phase 2: Split Model from View in `editor_ctx_t`
 
-- [ ] Factor `editor_ctx_t` into `EditorModel` + `ViewAdapter`
+- [x] Factor `editor_ctx_t` into `EditorModel` + `ViewAdapter`
   - Model: buffers, syntax, selections, language handles, cursor logical position
   - ViewAdapter: terminal metrics, theme colors, REPL layout
   - See `internal.h:163-219` for current mixed struct
 
-- [ ] Provide serialization helpers for the model
+- [x] Provide serialization helpers for the model
   - Enables snapshot/restore, RPC transport, test fixtures
 
 #### Phase 3: Abstract Input Handling
