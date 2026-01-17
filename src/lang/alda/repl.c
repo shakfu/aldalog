@@ -82,6 +82,11 @@ static void print_repl_help(void) {
  * REPL Loop
  * ============================================================================ */
 
+/* Check if string starts with prefix */
+static int starts_with(const char* str, const char* prefix) {
+    return strncmp(str, prefix, strlen(prefix)) == 0;
+}
+
 /* Process an Alda REPL command. Returns: 0=continue, 1=quit, 2=interpret as Alda */
 static int alda_process_command(AldaContext *ctx, const char *input) {
     /* Try shared commands first */
@@ -106,6 +111,27 @@ static int alda_process_command(AldaContext *ctx, const char *input) {
     /* Help - add Alda-specific help */
     if (strcmp(cmd, "help") == 0 || strcmp(cmd, "h") == 0 || strcmp(cmd, "?") == 0) {
         print_repl_help();
+        return 0;
+    }
+
+    /* :play file.alda - interpret and play an Alda file */
+    if (starts_with(cmd, "play ")) {
+        const char* path = cmd + 5;
+        while (*path == ' ') path++;
+        if (*path) {
+            printf("Playing %s...\n", path);
+            alda_events_clear(ctx);
+            int parse_result = alda_interpret_file(ctx, path);
+            if (parse_result < 0) {
+                printf("Failed to parse file: %s\n", path);
+            } else if (ctx->event_count > 0) {
+                alda_events_play_async(ctx);
+            } else {
+                printf("No events to play\n");
+            }
+        } else {
+            printf("Usage: :play PATH\n");
+        }
         return 0;
     }
 

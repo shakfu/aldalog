@@ -4,10 +4,10 @@
 
 ### Feature Completeness
 
-- [ ] Implement `:cs-play` command or remove from help (`src/shared/repl_commands.c:301-312`)
-  - Help text advertises `:cs-play PATH` but handler prints "not yet implemented"
-  - Users enabling Csound backend hit dead-end workflow
-  - Fix: Wire command into `shared_csound_play_file()` or hide until supported
+- [x] Implement `:play` command with file-type dispatch
+  - Replaced `:cs-play` with generic `:play PATH` command
+  - Dispatches based on file extension: `.csd` -> Csound, `.alda`/`.joy`/`.scm` -> respective REPL
+  - Each REPL handles its own file type (Alda, Joy, TR7)
 
 - [ ] Wire Ableton Link callbacks (`src/shared/link/link.c`)
   - Link is implemented as singleton, callers must poll `shared_link_check_callbacks` manually

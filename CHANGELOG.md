@@ -47,6 +47,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - `(play-seq '(pitches...) [vel] [dur])` plays notes sequentially without blocking
   - `:stop` command halts all playback
 
+- **Unified `:play` Command**: Generic file playback command that dispatches by extension
+  - `:play file.csd` - plays Csound file (blocking)
+  - `:play file.alda` - interprets and plays Alda file (from Alda REPL)
+  - `:play file.joy` - loads and executes Joy file (from Joy REPL)
+  - `:play file.scm` - loads and executes Scheme file (from TR7 REPL)
+  - Replaces the previous `:cs-play` command
+
 ### Changed
 
 - **Alda Async Migrated to Shared Service**: Alda now uses the shared async playback engine

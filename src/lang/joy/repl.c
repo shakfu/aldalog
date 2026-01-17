@@ -95,8 +95,13 @@ static void joy_stop_playback(void) {
     joy_midi_panic(g_joy_repl_shared);
 }
 
+/* Check if string starts with prefix */
+static int starts_with(const char* str, const char* prefix) {
+    return strncmp(str, prefix, strlen(prefix)) == 0;
+}
+
 /* Process a Joy REPL command. Returns: 0=continue, 1=quit, 2=evaluate as Joy code */
-static int joy_process_command(const char* input) {
+static int joy_process_command(JoyContext* ctx, const char* input) {
     /* Try shared commands first */
     int result = shared_process_command(g_joy_repl_shared, input, joy_stop_playback);
     if (result == REPL_CMD_QUIT) {
@@ -114,6 +119,22 @@ static int joy_process_command(const char* input) {
     /* Help - add Joy-specific help */
     if (strcmp(cmd, "help") == 0 || strcmp(cmd, "h") == 0 || strcmp(cmd, "?") == 0) {
         print_joy_repl_help();
+        return 0;
+    }
+
+    /* :play file.joy - load and execute a Joy file */
+    if (starts_with(cmd, "play ")) {
+        const char* path = cmd + 5;
+        while (*path == ' ') path++;
+        if (*path) {
+            printf("Loading %s...\n", path);
+            int load_result = joy_load_file(ctx, path);
+            if (load_result != 0) {
+                printf("Failed to load file: %s\n", path);
+            }
+        } else {
+            printf("Usage: :play PATH\n");
+        }
         return 0;
     }
 
@@ -143,7 +164,7 @@ static void joy_repl_loop_pipe(JoyContext *ctx) {
 
         if (len == 0) continue;
 
-        int result = joy_process_command(line);
+        int result = joy_process_command(ctx, line);
         if (result == 1) break; /* quit */
         if (result == 0) continue; /* command handled */
 
@@ -212,7 +233,7 @@ static void joy_repl_loop(JoyContext *ctx, editor_ctx_t *syntax_ctx) {
         repl_add_history(&ed, input);
 
         /* Process command */
-        int result = joy_process_command(input);
+        int result = joy_process_command(ctx, input);
         if (result == 1) break;      /* quit */
         if (result == 0) continue;   /* command handled */
 

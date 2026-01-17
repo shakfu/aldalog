@@ -52,7 +52,9 @@ void shared_print_command_help(void) {
     printf("  :csound           Enable Csound as audio backend\n");
     printf("  :cs-disable       Disable Csound\n");
     printf("  :cs-status        Show Csound status\n");
-    printf("  :cs-play PATH     Play a CSD file (blocking)\n");
+    printf("\n");
+    printf("Playback:\n");
+    printf("  :play PATH        Play a file (dispatches by extension)\n");
     printf("\n");
     printf("MIDI Port Commands:\n");
     printf("  :virtual [NAME]   Create virtual MIDI port\n");
@@ -298,16 +300,39 @@ int shared_process_command(SharedContext* ctx, const char* input,
         return REPL_CMD_HANDLED;
     }
 
-    if (starts_with(cmd, "cs-play ")) {
-        const char* path = skip_whitespace(cmd + 8);
+    /* Generic :play command - dispatches by file extension */
+    if (starts_with(cmd, "play ")) {
+        const char* path = skip_whitespace(cmd + 5);
         if (*path == '\0') {
-            printf("Usage: :cs-play PATH\n");
-        } else {
-            printf("Playing %s (Ctrl-C to stop)...\n", path);
-            /* Note: shared_csound_play_file is not available,
-             * this would need to be implemented in the audio layer */
-            printf("cs-play not yet implemented in shared layer\n");
+            printf("Usage: :play PATH\n");
+            return REPL_CMD_HANDLED;
         }
+
+        /* Find file extension */
+        const char* ext = strrchr(path, '.');
+        if (!ext) {
+            printf("Cannot determine file type (no extension)\n");
+            return REPL_CMD_HANDLED;
+        }
+
+        /* Dispatch based on extension */
+        if (strcmp(ext, ".csd") == 0 || strcmp(ext, ".orc") == 0) {
+            /* Csound file */
+            printf("Playing %s (Ctrl-C to stop)...\n", path);
+            int result = shared_csound_play_file(path, 1);
+            if (result != 0) {
+                printf("Csound: Failed to play file (is Csound backend available?)\n");
+            }
+            return REPL_CMD_HANDLED;
+        }
+
+        /* For language files (.alda, .joy, .scm), let the REPL handle it */
+        if (strcmp(ext, ".alda") == 0 || strcmp(ext, ".joy") == 0 ||
+            strcmp(ext, ".scm") == 0 || strcmp(ext, ".lisp") == 0) {
+            return REPL_CMD_NOT_CMD;
+        }
+
+        printf("Unknown file type: %s\n", ext);
         return REPL_CMD_HANDLED;
     }
 

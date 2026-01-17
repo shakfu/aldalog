@@ -538,6 +538,38 @@ static void tr7_stop_playback(void) {
     }
 }
 
+/* Check if string starts with prefix */
+static int starts_with(const char* str, const char* prefix) {
+    return strncmp(str, prefix, strlen(prefix)) == 0;
+}
+
+/* Helper to load and run a Scheme file */
+static int tr7_load_and_run_file(const char* filename) {
+    FILE *f = fopen(filename, "r");
+    if (!f) {
+        printf("Error: Cannot open file: %s\n", filename);
+        return -1;
+    }
+
+    int status = tr7_run_file(g_tr7_repl_engine, f, filename);
+    fclose(f);
+
+    if (status != 0) {
+        tr7_t err = tr7_get_last_value(g_tr7_repl_engine);
+        if (tr7_is_error(err)) {
+            tr7_t msg = tr7_error_message(err);
+            if (TR7_IS_STRING(msg)) {
+                printf("Error loading %s: %s\n", filename, tr7_string_buffer(msg));
+            } else {
+                printf("Error loading %s\n", filename);
+            }
+        }
+        return -1;
+    }
+
+    return 0;
+}
+
 /* Process a TR7 REPL command. Returns: 0=continue, 1=quit, 2=evaluate as Scheme */
 static int tr7_process_command(const char *input) {
     /* Try shared commands first */
@@ -560,31 +592,29 @@ static int tr7_process_command(const char *input) {
         return 0;
     }
 
-    /* ,load command */
+    /* :play file.scm - load and execute a Scheme file */
+    if (starts_with(cmd, "play ")) {
+        const char* path = cmd + 5;
+        while (*path == ' ') path++;
+        if (*path) {
+            printf("Loading %s...\n", path);
+            if (tr7_load_and_run_file(path) == 0) {
+                printf("Loaded: %s\n", path);
+            }
+        } else {
+            printf("Usage: :play PATH\n");
+        }
+        return 0;
+    }
+
+    /* ,load command (legacy syntax) */
     if (strncmp(input, ",load ", 6) == 0) {
         const char *filename = input + 6;
         while (*filename == ' ') filename++;
 
         if (*filename) {
-            FILE *f = fopen(filename, "r");
-            if (!f) {
-                printf("Error: Cannot open file: %s\n", filename);
-            } else {
-                int status = tr7_run_file(g_tr7_repl_engine, f, filename);
-                fclose(f);
-                if (status != 0) {
-                    tr7_t err = tr7_get_last_value(g_tr7_repl_engine);
-                    if (tr7_is_error(err)) {
-                        tr7_t msg = tr7_error_message(err);
-                        if (TR7_IS_STRING(msg)) {
-                            printf("Error loading %s: %s\n", filename, tr7_string_buffer(msg));
-                        } else {
-                            printf("Error loading %s\n", filename);
-                        }
-                    }
-                } else {
-                    printf("Loaded: %s\n", filename);
-                }
+            if (tr7_load_and_run_file(filename) == 0) {
+                printf("Loaded: %s\n", filename);
             }
         }
         return 0;
