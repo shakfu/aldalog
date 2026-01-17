@@ -219,17 +219,7 @@ void loki_lang_register_lua_apis(lua_State *L) {
 }
 
 void loki_lang_init(void) {
-    /* Register all compiled-in languages */
-#ifdef LANG_ALDA
-    alda_loki_lang_init();
-#endif
-#ifdef LANG_JOY
-    joy_loki_lang_init();
-#endif
-#ifdef LANG_TR7
-    tr7_loki_lang_init();
-#endif
-#ifdef LANG_BOG
-    bog_loki_lang_init();
-#endif
+    /* Register all compiled-in languages.
+     * Language init functions are declared in src/lang_config.h */
+    LOKI_LANG_INIT_ALL()
 }

@@ -102,17 +102,8 @@ enum KEY_ACTION{
 /* Undo/redo state - opaque pointer, defined in loki_undo.c */
 struct undo_state;
 
-/* Alda state - opaque pointer, defined in loki_alda.c */
-struct LokiAldaState;
-
-/* Joy state - opaque pointer, defined in loki_joy.c */
-struct LokiJoyState;
-
-/* TR7 state - opaque pointer, defined in lang/tr7.c */
-struct LokiTr7State;
-
-/* Bog state - opaque pointer, defined in lang/bog/register.c */
-struct LokiBogState;
+/* Language state forward declarations - see src/lang_config.h */
+#include "../lang_config.h"
 
 /* ======================= Data Structures ================================== */
 
@@ -172,19 +163,9 @@ typedef struct EditorModel {
     struct undo_state *undo_state;        /* Undo/redo state (NULL if disabled) */
     struct indent_config *indent_config;  /* Auto-indent settings */
 
-    /* Language states - per-context state (NULL until initialized) */
-#ifdef LANG_ALDA
-    struct LokiAldaState *alda_state;
-#endif
-#ifdef LANG_JOY
-    struct LokiJoyState *joy_state;
-#endif
-#ifdef LANG_TR7
-    struct LokiTr7State *tr7_state;
-#endif
-#ifdef LANG_BOG
-    struct LokiBogState *bog_state;
-#endif
+    /* Language states - per-context state (NULL until initialized)
+     * See lang_config.h to add new languages */
+    LOKI_LANG_STATE_FIELDS
 } EditorModel;
 
 /* EditorView - Presentation state that is terminal/viewport-specific.

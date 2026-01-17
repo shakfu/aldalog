@@ -203,23 +203,8 @@ void loki_lang_register_lua_apis(lua_State *L);
  * Registers all compiled-in languages. Must be called before any
  * language operations (loki_lang_for_file, loki_lang_init_for_file, etc.).
  *
- * This replaces the previous __attribute__((constructor)) approach
- * which is not portable to MSVC.
+ * Language init functions are declared in src/lang_config.h.
  */
 void loki_lang_init(void);
-
-/* Language-specific init functions (called by loki_lang_init) */
-#ifdef LANG_ALDA
-void alda_loki_lang_init(void);
-#endif
-#ifdef LANG_JOY
-void joy_loki_lang_init(void);
-#endif
-#ifdef LANG_TR7
-void tr7_loki_lang_init(void);
-#endif
-#ifdef LANG_BOG
-void bog_loki_lang_init(void);
-#endif
 
 #endif /* LOKI_LANG_BRIDGE_H */

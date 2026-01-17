@@ -10,7 +10,7 @@ psnd uses a language bridge pattern that allows music languages to integrate wit
 2. Implements the `LokiLangOps` interface for editor integration
 3. Provides a standalone REPL with shared command handling
 4. Uses `SharedContext` for MIDI, audio, and Link integration
-5. Registers itself via explicit initialization in `lang_bridge.c`
+5. Registers itself via `src/lang_config.h` (single file for all language configuration)
 6. Optionally provides Lua API bindings for scripting
 
 ## Directory Structure
@@ -649,79 +649,46 @@ void example_loki_lang_init(void) {
 }
 ```
 
-## Step 5: Add Editor Context State
+## Step 5: Add Language Configuration
 
-Add your state pointer to `src/loki/internal.h` inside `EditorModel`:
-
-```c
-typedef struct EditorModel {
-    /* ... existing fields ... */
-
-    /* Language states - per-context state (NULL until initialized) */
-#ifdef LANG_ALDA
-    struct LokiAldaState *alda_state;
-#endif
-#ifdef LANG_JOY
-    struct LokiJoyState *joy_state;
-#endif
-#ifdef LANG_TR7
-    struct LokiTr7State *tr7_state;
-#endif
-#ifdef LANG_BOG
-    struct LokiBogState *bog_state;
-#endif
-#ifdef LANG_EXAMPLE
-    struct LokiExampleState *example_state;  /* Add this */
-#endif
-} EditorModel;
-```
-
-## Step 6: Register in lang_bridge.c
-
-Add to `src/loki/lang_bridge.h`:
+Add your language to `src/lang_config.h`. This file centralizes **all** language-specific declarations, so you only need to modify this one file:
 
 ```c
-/* Language init declarations */
-#ifdef LANG_ALDA
-void alda_loki_lang_init(void);
-#endif
-#ifdef LANG_JOY
-void joy_loki_lang_init(void);
-#endif
-#ifdef LANG_TR7
-void tr7_loki_lang_init(void);
-#endif
-#ifdef LANG_BOG
-void bog_loki_lang_init(void);
-#endif
+/* In src/lang_config.h */
+
+/* 1. Add helper macro */
 #ifdef LANG_EXAMPLE
-void example_loki_lang_init(void);  /* Add this */
+#define IF_LANG_EXAMPLE(x) x
+#else
+#define IF_LANG_EXAMPLE(x)
 #endif
+
+/* 2. Add forward declaration (in Forward Declarations section) */
+IF_LANG_EXAMPLE(struct LokiExampleState;)
+
+/* 3. Add to LOKI_LANG_STATE_FIELDS macro */
+#define LOKI_LANG_STATE_FIELDS \
+    IF_LANG_ALDA(struct LokiAldaState *alda_state;) \
+    IF_LANG_JOY(struct LokiJoyState *joy_state;) \
+    IF_LANG_TR7(struct LokiTr7State *tr7_state;) \
+    IF_LANG_BOG(struct LokiBogState *bog_state;) \
+    IF_LANG_EXAMPLE(struct LokiExampleState *example_state;)
+
+/* 4. Add init declaration (in Language Init Declarations section) */
+IF_LANG_EXAMPLE(void example_loki_lang_init(void);)
+
+/* 5. Add to LOKI_LANG_INIT_ALL macro */
+#define LOKI_LANG_INIT_ALL() \
+    IF_LANG_ALDA(alda_loki_lang_init();) \
+    IF_LANG_JOY(joy_loki_lang_init();) \
+    IF_LANG_TR7(tr7_loki_lang_init();) \
+    IF_LANG_BOG(bog_loki_lang_init();) \
+    IF_LANG_EXAMPLE(example_loki_lang_init();)
 ```
 
-Add to `loki_lang_init()` in `src/loki/lang_bridge.c`:
+No other core files need modification.
 
-```c
-void loki_lang_init(void) {
-#ifdef LANG_ALDA
-    alda_loki_lang_init();
-#endif
-#ifdef LANG_JOY
-    joy_loki_lang_init();
-#endif
-#ifdef LANG_TR7
-    tr7_loki_lang_init();
-#endif
-#ifdef LANG_BOG
-    bog_loki_lang_init();
-#endif
-#ifdef LANG_EXAMPLE
-    example_loki_lang_init();  /* Add this */
-#endif
-}
-```
-
-## Step 7: Update CMake Build Files
+## Step 6: Update CMake Build Files
 
 ### Add language option to CMakeLists.txt
 
@@ -765,7 +732,7 @@ if(LANG_EXAMPLE)
 endif()
 ```
 
-## Step 8: Add CLI Dispatch
+## Step 7: Add CLI Dispatch
 
 Update `src/lang_dispatch.c`:
 
@@ -787,7 +754,7 @@ int lang_dispatch(const char *lang, int argc, char **argv) {
 }
 ```
 
-## Step 9: Add Tests
+## Step 8: Add Tests
 
 Create `tests/example/CMakeLists.txt`:
 
@@ -833,7 +800,7 @@ if(LANG_EXAMPLE)
 endif()
 ```
 
-## Step 10: Add Documentation
+## Step 9: Add Documentation
 
 Create `docs/example/README.md` with:
 
@@ -846,7 +813,7 @@ Create `docs/example/README.md` with:
 
 See existing documentation in `docs/alda/`, `docs/joy/`, `docs/tr7/`, or `docs/bog/` for reference.
 
-## Step 11: Add Syntax Highlighting (Optional)
+## Step 10: Add Syntax Highlighting (Optional)
 
 Create `.psnd/languages/example.lua`:
 
@@ -928,9 +895,7 @@ double shared_link_tempo(SharedContext *ctx);
 
 | File | Purpose |
 |------|---------|
-| `src/loki/lang_bridge.h` | Language bridge interface |
-| `src/loki/lang_bridge.c` | Bridge implementation and dispatch |
-| `src/loki/internal.h` | Editor context with language state |
+| `src/lang_config.h` | **Modify this for new languages** - state fields, forward decls, init calls |
 | `src/shared/context.h` | Shared MIDI/audio context |
 | `src/shared/repl_commands.h` | Common REPL command handling |
 | `src/lang/alda/register.c` | Reference: Alda integration |
