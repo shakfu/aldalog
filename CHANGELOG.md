@@ -19,6 +19,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Bog Language Integration**: Prolog-based live coding language for music, inspired by [dogalog](https://github.com/danja/dogalog)
+  - **REPL Mode**: `psnd bog` starts interactive Bog REPL with syntax highlighting
+    - Declarative event rules: `event(kick, 36, 0.9, T) :- every(T, 1.0).`
+    - Named slots for managing multiple patterns: `:def kick ...`, `:undef kick`, `:slots`
+    - Mute/unmute/solo controls for live performance: `:mute kick`, `:solo hat`
+    - Virtual MIDI port creation: `--virtual NAME`
+    - Non-blocking scheduler with ~10ms tick interval
+  - **Timing Predicates**: Flexible rhythm generation
+    - `every(T, N)` - Fire every N beats
+    - `beat(T, N)` - Fire on beat N of bar
+    - `euc(T, K, N, B, R)` - Euclidean rhythms (K hits over N steps)
+    - `phase(T, P, L, O)` - Phase patterns
+  - **Selection Predicates**: Variation and randomness
+    - `choose(X, List)` - Random selection
+    - `seq(X, List)` - Cycle through list
+    - `shuffle(X, List)` - Random permutation
+    - `wrand(X, List)` - Weighted random
+    - `chance(P, Goal)` - Probabilistic execution
+  - **Voice Mapping**: Bog voices map to General MIDI
+    - Drums: `kick` (36), `snare` (38), `hat` (42), `clap` (39), `noise` (46) on channel 10
+    - Melodic: `sine`, `square`, `triangle` on channel 1
+  - **Editor Support**: Full livecoding for `.bog` files
+    - `Ctrl-E` - Evaluate current buffer
+    - `Ctrl-S` - Stop playback
+    - `Ctrl-P` - Panic (all notes off)
+  - **Lua API** (`loki.bog` table):
+    - `loki.bog.init()` - Initialize Bog subsystem
+    - `loki.bog.eval(code)` - Evaluate Bog code
+    - `loki.bog.stop()` - Stop playback
+    - `loki.bog.is_playing()` - Check if playing
+    - `loki.bog.set_tempo(bpm)` - Set tempo
+    - `loki.bog.set_swing(amount)` - Set swing
+  - **Files Added**:
+    - `src/lang/bog/` - Bog language implementation (REPL, dispatch, register, async)
+    - `src/lang/bog/impl/` - Core Bog engine (parser, unifier, builtins, scheduler, state manager)
+    - `tests/bog/` - Bog test suite (parser, unify, builtins, state manager, resolution, livecoding)
+    - `docs/bog/` - Bog documentation (README.md, overview.md)
+
 - **REPL History Persistence**: Command history is now saved between sessions for all REPLs
   - Prefers local `.psnd/` directory if it exists, falls back to `~/.psnd/` if present
   - Joy: `{.psnd}/joy_history`, Alda: `{.psnd}/alda_history`, TR7: `{.psnd}/tr7_history`

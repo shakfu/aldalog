@@ -73,20 +73,33 @@ static void print_bog_repl_help(void) {
     printf("  :tempo BPM        Set tempo (default: 120)\n");
     printf("  :swing AMOUNT     Set swing (0.0-1.0, default: 0.0)\n");
     printf("\n");
+    printf("Slot Commands (named rules):\n");
+    printf("  :def NAME RULE    Define/replace a named slot (:d for short)\n");
+    printf("  :undef NAME       Remove a named slot (:u for short)\n");
+    printf("  :slots            Show all slots (:ls for short)\n");
+    printf("  :clear            Remove all slots\n");
+    printf("  :mute NAME        Mute a slot (keeps rule, stops sound)\n");
+    printf("  :unmute NAME      Unmute a slot\n");
+    printf("  :solo NAME        Mute all except named slot\n");
+    printf("  :unsolo           Unmute all slots\n");
+    printf("\n");
     printf("Bog Syntax:\n");
-    printf("  event(Voice, Pitch, Vel, T) :- beat(T, N).     Trigger on beats\n");
-    printf("  event(kick, 36, 0.9, T) :- every(T, 0.5).      Every 0.5 beats\n");
-    printf("  event(snare, 38, 0.8, T) :- beat(T, 2).        On beat 2\n");
-    printf("  event(hat, 42, 0.6, T) :- every(T, 0.25).      Every quarter beat\n");
-    printf("  event(sine, Note, Vel, T) :- pattern(T, Note). Melodic patterns\n");
+    printf("  event(Voice, Pitch, Vel, T) :- Condition.\n");
+    printf("\n");
+    printf("Conditions:\n");
+    printf("  every(T, N)       Fire every N beats (0.5 = 8th notes)\n");
+    printf("  beat(T, N)        Fire on beat N of the bar\n");
+    printf("  euc(T, K, N, B, R) Euclidean rhythm: K hits over N steps\n");
     printf("\n");
     printf("Available Voices:\n");
     printf("  kick, snare, hat, clap, noise   (drums, channel 10)\n");
     printf("  sine, square, triangle          (melodic, channel 1)\n");
     printf("\n");
     printf("Examples:\n");
-    printf("  event(kick, 36, 0.9, T) :- beat(T, 1).   ; Kick on beat 1\n");
-    printf("  event(hat, 42, 0.5, T) :- every(T, 0.25). ; Hi-hat 16ths\n");
+    printf("  :d kick event(kick, 36, 0.9, T) :- every(T, 1.0).\n");
+    printf("  :d hat  event(hat, 42, 0.5, T) :- every(T, 0.25).\n");
+    printf("  :mute kick\n");
+    printf("  :u hat\n");
     printf("\n");
 }
 
@@ -116,6 +129,158 @@ static SharedContext *g_bog_repl_shared = NULL;
 static int g_bog_repl_running = 0;
 static double g_bog_repl_tempo = 120.0;
 static double g_bog_repl_swing = 0.0;
+
+/* Forward declaration */
+static void bog_start_async(void);
+
+/* ============================================================================
+ * Named Slots for Rule Management
+ * ============================================================================ */
+
+typedef struct {
+    char *name;
+    char *rule_text;
+    int muted;
+} BogReplSlot;
+
+static BogReplSlot *g_bog_slots = NULL;
+static size_t g_bog_slot_count = 0;
+static size_t g_bog_slot_capacity = 0;
+
+/* Find slot by name, returns index or -1 if not found */
+static int bog_slot_find(const char *name) {
+    for (size_t i = 0; i < g_bog_slot_count; i++) {
+        if (strcmp(g_bog_slots[i].name, name) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+/* Add or replace a slot */
+static int bog_slot_def(const char *name, const char *rule_text) {
+    int idx = bog_slot_find(name);
+    if (idx >= 0) {
+        /* Replace existing */
+        free(g_bog_slots[idx].rule_text);
+        g_bog_slots[idx].rule_text = strdup(rule_text);
+        g_bog_slots[idx].muted = 0;
+        return 1; /* replaced */
+    }
+    /* Add new */
+    if (g_bog_slot_count >= g_bog_slot_capacity) {
+        size_t new_cap = g_bog_slot_capacity ? g_bog_slot_capacity * 2 : 16;
+        BogReplSlot *new_slots = realloc(g_bog_slots, new_cap * sizeof(BogReplSlot));
+        if (!new_slots) return -1;
+        g_bog_slots = new_slots;
+        g_bog_slot_capacity = new_cap;
+    }
+    g_bog_slots[g_bog_slot_count].name = strdup(name);
+    g_bog_slots[g_bog_slot_count].rule_text = strdup(rule_text);
+    g_bog_slots[g_bog_slot_count].muted = 0;
+    g_bog_slot_count++;
+    return 0; /* added */
+}
+
+/* Remove a slot by name */
+static int bog_slot_undef(const char *name) {
+    int idx = bog_slot_find(name);
+    if (idx < 0) return -1;
+    free(g_bog_slots[idx].name);
+    free(g_bog_slots[idx].rule_text);
+    /* Shift remaining slots */
+    for (size_t i = idx; i < g_bog_slot_count - 1; i++) {
+        g_bog_slots[i] = g_bog_slots[i + 1];
+    }
+    g_bog_slot_count--;
+    return 0;
+}
+
+/* Mute/unmute a slot */
+static int bog_slot_mute(const char *name, int muted) {
+    int idx = bog_slot_find(name);
+    if (idx < 0) return -1;
+    g_bog_slots[idx].muted = muted;
+    return 0;
+}
+
+/* Clear all slots */
+static void bog_slot_clear(void) {
+    for (size_t i = 0; i < g_bog_slot_count; i++) {
+        free(g_bog_slots[i].name);
+        free(g_bog_slots[i].rule_text);
+    }
+    g_bog_slot_count = 0;
+}
+
+/* Free all slot memory */
+static void bog_slot_cleanup(void) {
+    bog_slot_clear();
+    free(g_bog_slots);
+    g_bog_slots = NULL;
+    g_bog_slot_capacity = 0;
+}
+
+/* Build concatenated program from non-muted slots */
+static char *bog_slot_build_program(void) {
+    size_t total_len = 0;
+    for (size_t i = 0; i < g_bog_slot_count; i++) {
+        if (!g_bog_slots[i].muted) {
+            total_len += strlen(g_bog_slots[i].rule_text) + 1; /* +1 for newline */
+        }
+    }
+    if (total_len == 0) return strdup("");
+
+    char *program = malloc(total_len + 1);
+    if (!program) return NULL;
+
+    char *p = program;
+    for (size_t i = 0; i < g_bog_slot_count; i++) {
+        if (!g_bog_slots[i].muted) {
+            size_t len = strlen(g_bog_slots[i].rule_text);
+            memcpy(p, g_bog_slots[i].rule_text, len);
+            p += len;
+            *p++ = '\n';
+        }
+    }
+    *p = '\0';
+    return program;
+}
+
+/* Evaluate the current slot program */
+static int bog_slot_evaluate(void) {
+    char *program = bog_slot_build_program();
+    if (!program) return -1;
+
+    char *error = NULL;
+    int ok = 1;
+
+    if (g_bog_repl_evaluator) {
+        if (*program) {
+            ok = bog_live_evaluator_evaluate(g_bog_repl_evaluator, program, &error);
+        } else {
+            /* Empty program - clear scheduler */
+            ok = bog_live_evaluator_evaluate(g_bog_repl_evaluator, "% empty", &error);
+        }
+    }
+
+    free(program);
+
+    if (!ok) {
+        printf("Error: %s\n", error ? error : "Parse error");
+        if (error) free(error);
+        return -1;
+    }
+
+    /* Start scheduler if not running */
+    if (!g_bog_repl_running && g_bog_repl_scheduler && g_bog_slot_count > 0) {
+        bog_scheduler_start(g_bog_repl_scheduler);
+        g_bog_repl_running = 1;
+        bog_start_async();
+    }
+
+    return 0;
+}
 
 /* ============================================================================
  * Audio Callbacks
@@ -331,6 +496,158 @@ static int bog_process_command(const char *input) {
         } else {
             printf("Usage: :play PATH\n");
         }
+        return 0;
+    }
+
+    /* :def NAME RULE - define or replace a named slot */
+    if (starts_with(cmd, "def ") || starts_with(cmd, "d ")) {
+        const char *rest = cmd + (cmd[1] == 'e' ? 4 : 2);
+        while (*rest == ' ') rest++;
+        /* Parse name (until space) */
+        const char *name_start = rest;
+        while (*rest && *rest != ' ') rest++;
+        if (rest == name_start || !*rest) {
+            printf("Usage: :def NAME RULE\n");
+            return 0;
+        }
+        size_t name_len = rest - name_start;
+        char *name = malloc(name_len + 1);
+        memcpy(name, name_start, name_len);
+        name[name_len] = '\0';
+
+        while (*rest == ' ') rest++;
+        if (!*rest) {
+            printf("Usage: :def NAME RULE\n");
+            free(name);
+            return 0;
+        }
+
+        int result = bog_slot_def(name, rest);
+        if (result < 0) {
+            printf("Error: Failed to define slot\n");
+        } else if (result == 1) {
+            printf("ok [%s replaced]\n", name);
+        } else {
+            printf("ok [%s]\n", name);
+        }
+        free(name);
+
+        bog_slot_evaluate();
+        return 0;
+    }
+
+    /* :undef NAME - remove a named slot */
+    if (starts_with(cmd, "undef ") || starts_with(cmd, "u ")) {
+        const char *name = cmd + (cmd[1] == 'n' ? 6 : 2);
+        while (*name == ' ') name++;
+        if (!*name) {
+            printf("Usage: :undef NAME\n");
+            return 0;
+        }
+        /* Trim trailing space */
+        char *name_copy = strdup(name);
+        char *end = name_copy + strlen(name_copy) - 1;
+        while (end > name_copy && *end == ' ') *end-- = '\0';
+
+        if (bog_slot_undef(name_copy) == 0) {
+            printf("ok [%s removed]\n", name_copy);
+            bog_slot_evaluate();
+        } else {
+            printf("Error: No slot named '%s'\n", name_copy);
+        }
+        free(name_copy);
+        return 0;
+    }
+
+    /* :slots or :ls - show all slots */
+    if (strcmp(cmd, "slots") == 0 || strcmp(cmd, "ls") == 0) {
+        if (g_bog_slot_count == 0) {
+            printf("No slots defined\n");
+        } else {
+            printf("Slots (%zu):\n", g_bog_slot_count);
+            for (size_t i = 0; i < g_bog_slot_count; i++) {
+                printf("  %s: %s%s\n",
+                       g_bog_slots[i].name,
+                       g_bog_slots[i].rule_text,
+                       g_bog_slots[i].muted ? " [muted]" : "");
+            }
+        }
+        return 0;
+    }
+
+    /* :clear - remove all slots */
+    if (strcmp(cmd, "clear") == 0) {
+        bog_slot_clear();
+        bog_slot_evaluate();
+        printf("All slots cleared\n");
+        return 0;
+    }
+
+    /* :mute NAME - mute a slot */
+    if (starts_with(cmd, "mute ")) {
+        const char *name = cmd + 5;
+        while (*name == ' ') name++;
+        char *name_copy = strdup(name);
+        char *end = name_copy + strlen(name_copy) - 1;
+        while (end > name_copy && *end == ' ') *end-- = '\0';
+
+        if (bog_slot_mute(name_copy, 1) == 0) {
+            printf("ok [%s muted]\n", name_copy);
+            bog_slot_evaluate();
+        } else {
+            printf("Error: No slot named '%s'\n", name_copy);
+        }
+        free(name_copy);
+        return 0;
+    }
+
+    /* :unmute NAME - unmute a slot */
+    if (starts_with(cmd, "unmute ")) {
+        const char *name = cmd + 7;
+        while (*name == ' ') name++;
+        char *name_copy = strdup(name);
+        char *end = name_copy + strlen(name_copy) - 1;
+        while (end > name_copy && *end == ' ') *end-- = '\0';
+
+        if (bog_slot_mute(name_copy, 0) == 0) {
+            printf("ok [%s unmuted]\n", name_copy);
+            bog_slot_evaluate();
+        } else {
+            printf("Error: No slot named '%s'\n", name_copy);
+        }
+        free(name_copy);
+        return 0;
+    }
+
+    /* :solo NAME - mute all except named slot */
+    if (starts_with(cmd, "solo ")) {
+        const char *name = cmd + 5;
+        while (*name == ' ') name++;
+        char *name_copy = strdup(name);
+        char *end = name_copy + strlen(name_copy) - 1;
+        while (end > name_copy && *end == ' ') *end-- = '\0';
+
+        int found = bog_slot_find(name_copy);
+        if (found < 0) {
+            printf("Error: No slot named '%s'\n", name_copy);
+        } else {
+            for (size_t i = 0; i < g_bog_slot_count; i++) {
+                g_bog_slots[i].muted = (i != (size_t)found);
+            }
+            printf("ok [solo %s]\n", name_copy);
+            bog_slot_evaluate();
+        }
+        free(name_copy);
+        return 0;
+    }
+
+    /* :unsolo - unmute all slots */
+    if (strcmp(cmd, "unsolo") == 0) {
+        for (size_t i = 0; i < g_bog_slot_count; i++) {
+            g_bog_slots[i].muted = 0;
+        }
+        printf("ok [all unmuted]\n");
+        bog_slot_evaluate();
         return 0;
     }
 
@@ -703,6 +1020,9 @@ static void bog_cb_cleanup(void *lang_ctx) {
         bog_state_manager_destroy(g_bog_repl_state_manager);
         g_bog_repl_state_manager = NULL;
     }
+    /* Cleanup slots */
+    bog_slot_cleanup();
+
     if (g_bog_repl_arena) {
         bog_arena_destroy(g_bog_repl_arena);
         g_bog_repl_arena = NULL;

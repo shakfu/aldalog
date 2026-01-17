@@ -2,18 +2,19 @@
 
 **psnd** is a self-contained modal editor, REPL, and playback environment aimed at music programming languages. The project is a polyglot platform for composing, live-coding, and rendering music DSLs from one binary.
 
-Three languages are currently supported:
+Four languages are currently supported:
 
 - **[Alda](https://alda.io)** - Declarative music notation language
 - **[Joy](https://github.com/shakfu/midi-langs/tree/main/projects/joy-midi)** - Concatenative (stack-based) functional language for music
 - **[TR7](https://gitlab.com/jobol/tr7)** - R7RS-small Scheme with music extensions
+- **[Bog](https://github.com/shakfu/bog)** - C implementation of [dogalog](https://github.com/danja/dogalog, a prolog-based beats-oriented language for music
 
 All are practical for daily live-coding, REPL sketches, and headless playback. The Alda and Joy MIDI cores are from the [midi-langs](https://github.com/shakfu/midi-langs) project. Languages register themselves via a modular dispatch system, allowing additional DSLs to be integrated without modifying core dispatch logic. Audio output is handled by the built-in [TinySoundFont](https://github.com/schellingb/TinySoundFont) synthesizer or, optionally, a [Csound](https://csound.com/) backend for advanced synthesis. macOS and Linux are currently supported.
 
 ## Features
 
 - **Vim-style editor** with INSERT/NORMAL modes, live evaluation shortcuts, and Lua scripting (built on [loki](https://github.com/shakfu/loki), a fork of [kilo](https://github.com/antirez/kilo))
-- **Language-aware REPLs** for interactive composition (Alda, Joy, TR7 Scheme)
+- **Language-aware REPLs** for interactive composition (Alda, Joy, TR7 Scheme, Bog)
 - **Headless play mode** for batch jobs and automation
 - **Non-blocking async playback** through [libuv](https://github.com/libuv/libuv) - REPLs remain responsive during playback
 - **Integrated MIDI routing** powered by [libremidi](https://github.com/celtera/libremidi)
@@ -26,7 +27,7 @@ All are practical for daily live-coding, REPL sketches, and headless playback. T
 
 ## Status
 
-psnd is in active development. Alda, Joy, and TR7 Scheme are the three fully integrated languages, demonstrating the polyglot architecture. Languages register via a modular dispatch system (`lang_dispatch.h`), allowing new DSLs to be added without modifying core dispatch logic. Additional mini MIDI languages from [midi-langs](https://github.com/shakfu/midi-langs) can reuse the same editor, REPL, and audio stack. Expect iteration and occasional breaking changes as polyglot support expands.
+psnd is in active development. Alda, Joy, TR7 Scheme, and Bog are the four fully integrated languages, demonstrating the polyglot architecture. Languages register via a modular dispatch system (`lang_dispatch.h`), allowing new DSLs to be added without modifying core dispatch logic. Additional mini MIDI languages from [midi-langs](https://github.com/shakfu/midi-langs) can reuse the same editor, REPL, and audio stack. Expect iteration and occasional breaking changes as polyglot support expands.
 
 ## Building
 
@@ -97,7 +98,31 @@ tr7> (set-octave 5)
 tr7> :q
 ```
 
-**Shared REPL Commands** (work in Alda, Joy, and TR7, with or without `:`):
+**Bog REPL**:
+
+```bash
+psnd bog                # Start Bog REPL
+psnd bog --virtual out  # Bog REPL with named virtual port
+psnd bog -sf gm.sf2     # Bog REPL with built-in synth
+```
+
+Type Bog rules directly:
+
+```text
+bog> :def kick event(kick, 36, 0.9, T) :- every(T, 1.0).
+Slot 'kick' defined (new)
+bog> :def hat event(hat, 42, 0.5, T) :- every(T, 0.25).
+Slot 'hat' defined (new)
+bog> :slots
+Slots:
+  kick: event(kick, 36, 0.9, T) :- every(T, 1.0).
+  hat: event(hat, 42, 0.5, T) :- every(T, 0.25).
+bog> :mute hat
+bog> :solo kick
+bog> :q
+```
+
+**Shared REPL Commands** (work in Alda, Joy, TR7, and Bog, with or without `:`):
 
 | Command | Action |
 |---------|--------|
@@ -134,12 +159,28 @@ tr7> :q
 |---------|--------|
 | `.` | Print stack |
 
+**Bog-specific commands**:
+
+| Command | Action |
+|---------|--------|
+| `:def NAME RULE` | Define a named slot |
+| `:undef NAME` | Remove a named slot |
+| `:slots` `:ls` | Show all defined slots |
+| `:clear` | Remove all slots |
+| `:mute NAME` | Mute a slot |
+| `:unmute NAME` | Unmute a slot |
+| `:solo NAME` | Solo a slot (mute all others) |
+| `:unsolo` | Unmute all slots |
+| `:tempo BPM` | Set tempo |
+| `:swing AMOUNT` | Set swing (0.0-1.0) |
+
 ### Editor Mode
 
 ```bash
 psnd song.alda                        # Open Alda file in editor
 psnd song.joy                         # Open Joy file in editor
 psnd song.scm                         # Open Scheme file in editor
+psnd song.bog                         # Open Bog file in editor
 psnd song.csd                         # Open Csound file in editor
 psnd -sf gm.sf2 song.alda             # Editor with TinySoundFont synth
 psnd -cs instruments.csd song.alda    # Editor with Csound synthesis
@@ -183,6 +224,7 @@ Ex Commands (press `:` in NORMAL mode):
 psnd play song.alda              # Play Alda file and exit
 psnd play song.joy               # Play Joy file and exit
 psnd play song.scm               # Play Scheme file and exit
+psnd play song.bog               # Play Bog file and exit
 psnd play song.csd               # Play Csound file and exit
 psnd play -sf gm.sf2 song.alda   # Play Alda with built-in synth
 psnd play -v song.csd            # Play with verbose output
@@ -203,6 +245,9 @@ printf ':cs synth.csd\n:cs-status\n:q\n' | psnd joy
 
 # TR7 Scheme REPL
 echo '(play-note 60 80 500)' | psnd tr7
+
+# Bog REPL
+echo ':def kick event(kick, 36, 0.9, T) :- every(T, 1.0).' | psnd bog
 ```
 
 This is useful for testing, CI/CD pipelines, and batch processing.
@@ -366,6 +411,89 @@ TR7 extends R7RS-small Scheme with music-specific procedures:
 (play-chord '(65 69 72) 80 500)  ; F major
 (play-chord '(67 71 74) 80 500)  ; G major
 (play-chord '(60 64 67) 80 1000) ; C major
+```
+
+## Bog Language
+
+Bog is a Prolog-based live coding language for music, inspired by [dogalog](https://github.com/danja/dogalog). Musical events emerge from declarative logic rules rather than imperative sequences.
+
+### Quick Start
+
+```bash
+psnd bog                    # Start Bog REPL
+psnd bog song.bog           # Run Bog file
+psnd song.bog               # Edit Bog file
+psnd play song.bog          # Play Bog file headlessly
+```
+
+### Core Concept
+
+All Bog patterns produce `event/4` facts:
+
+```prolog
+event(Voice, Pitch, Velocity, Time)
+```
+
+- **Voice**: Sound source (`kick`, `snare`, `hat`, `clap`, `noise`, `sine`, `square`, `triangle`)
+- **Pitch**: MIDI note number (0-127) or ignored for drums
+- **Velocity**: Intensity (0.0-1.0)
+- **Time**: Beat time (bound by timing predicates)
+
+### Timing Predicates
+
+| Predicate | Description | Example |
+|-----------|-------------|---------|
+| `every(T, N)` | Fire every N beats | `every(T, 0.5)` - 8th notes |
+| `beat(T, N)` | Fire on beat N of bar | `beat(T, 1)` - beat 1 |
+| `euc(T, K, N, B, R)` | Euclidean rhythm | `euc(T, 5, 16, 4, 0)` - 5 hits over 16 steps |
+
+### Named Slots
+
+The REPL uses named slots to manage multiple concurrent patterns:
+
+```prolog
+bog> :def kick event(kick, 36, 0.9, T) :- every(T, 1.0).
+bog> :def snare event(snare, 38, 0.8, T) :- every(T, 2.0).
+bog> :def hat event(hat, 42, 0.5, T) :- every(T, 0.25).
+bog> :slots           % List all patterns
+bog> :mute hat        % Mute hi-hat
+bog> :solo kick       % Solo kick drum
+bog> :undef snare     % Remove snare pattern
+bog> :clear           % Remove all patterns
+```
+
+### Example Patterns
+
+```prolog
+% Basic four-on-the-floor
+event(kick, 36, 0.9, T) :- every(T, 1.0).
+event(snare, 38, 0.8, T) :- beat(T, 2), beat(T, 4).
+event(hat, 42, 0.5, T) :- every(T, 0.5).
+
+% Euclidean breakbeat
+event(kick, 36, 0.9, T) :- euc(T, 5, 16, 4, 0).
+event(snare, 38, 0.85, T) :- euc(T, 3, 8, 4, 2).
+
+% Random variation
+event(kick, 36, Vel, T) :- every(T, 1.0), choose(Vel, [0.7, 0.8, 0.9, 1.0]).
+event(hat, 42, 0.5, T) :- every(T, 0.25), chance(0.7, true).
+```
+
+### Lua API
+
+```lua
+-- Initialize Bog
+loki.bog.init()
+
+-- Evaluate Bog code
+loki.bog.eval("event(kick, 36, 0.9, T) :- every(T, 1.0).")
+
+-- Stop playback
+loki.bog.stop()
+
+-- Set tempo and swing
+loki.bog.set_tempo(140)
+loki.bog.set_swing(0.3)
 ```
 
 ## Ableton Link
@@ -551,6 +679,7 @@ psnd provides built-in syntax highlighting for music programming languages with 
 | `.alda` | Alda | Instruments, attributes, note names, octave markers, comments |
 | `.joy` | Joy | Stack ops, combinators, music primitives, note names, comments |
 | `.scm` `.ss` `.scheme` | TR7 Scheme | Keywords, special forms, music primitives, comments |
+| `.bog` | Bog | Predicates, variables, operators, comments |
 | `.csd` | Csound CSD | Section-aware (orchestra/score/options), opcodes, control flow |
 | `.orc` | Csound Orchestra | Full orchestra syntax |
 | `.sco` | Csound Score | Score statements, parameters |
@@ -658,6 +787,7 @@ src/
     alda/         # Alda music language (parser, interpreter, backends)
     joy/          # Joy language runtime (parser, primitives, MIDI)
     tr7/          # TR7 Scheme (R7RS-small + music extensions)
+    bog/          # Bog language (Prolog-based live coding)
   loki/           # Editor components (core, modal, syntax, lua, etc.)
   shared/         # Language-agnostic shared backend (audio, MIDI, Link)
   main.c          # Entry point and CLI dispatch
@@ -669,6 +799,7 @@ tests/
   loki/           # Editor unit tests
   alda/           # Alda parser tests
   joy/            # Joy parser and MIDI tests
+  bog/            # Bog parser and runtime tests
   shared/         # Shared backend tests
 thirdparty/       # External dependencies (lua, libremidi, TinySoundFont, etc.)
 ```
@@ -682,6 +813,7 @@ See the `docs` folder for full technical documentation.
 - [Alda](https://alda.io) - music programming language by Dave Yarwood
 - [Joy](https://github.com/shakfu/midi-langs/tree/main/projects/joy-midi) - concatenative music language from midi-langs
 - [TR7](https://gitlab.com/jobol/tr7) - R7RS-small Scheme interpreter
+- [dogalog](https://github.com/danja/dogalog) - Prolog-based live coding inspiration for Bog
 - [kilo](https://github.com/antirez/kilo) by Salvatore Sanfilippo (antirez) - original editor
 - [loki](https://github.com/shakfu/loki) - Lua-enhanced fork
 - [Csound](https://csound.com/) - sound synthesis system (optional)
