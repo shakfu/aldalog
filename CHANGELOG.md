@@ -19,6 +19,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Abstract Input Handling Layer**: Structured event abstraction for editor input
+  - Replaces raw keycodes with `EditorEvent` objects for cleaner input processing
+  - Modifier flags (`MOD_CTRL`, `MOD_SHIFT`, `MOD_ALT`) separated from keycodes
+    - `SHIFT_ARROW_UP` becomes `(ARROW_UP, MOD_SHIFT)` internally
+  - Event types: `EVENT_KEY`, `EVENT_COMMAND`, `EVENT_ACTION`, `EVENT_RESIZE`, `EVENT_MOUSE`, `EVENT_QUIT`
+  - `EventSource` interface for polymorphic input sources:
+    - `event_source_terminal(fd)` - wraps `terminal_read_key()` for terminal input
+    - `event_source_test()` - queue-based source for unit testing without I/O
+  - Backward-compatible conversion functions:
+    - `event_from_keycode()` - legacy keycode to event
+    - `event_to_keycode()` - event back to legacy keycode
+  - New entry point `modal_process_event()` for event-based modal processing
+  - Enables test injection without terminal I/O
+  - Foundation for future transports (WebSocket, RPC)
+  - **Files Added**: `source/core/loki/event.c`, `source/core/loki/event.h`
+  - **Files Modified**: `source/core/loki/modal.c`, `source/core/loki/internal.h`, `source/core/CMakeLists.txt`
+
 - **Live Loop Feature**: Re-evaluate buffer content on beat boundaries synced to Ableton Link
   - `:loop <beats>` - Start live loop that re-evaluates buffer every N beats (e.g., `:loop 4`)
   - `:unloop` - Stop live loop for current buffer
