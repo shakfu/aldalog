@@ -167,18 +167,39 @@ int async_queue_push(AsyncEventQueue *queue, const AsyncEvent *event) {
     return 0;
 }
 
-int async_queue_push_lang_callback(AsyncEventQueue *queue, int slot_id, int status) {
+int async_queue_push_lang_callback(AsyncEventQueue *queue, int slot_id, int status,
+                                   int events_played, int duration_ms,
+                                   const char *callback, const char *error) {
     AsyncEvent event = {
         .type = ASYNC_EVENT_LANG_CALLBACK,
         .flags = 0,
         .timestamp = (int64_t)uv_hrtime(),
-        .data.lang = { .slot_id = slot_id, .status = status },
+        .data.lang = {
+            .slot_id = slot_id,
+            .status = status,
+            .events_played = events_played,
+            .duration_ms = duration_ms
+        },
         .heap_data = NULL
     };
+    /* Copy callback name */
+    if (callback) {
+        strncpy(event.data.lang.callback, callback, ASYNC_CALLBACK_NAME_SIZE - 1);
+        event.data.lang.callback[ASYNC_CALLBACK_NAME_SIZE - 1] = '\0';
+    } else {
+        event.data.lang.callback[0] = '\0';
+    }
+    /* Copy error message */
+    if (error) {
+        strncpy(event.data.lang.error, error, ASYNC_ERROR_MSG_SIZE - 1);
+        event.data.lang.error[ASYNC_ERROR_MSG_SIZE - 1] = '\0';
+    } else {
+        event.data.lang.error[0] = '\0';
+    }
     return async_queue_push(queue, &event);
 }
 
-int async_queue_push_link_peers(AsyncEventQueue *queue, uint64_t peers) {
+int async_queue_push_link_peers(AsyncEventQueue *queue, uint64_t peers, const char *callback) {
     AsyncEvent event = {
         .type = ASYNC_EVENT_LINK_PEERS,
         .flags = 0,
@@ -186,10 +207,17 @@ int async_queue_push_link_peers(AsyncEventQueue *queue, uint64_t peers) {
         .data.link_peers = { .peers = peers },
         .heap_data = NULL
     };
+    /* Copy callback name */
+    if (callback) {
+        strncpy(event.data.link_peers.callback, callback, ASYNC_CALLBACK_NAME_SIZE - 1);
+        event.data.link_peers.callback[ASYNC_CALLBACK_NAME_SIZE - 1] = '\0';
+    } else {
+        event.data.link_peers.callback[0] = '\0';
+    }
     return async_queue_push(queue, &event);
 }
 
-int async_queue_push_link_tempo(AsyncEventQueue *queue, double tempo) {
+int async_queue_push_link_tempo(AsyncEventQueue *queue, double tempo, const char *callback) {
     AsyncEvent event = {
         .type = ASYNC_EVENT_LINK_TEMPO,
         .flags = 0,
@@ -197,10 +225,17 @@ int async_queue_push_link_tempo(AsyncEventQueue *queue, double tempo) {
         .data.link_tempo = { .tempo = tempo },
         .heap_data = NULL
     };
+    /* Copy callback name */
+    if (callback) {
+        strncpy(event.data.link_tempo.callback, callback, ASYNC_CALLBACK_NAME_SIZE - 1);
+        event.data.link_tempo.callback[ASYNC_CALLBACK_NAME_SIZE - 1] = '\0';
+    } else {
+        event.data.link_tempo.callback[0] = '\0';
+    }
     return async_queue_push(queue, &event);
 }
 
-int async_queue_push_link_transport(AsyncEventQueue *queue, int playing) {
+int async_queue_push_link_transport(AsyncEventQueue *queue, int playing, const char *callback) {
     AsyncEvent event = {
         .type = ASYNC_EVENT_LINK_TRANSPORT,
         .flags = 0,
@@ -208,6 +243,13 @@ int async_queue_push_link_transport(AsyncEventQueue *queue, int playing) {
         .data.link_transport = { .playing = playing },
         .heap_data = NULL
     };
+    /* Copy callback name */
+    if (callback) {
+        strncpy(event.data.link_transport.callback, callback, ASYNC_CALLBACK_NAME_SIZE - 1);
+        event.data.link_transport.callback[ASYNC_CALLBACK_NAME_SIZE - 1] = '\0';
+    } else {
+        event.data.link_transport.callback[0] = '\0';
+    }
     return async_queue_push(queue, &event);
 }
 
@@ -426,12 +468,73 @@ void async_handler_lang_callback(AsyncEvent *event, void *ctx) {
     }
 
     DispatchContext *dc = (DispatchContext *)ctx;
-    if (!dc) {
+    if (!dc || !dc->L) {
         return;
     }
 
-    /* Dispatch to all registered language callback handlers */
-    loki_lang_check_callbacks(dc->ctx, dc->L);
+    /* Skip if no callback registered */
+    const char *callback = event->data.lang.callback;
+    if (!callback || callback[0] == '\0') {
+        return;
+    }
+
+    lua_State *L = dc->L;
+
+    /* Get the callback function */
+    lua_getglobal(L, callback);
+    if (lua_isfunction(L, -1)) {
+        /* Create result table matching loki_alda_check_callbacks format */
+        lua_newtable(L);
+
+        /* status field */
+        lua_pushstring(L, "status");
+        switch (event->data.lang.status) {
+            case 0:
+                lua_pushstring(L, "complete");
+                break;
+            case 1:
+                lua_pushstring(L, "stopped");
+                break;
+            case 2:
+                lua_pushstring(L, "error");
+                break;
+            default:
+                lua_pushstring(L, "unknown");
+                break;
+        }
+        lua_settable(L, -3);
+
+        /* slot field */
+        lua_pushstring(L, "slot");
+        lua_pushinteger(L, event->data.lang.slot_id);
+        lua_settable(L, -3);
+
+        /* events field */
+        lua_pushstring(L, "events");
+        lua_pushinteger(L, event->data.lang.events_played);
+        lua_settable(L, -3);
+
+        /* duration_ms field */
+        lua_pushstring(L, "duration_ms");
+        lua_pushinteger(L, event->data.lang.duration_ms);
+        lua_settable(L, -3);
+
+        /* error field (if present) */
+        if (event->data.lang.error[0] != '\0') {
+            lua_pushstring(L, "error");
+            lua_pushstring(L, event->data.lang.error);
+            lua_settable(L, -3);
+        }
+
+        /* Call the function with 1 argument (result table) */
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            fprintf(stderr, "Language callback error: %s\n", err ? err : "unknown");
+            lua_pop(L, 1);
+        }
+    } else {
+        lua_pop(L, 1);  /* Pop non-function value */
+    }
 }
 
 void async_handler_link_peers(AsyncEvent *event, void *ctx) {
@@ -444,12 +547,24 @@ void async_handler_link_peers(AsyncEvent *event, void *ctx) {
         return;
     }
 
-    /* Get the callback function name from Link state */
-    /* Note: This would need access to loki_link internals, so we just
-     * trigger the check_callbacks function which handles this */
-    (void)event->data.link_peers.peers;
+    /* Skip if no callback registered */
+    const char *callback = event->data.link_peers.callback;
+    if (!callback || callback[0] == '\0') {
+        return;
+    }
 
-    /* The Link check_callbacks function will handle this */
+    lua_State *L = dc->L;
+    lua_getglobal(L, callback);
+    if (lua_isfunction(L, -1)) {
+        lua_pushinteger(L, (lua_Integer)event->data.link_peers.peers);
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            fprintf(stderr, "Link peers callback error: %s\n", err ? err : "unknown");
+            lua_pop(L, 1);
+        }
+    } else {
+        lua_pop(L, 1);
+    }
 }
 
 void async_handler_link_tempo(AsyncEvent *event, void *ctx) {
@@ -462,8 +577,24 @@ void async_handler_link_tempo(AsyncEvent *event, void *ctx) {
         return;
     }
 
-    /* The Link check_callbacks function will handle this */
-    (void)event->data.link_tempo.tempo;
+    /* Skip if no callback registered */
+    const char *callback = event->data.link_tempo.callback;
+    if (!callback || callback[0] == '\0') {
+        return;
+    }
+
+    lua_State *L = dc->L;
+    lua_getglobal(L, callback);
+    if (lua_isfunction(L, -1)) {
+        lua_pushnumber(L, event->data.link_tempo.tempo);
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            fprintf(stderr, "Link tempo callback error: %s\n", err ? err : "unknown");
+            lua_pop(L, 1);
+        }
+    } else {
+        lua_pop(L, 1);
+    }
 }
 
 void async_handler_link_transport(AsyncEvent *event, void *ctx) {
@@ -476,8 +607,24 @@ void async_handler_link_transport(AsyncEvent *event, void *ctx) {
         return;
     }
 
-    /* The Link check_callbacks function will handle this */
-    (void)event->data.link_transport.playing;
+    /* Skip if no callback registered */
+    const char *callback = event->data.link_transport.callback;
+    if (!callback || callback[0] == '\0') {
+        return;
+    }
+
+    lua_State *L = dc->L;
+    lua_getglobal(L, callback);
+    if (lua_isfunction(L, -1)) {
+        lua_pushboolean(L, event->data.link_transport.playing);
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            fprintf(stderr, "Link start/stop callback error: %s\n", err ? err : "unknown");
+            lua_pop(L, 1);
+        }
+    } else {
+        lua_pop(L, 1);
+    }
 }
 
 void async_handler_beat_boundary(AsyncEvent *event, void *ctx) {

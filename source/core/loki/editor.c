@@ -441,17 +441,15 @@ int loki_editor_main(int argc, char **argv) {
 
         /* Dispatch all pending async events.
          * This handles:
-         * - Language callbacks (playback completion)
          * - Link callbacks (tempo, peers, transport changes)
          * - Beat boundary events (live loop triggers)
+         * - Language playback completion callbacks
          * - Custom events */
         if (ctx_L(ctx)) {
             async_queue_dispatch_lua(NULL, ctx, ctx_L(ctx));
 
-            /* Also run legacy polling for backward compatibility.
-             * These may still be needed for events that haven't been
-             * migrated to the queue yet. */
-            loki_link_check_callbacks(ctx, ctx_L(ctx));
+            /* Update language slot state (mark completed slots).
+             * Lua callback invocation is handled by async_queue_dispatch_lua. */
             loki_lang_check_callbacks(ctx, ctx_L(ctx));
         }
 

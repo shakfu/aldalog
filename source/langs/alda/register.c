@@ -1,7 +1,7 @@
 /* loki_alda.c - Alda music language integration for Loki
  *
  * Integrates the Alda music notation language with Loki editor for livecoding.
- * Uses alda's libuv-based async system with a polling callback mechanism.
+ * Uses the unified async event queue for completion callbacks.
  */
 
 #include <stdio.h>
@@ -14,6 +14,7 @@
 #include "loki/internal.h"
 #include "loki/link.h"
 #include "loki/lang_bridge.h"
+#include "loki/async_queue.h"  /* For async event queue */
 
 /* Alda library headers */
 #include <alda/alda.h>
@@ -63,6 +64,44 @@ static LokiAldaState* get_alda_state(editor_ctx_t *ctx) {
 
 /* Global scale storage for Scala microtuning */
 static ScalaScale *g_current_scale = NULL;
+
+/* ======================= Async Completion Callback ======================= */
+
+/* Info passed to async completion callback */
+typedef struct {
+    int alda_slot_id;           /* Alda slot index */
+    int events_played;          /* Number of events played */
+    time_t start_time;          /* When playback started */
+    char lua_callback[ASYNC_CALLBACK_NAME_SIZE];  /* Lua callback function name */
+} AldaCallbackInfo;
+
+/* Completion callback invoked when playback finishes */
+static void on_alda_playback_complete(int slot_id, int stopped, void *userdata) {
+    AldaCallbackInfo *info = (AldaCallbackInfo *)userdata;
+    if (!info) return;
+
+    /* Calculate duration */
+    int duration_ms = (int)((time(NULL) - info->start_time) * 1000);
+
+    /* Determine status: 0=complete, 1=stopped, 2=error */
+    int status = stopped ? 1 : 0;
+
+    /* Push event to async queue */
+    async_queue_push_lang_callback(
+        NULL,  /* global queue */
+        info->alda_slot_id,
+        status,
+        info->events_played,
+        duration_ms,
+        info->lua_callback[0] ? info->lua_callback : NULL,
+        NULL   /* no error */
+    );
+
+    /* Free the callback info */
+    free(info);
+
+    (void)slot_id;  /* unused - we track our own slot */
+}
 
 /* ======================= Helper Functions ======================= */
 
@@ -266,12 +305,28 @@ int loki_alda_eval_async(editor_ctx_t *ctx, const char *code, const char *lua_ca
     slot->events_played = state->alda_ctx.event_count;
     slot->start_time = time(NULL);
 
-    /* Start async playback */
-    if (alda_events_play_async(&state->alda_ctx) != 0) {
+    /* Create callback info for completion notification */
+    AldaCallbackInfo *cb_info = NULL;
+    if (lua_callback) {
+        cb_info = (AldaCallbackInfo *)malloc(sizeof(AldaCallbackInfo));
+        if (cb_info) {
+            cb_info->alda_slot_id = slot_id;
+            cb_info->events_played = state->alda_ctx.event_count;
+            cb_info->start_time = slot->start_time;
+            strncpy(cb_info->lua_callback, lua_callback, ASYNC_CALLBACK_NAME_SIZE - 1);
+            cb_info->lua_callback[ASYNC_CALLBACK_NAME_SIZE - 1] = '\0';
+        }
+    }
+
+    /* Start async playback with completion callback */
+    int result = alda_events_play_async_ex(&state->alda_ctx,
+                                            on_alda_playback_complete, cb_info);
+    if (result < 0) {
         slot->active = 0;
         slot->playing = 0;
         free(slot->lua_callback);
         slot->lua_callback = NULL;
+        free(cb_info);
         pthread_mutex_unlock(&state->mutex);
         set_state_error(state, "Failed to start playback");
         return -1;
@@ -694,7 +749,7 @@ void loki_alda_csound_stop_playback(void) {
 void loki_alda_check_callbacks(editor_ctx_t *ctx, lua_State *L) {
     LokiAldaState *state = get_alda_state(ctx);
     if (!state || !state->initialized) return;
-    if (!L) return;
+    (void)L;  /* Lua callbacks are now handled by the async event queue */
 
     pthread_mutex_lock(&state->mutex);
 
@@ -714,65 +769,8 @@ void loki_alda_check_callbacks(editor_ctx_t *ctx, lua_State *L) {
             slot->duration_ms = (int)((time(NULL) - slot->start_time) * 1000);
         }
 
-        /* Invoke callback for completed slots */
-        if (slot->completed && slot->lua_callback) {
-            /* Get the callback function */
-            lua_getglobal(L, slot->lua_callback);
-            if (lua_isfunction(L, -1)) {
-                /* Create result table */
-                lua_newtable(L);
-
-                lua_pushstring(L, "status");
-                switch (slot->status) {
-                    case LOKI_ALDA_STATUS_COMPLETE:
-                        lua_pushstring(L, "complete");
-                        break;
-                    case LOKI_ALDA_STATUS_STOPPED:
-                        lua_pushstring(L, "stopped");
-                        break;
-                    case LOKI_ALDA_STATUS_ERROR:
-                        lua_pushstring(L, "error");
-                        break;
-                    default:
-                        lua_pushstring(L, "unknown");
-                        break;
-                }
-                lua_settable(L, -3);
-
-                lua_pushstring(L, "slot");
-                lua_pushinteger(L, i);
-                lua_settable(L, -3);
-
-                lua_pushstring(L, "events");
-                lua_pushinteger(L, slot->events_played);
-                lua_settable(L, -3);
-
-                lua_pushstring(L, "duration_ms");
-                lua_pushinteger(L, slot->duration_ms);
-                lua_settable(L, -3);
-
-                if (slot->error_msg) {
-                    lua_pushstring(L, "error");
-                    lua_pushstring(L, slot->error_msg);
-                    lua_settable(L, -3);
-                }
-
-                /* Call the function with 1 argument (result table) */
-                if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-                    const char *err = lua_tostring(L, -1);
-                    fprintf(stderr, "Alda callback error: %s\n", err ? err : "unknown");
-                    lua_pop(L, 1);
-                }
-            } else {
-                lua_pop(L, 1);  /* Pop non-function value */
-            }
-
-            /* Clear the slot after callback */
-            clear_slot(state, i);
-        }
-
-        /* Clear completed slots without callbacks */
-        if (slot->completed && !slot->lua_callback) {
+        /* Clear completed slots - Lua callback invocation is handled by async queue */
+        if (slot->completed) {
             clear_slot(state, i);
         }
     }

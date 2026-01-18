@@ -34,7 +34,7 @@ void alda_async_cleanup(void) {
     shared_async_cleanup();
 }
 
-int alda_events_play_async(AldaContext* ctx) {
+int alda_events_play_async_ex(AldaContext* ctx, AldaAsyncCompletionCallback callback, void *userdata) {
     if (!ctx) return -1;
 
     if (ctx->event_count == 0) {
@@ -106,11 +106,17 @@ int alda_events_play_async(AldaContext* ctx) {
         }
     }
 
-    /* Play via shared async */
-    int result = shared_async_play(sched, ctx->shared);
+    /* Play via shared async with completion callback */
+    int result = shared_async_play_ex(sched, ctx->shared,
+                                       (SharedAsyncCompletionCallback)callback, userdata);
 
     shared_async_schedule_free(sched);
 
+    return result;
+}
+
+int alda_events_play_async(AldaContext* ctx) {
+    int result = alda_events_play_async_ex(ctx, NULL, NULL);
     return (result >= 0) ? 0 : -1;
 }
 

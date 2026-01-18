@@ -36,7 +36,7 @@ TEST(queue_push_poll) {
     ASSERT_EQ(async_queue_count(queue), 0);
 
     /* Push a language callback event */
-    ASSERT_EQ(async_queue_push_lang_callback(queue, 42, 0), 0);
+    ASSERT_EQ(async_queue_push_lang_callback(queue, 42, 0, 10, 500, "on_done", NULL), 0);
 
     /* Queue should have one event */
     ASSERT_FALSE(async_queue_is_empty(queue));
@@ -48,6 +48,9 @@ TEST(queue_push_poll) {
     ASSERT_EQ(event.type, ASYNC_EVENT_LANG_CALLBACK);
     ASSERT_EQ(event.data.lang.slot_id, 42);
     ASSERT_EQ(event.data.lang.status, 0);
+    ASSERT_EQ(event.data.lang.events_played, 10);
+    ASSERT_EQ(event.data.lang.duration_ms, 500);
+    ASSERT_STR_EQ(event.data.lang.callback, "on_done");
 
     /* Queue should be empty again */
     ASSERT_TRUE(async_queue_is_empty(queue));
@@ -64,9 +67,9 @@ TEST(queue_event_types) {
     AsyncEventQueue *queue = async_queue_global();
 
     /* Push various event types */
-    ASSERT_EQ(async_queue_push_link_peers(queue, 5), 0);
-    ASSERT_EQ(async_queue_push_link_tempo(queue, 120.5), 0);
-    ASSERT_EQ(async_queue_push_link_transport(queue, 1), 0);
+    ASSERT_EQ(async_queue_push_link_peers(queue, 5, "on_peers"), 0);
+    ASSERT_EQ(async_queue_push_link_tempo(queue, 120.5, "on_tempo"), 0);
+    ASSERT_EQ(async_queue_push_link_transport(queue, 1, NULL), 0);
     ASSERT_EQ(async_queue_push_beat(queue, 4.0, 4.0, 1), 0);
     ASSERT_EQ(async_queue_push_timer(queue, 100, NULL), 0);
 
@@ -78,14 +81,17 @@ TEST(queue_event_types) {
     ASSERT_EQ(async_queue_poll(queue, &event), 0);
     ASSERT_EQ(event.type, ASYNC_EVENT_LINK_PEERS);
     ASSERT_EQ(event.data.link_peers.peers, 5);
+    ASSERT_STR_EQ(event.data.link_peers.callback, "on_peers");
 
     ASSERT_EQ(async_queue_poll(queue, &event), 0);
     ASSERT_EQ(event.type, ASYNC_EVENT_LINK_TEMPO);
     ASSERT_TRUE(event.data.link_tempo.tempo > 120.4 && event.data.link_tempo.tempo < 120.6);
+    ASSERT_STR_EQ(event.data.link_tempo.callback, "on_tempo");
 
     ASSERT_EQ(async_queue_poll(queue, &event), 0);
     ASSERT_EQ(event.type, ASYNC_EVENT_LINK_TRANSPORT);
     ASSERT_EQ(event.data.link_transport.playing, 1);
+    ASSERT_STR_EQ(event.data.link_transport.callback, "");  /* NULL becomes empty string */
 
     ASSERT_EQ(async_queue_poll(queue, &event), 0);
     ASSERT_EQ(event.type, ASYNC_EVENT_BEAT_BOUNDARY);
@@ -132,7 +138,7 @@ TEST(queue_peek) {
 
     AsyncEventQueue *queue = async_queue_global();
 
-    ASSERT_EQ(async_queue_push_link_tempo(queue, 140.0), 0);
+    ASSERT_EQ(async_queue_push_link_tempo(queue, 140.0, NULL), 0);
 
     AsyncEvent event;
 
@@ -201,7 +207,7 @@ TEST(queue_null_uses_global) {
     ASSERT_EQ(async_queue_init(), 0);
 
     /* Push with NULL queue should use global */
-    ASSERT_EQ(async_queue_push_link_peers(NULL, 3), 0);
+    ASSERT_EQ(async_queue_push_link_peers(NULL, 3, NULL), 0);
 
     /* Count with NULL queue should use global */
     ASSERT_EQ(async_queue_count(NULL), 1);

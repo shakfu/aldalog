@@ -57,10 +57,12 @@ static void on_peers_changed(uint64_t num_peers, void *context) {
     pthread_mutex_lock(&g_link_state.mutex);
     g_link_state.pending_peers = num_peers;
     g_link_state.peers_changed = 1;
+    /* Capture callback name while holding mutex */
+    const char *callback = g_link_state.peers_callback;
     pthread_mutex_unlock(&g_link_state.mutex);
 
     /* Push event to async queue for unified event handling */
-    async_queue_push_link_peers(NULL, num_peers);
+    async_queue_push_link_peers(NULL, num_peers, callback);
 }
 
 /* Called on Link-managed thread when tempo changes */
@@ -69,10 +71,12 @@ static void on_tempo_changed(double tempo, void *context) {
     pthread_mutex_lock(&g_link_state.mutex);
     g_link_state.pending_tempo = tempo;
     g_link_state.tempo_changed = 1;
+    /* Capture callback name while holding mutex */
+    const char *callback = g_link_state.tempo_callback;
     pthread_mutex_unlock(&g_link_state.mutex);
 
     /* Push event to async queue for unified event handling */
-    async_queue_push_link_tempo(NULL, tempo);
+    async_queue_push_link_tempo(NULL, tempo, callback);
 }
 
 /* Called on Link-managed thread when start/stop state changes */
@@ -81,10 +85,12 @@ static void on_start_stop_changed(bool is_playing, void *context) {
     pthread_mutex_lock(&g_link_state.mutex);
     g_link_state.pending_playing = is_playing ? 1 : 0;
     g_link_state.playing_changed = 1;
+    /* Capture callback name while holding mutex */
+    const char *callback = g_link_state.start_stop_callback;
     pthread_mutex_unlock(&g_link_state.mutex);
 
     /* Push event to async queue for unified event handling */
-    async_queue_push_link_transport(NULL, is_playing ? 1 : 0);
+    async_queue_push_link_transport(NULL, is_playing ? 1 : 0, callback);
 }
 
 /* ======================= Initialization ======================= */

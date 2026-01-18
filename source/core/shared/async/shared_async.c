@@ -54,6 +54,11 @@ typedef struct {
     /* Output context (borrowed) */
     SharedContext* ctx;
 
+    /* Completion callback */
+    SharedAsyncCompletionCallback callback;
+    void *callback_userdata;
+    int slot_id;            /* Store slot ID for callback */
+
     /* libuv handles */
     uv_timer_t timer;
     uv_async_t stop_async;
@@ -305,12 +310,30 @@ static void schedule_next_timer(AsyncSlot* slot) {
 }
 
 static void finalize_slot(AsyncSlot* slot) {
+    SharedAsyncCompletionCallback callback = NULL;
+    void *userdata = NULL;
+    int slot_id = -1;
+    int stopped = 0;
+
     uv_mutex_lock(&g_async.mutex);
     if (slot->active) {
         slot->active = 0;
         g_async.active_count--;
+        /* Capture callback info before releasing mutex */
+        callback = slot->callback;
+        userdata = slot->callback_userdata;
+        slot_id = slot->slot_id;
+        stopped = slot->stop_requested;
+        /* Clear callback to prevent double-invocation */
+        slot->callback = NULL;
+        slot->callback_userdata = NULL;
     }
     uv_mutex_unlock(&g_async.mutex);
+
+    /* Invoke callback outside of mutex to avoid deadlock */
+    if (callback) {
+        callback(slot_id, stopped, userdata);
+    }
 }
 
 /* ============================================================================
@@ -323,12 +346,8 @@ static void on_stop_signal(uv_async_t* handle) {
     uv_timer_stop(&slot->timer);
     send_all_note_offs(slot);
 
-    uv_mutex_lock(&g_async.mutex);
-    if (slot->active) {
-        slot->active = 0;
-        g_async.active_count--;
-    }
-    uv_mutex_unlock(&g_async.mutex);
+    /* Use finalize_slot to handle callback invocation */
+    finalize_slot(slot);
 }
 
 /* ============================================================================
@@ -694,7 +713,8 @@ void shared_async_cleanup(void) {
     g_async.loop = NULL;
 }
 
-int shared_async_play(SharedAsyncSchedule* sched, SharedContext* ctx) {
+int shared_async_play_ex(SharedAsyncSchedule* sched, SharedContext* ctx,
+                         SharedAsyncCompletionCallback callback, void *userdata) {
     if (!sched || sched->count == 0) return -1;
     if (!ctx) return -1;
 
@@ -758,6 +778,9 @@ int shared_async_play(SharedAsyncSchedule* sched, SharedContext* ctx) {
     slot->active_note_count = 0;
     slot->stop_requested = 0;
     slot->ctx = ctx;
+    slot->callback = callback;
+    slot->callback_userdata = userdata;
+    slot->slot_id = slot_id;
     slot->active = 1;
     g_async.active_count++;
 
@@ -784,6 +807,10 @@ int shared_async_play(SharedAsyncSchedule* sched, SharedContext* ctx) {
     uv_async_send(&g_async.wake_async);
 
     return slot_id;
+}
+
+int shared_async_play(SharedAsyncSchedule* sched, SharedContext* ctx) {
+    return shared_async_play_ex(sched, ctx, NULL, NULL);
 }
 
 void shared_async_stop(int slot_id) {

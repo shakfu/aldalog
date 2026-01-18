@@ -52,6 +52,8 @@ typedef enum {
  * ============================================================================ */
 
 #define ASYNC_CUSTOM_TAG_SIZE 16
+#define ASYNC_CALLBACK_NAME_SIZE 64
+#define ASYNC_ERROR_MSG_SIZE 128
 
 typedef struct AsyncEvent {
     AsyncEventType type;
@@ -62,22 +64,29 @@ typedef struct AsyncEvent {
         /* ASYNC_EVENT_LANG_CALLBACK */
         struct {
             int slot_id;
-            int status;
+            int status;             /* 0=complete, 1=stopped, 2=error */
+            int events_played;      /* Number of events played */
+            int duration_ms;        /* Playback duration */
+            char callback[ASYNC_CALLBACK_NAME_SIZE];  /* Lua callback name */
+            char error[ASYNC_ERROR_MSG_SIZE];         /* Error message if any */
         } lang;
 
         /* ASYNC_EVENT_LINK_PEERS */
         struct {
             uint64_t peers;
+            char callback[ASYNC_CALLBACK_NAME_SIZE];  /* Lua callback name */
         } link_peers;
 
         /* ASYNC_EVENT_LINK_TEMPO */
         struct {
             double tempo;
+            char callback[ASYNC_CALLBACK_NAME_SIZE];  /* Lua callback name */
         } link_tempo;
 
         /* ASYNC_EVENT_LINK_TRANSPORT */
         struct {
             int playing;
+            char callback[ASYNC_CALLBACK_NAME_SIZE];  /* Lua callback name */
         } link_transport;
 
         /* ASYNC_EVENT_TIMER */
@@ -172,37 +181,46 @@ int async_queue_push(AsyncEventQueue *queue, const AsyncEvent *event);
  *
  * @param queue The event queue (or NULL for global)
  * @param slot_id The playback slot that completed
- * @param status 0 for normal completion, non-zero for error
+ * @param status 0=complete, 1=stopped, 2=error
+ * @param events_played Number of events played
+ * @param duration_ms Playback duration in milliseconds
+ * @param callback Lua callback function name (can be NULL)
+ * @param error Error message if status is error (can be NULL)
  * @return 0 on success, -1 if queue is full
  */
-int async_queue_push_lang_callback(AsyncEventQueue *queue, int slot_id, int status);
+int async_queue_push_lang_callback(AsyncEventQueue *queue, int slot_id, int status,
+                                   int events_played, int duration_ms,
+                                   const char *callback, const char *error);
 
 /**
  * Push a Link peer count change event.
  *
  * @param queue The event queue (or NULL for global)
  * @param peers New peer count
+ * @param callback Lua callback function name (can be NULL)
  * @return 0 on success, -1 if queue is full
  */
-int async_queue_push_link_peers(AsyncEventQueue *queue, uint64_t peers);
+int async_queue_push_link_peers(AsyncEventQueue *queue, uint64_t peers, const char *callback);
 
 /**
  * Push a Link tempo change event.
  *
  * @param queue The event queue (or NULL for global)
  * @param tempo New tempo in BPM
+ * @param callback Lua callback function name (can be NULL)
  * @return 0 on success, -1 if queue is full
  */
-int async_queue_push_link_tempo(AsyncEventQueue *queue, double tempo);
+int async_queue_push_link_tempo(AsyncEventQueue *queue, double tempo, const char *callback);
 
 /**
  * Push a Link transport (start/stop) change event.
  *
  * @param queue The event queue (or NULL for global)
  * @param playing 1 if playing, 0 if stopped
+ * @param callback Lua callback function name (can be NULL)
  * @return 0 on success, -1 if queue is full
  */
-int async_queue_push_link_transport(AsyncEventQueue *queue, int playing);
+int async_queue_push_link_transport(AsyncEventQueue *queue, int playing, const char *callback);
 
 /**
  * Push a beat boundary event (for live loops).

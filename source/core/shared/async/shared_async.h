@@ -32,6 +32,20 @@ extern "C" {
 #define SHARED_ASYNC_DEFAULT_TEMPO 120     /* Default BPM */
 
 /* ============================================================================
+ * Completion Callback
+ * ============================================================================ */
+
+/**
+ * Callback invoked when a playback slot completes.
+ * Called from the async thread, so must be thread-safe.
+ *
+ * @param slot_id The slot that completed.
+ * @param stopped Non-zero if stopped by user, zero if completed naturally.
+ * @param userdata User-provided data from shared_async_play_ex().
+ */
+typedef void (*SharedAsyncCompletionCallback)(int slot_id, int stopped, void *userdata);
+
+/* ============================================================================
  * Event Types
  * ============================================================================ */
 
@@ -195,6 +209,19 @@ void shared_async_cleanup(void);
  * @return Slot ID (0 to MAX_SLOTS-1) on success, -1 on error.
  */
 int shared_async_play(SharedAsyncSchedule* sched, SharedContext* ctx);
+
+/**
+ * Play a schedule asynchronously with completion callback.
+ * Extended version that allows notification when playback completes.
+ *
+ * @param sched Schedule to play.
+ * @param ctx SharedContext for MIDI output.
+ * @param callback Function to call when playback completes (can be NULL).
+ * @param userdata User data passed to callback.
+ * @return Slot ID (0 to MAX_SLOTS-1) on success, -1 on error.
+ */
+int shared_async_play_ex(SharedAsyncSchedule* sched, SharedContext* ctx,
+                         SharedAsyncCompletionCallback callback, void *userdata);
 
 /**
  * Stop a specific playback slot.

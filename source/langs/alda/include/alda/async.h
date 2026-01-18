@@ -37,6 +37,15 @@ int alda_async_init(void);
 void alda_async_cleanup(void);
 
 /**
+ * @brief Completion callback type for async playback.
+ *
+ * @param slot_id The slot that completed.
+ * @param stopped Non-zero if stopped by user, zero if completed naturally.
+ * @param userdata User-provided data from alda_events_play_async_ex().
+ */
+typedef void (*AldaAsyncCompletionCallback)(int slot_id, int stopped, void *userdata);
+
+/**
  * @brief Play events asynchronously.
  *
  * Copies the current events from context and plays them
@@ -46,6 +55,18 @@ void alda_async_cleanup(void);
  * @return 0 on success, -1 on error.
  */
 int alda_events_play_async(AldaContext* ctx);
+
+/**
+ * @brief Play events asynchronously with completion callback.
+ *
+ * Like alda_events_play_async() but with notification when playback completes.
+ *
+ * @param ctx Alda context with scheduled events.
+ * @param callback Function to call when playback completes (can be NULL).
+ * @param userdata User data passed to callback.
+ * @return Slot ID on success (0 to MAX_SLOTS-1), -1 on error.
+ */
+int alda_events_play_async_ex(AldaContext* ctx, AldaAsyncCompletionCallback callback, void *userdata);
 
 /**
  * @brief Stop all async playback.
