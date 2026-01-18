@@ -22,16 +22,16 @@ approach using parser generators.
 
 MODULAR ARCHITECTURE:
 This script uses the modular language architecture. Creating a new language only
-requires creating files under lang/<name>/ - NO modifications to shared files
+requires creating files under source/langs/<name>/ - NO modifications to shared files
 (lang_config.h, lang_dispatch.c, CMakeLists.txt, etc.) are needed.
 
 Workflow:
-1. Run this script to generate the language skeleton under lang/<name>/
+1. Run this script to generate the language skeleton under source/langs/<name>/
 2. Edit the .peg grammar file to experiment with syntax
 3. Run 'make' - CMake auto-discovers languages and rebuilds
 4. Test your changes
 
-The packcc tool is bundled in thirdparty/packcc-2.2.0 and built automatically.
+The packcc tool is bundled in source/thirdparty/packcc-2.2.0 and built automatically.
 """
 
 import argparse
@@ -291,6 +291,10 @@ RUNTIME_H_TEMPLATE = '''#ifndef {NAME}_RUNTIME_H
 
 #include "{name}_grammar.h"
 
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
 /* Forward declaration */
 typedef struct SharedContext SharedContext;
 
@@ -330,6 +334,10 @@ void {name}_runtime_stop({Title}Runtime *rt);
  */
 const char *{name}_runtime_get_error({Title}Runtime *rt);
 
+#ifdef __cplusplus
+}}
+#endif
+
 #endif /* {NAME}_RUNTIME_H */
 '''
 
@@ -340,7 +348,7 @@ RUNTIME_C_TEMPLATE = '''/**
 
 #include "{name}_runtime.h"
 #include "{name}_grammar.h"
-#include "shared/context.h"
+#include "context.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -484,6 +492,32 @@ const char *{name}_runtime_get_error({Title}Runtime *rt) {{
 # Register/REPL/Dispatch Templates
 # =============================================================================
 
+REGISTER_H_TEMPLATE = '''#ifndef {NAME}_REGISTER_H
+#define {NAME}_REGISTER_H
+
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
+/* Forward declarations */
+struct editor_ctx;
+typedef struct editor_ctx editor_ctx_t;
+struct lua_State;
+typedef struct lua_State lua_State;
+
+/**
+ * Initialize {Title} language registration with the language bridge.
+ * Called automatically during editor initialization.
+ */
+void {name}_loki_lang_init(void);
+
+#ifdef __cplusplus
+}}
+#endif
+
+#endif /* {NAME}_REGISTER_H */
+'''
+
 REGISTER_C_TEMPLATE = '''/**
  * @file register.c
  * @brief {Title} language integration with Loki editor.
@@ -491,19 +525,20 @@ REGISTER_C_TEMPLATE = '''/**
  * Uses a PackCC-generated PEG parser for parsing.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
+#include "register.h"
 #include "psnd.h"
 #include "loki/internal.h"
 #include "loki/lang_bridge.h"
 #include "loki/lua.h"
 #include "lauxlib.h"
 
-#include "shared/context.h"
+#include "context.h"
 #include "shared/midi/midi.h"
 #include "{name}_runtime.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* ============================================================================
  * Per-Context State
@@ -704,33 +739,62 @@ void {name}_loki_lang_init(void) {{
 }}
 '''
 
+REPL_H_TEMPLATE = '''#ifndef {NAME}_REPL_H
+#define {NAME}_REPL_H
+
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
+/**
+ * {Title} REPL main entry point.
+ * Called when user runs: psnd {name} [options] [file]
+ */
+int {name}_repl_main(int argc, char **argv);
+
+/**
+ * {Title} play mode entry point.
+ * Called when user runs: psnd play file.{ext}
+ */
+int {name}_play_main(int argc, char **argv);
+
+#ifdef __cplusplus
+}}
+#endif
+
+#endif /* {NAME}_REPL_H */
+'''
+
 REPL_C_TEMPLATE = '''/**
  * @file repl.c
  * @brief {Title} language REPL with PackCC-generated PEG parser.
  */
 
-#include "repl.h"
 #include "psnd.h"
+#include "repl.h"  /* Core REPL infrastructure */
 #include "loki/core.h"
 #include "loki/internal.h"
-#include "loki/repl_launcher.h"
+#include "loki/syntax.h"
+#include "loki/lua.h"
+#include "loki/repl_helpers.h"
 #include "shared/repl_commands.h"
-#include "shared/context.h"
 #include "shared/midi/midi.h"
 #include "shared/audio/audio.h"
+#include "context.h"
 #include "{name}_runtime.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 /* ============================================================================
  * REPL State
  * ============================================================================ */
 
-static SharedContext *g_shared_ctx = NULL;
-static {Title}Runtime g_runtime;
+static SharedContext *g_{name}_shared_ctx = NULL;
+static {Title}Runtime g_{name}_runtime;
 
 /* ============================================================================
  * Usage and Help
@@ -765,11 +829,14 @@ static void print_help(void) {{
  * ============================================================================ */
 
 static void {name}_stop_playback(void) {{
-    {name}_runtime_stop(&g_runtime);
+    {name}_runtime_stop(&g_{name}_runtime);
+    if (g_{name}_shared_ctx) {{
+        shared_send_panic(g_{name}_shared_ctx);
+    }}
 }}
 
-static int process_command(const char *input) {{
-    int result = shared_process_command(g_shared_ctx, input, {name}_stop_playback);
+static int {name}_process_command(const char *input) {{
+    int result = shared_process_command(g_{name}_shared_ctx, input, {name}_stop_playback);
     if (result == REPL_CMD_QUIT) return 1;
     if (result == REPL_CMD_HANDLED) return 0;
 
@@ -789,9 +856,9 @@ static int process_command(const char *input) {{
  * ============================================================================ */
 
 static int evaluate_code(const char *code) {{
-    int result = {name}_runtime_eval(&g_runtime, code);
+    int result = {name}_runtime_eval(&g_{name}_runtime, code);
     if (result != 0) {{
-        const char *err = {name}_runtime_get_error(&g_runtime);
+        const char *err = {name}_runtime_get_error(&g_{name}_runtime);
         if (err) {{
             fprintf(stderr, "Error: %s\\n", err);
         }}
@@ -831,52 +898,70 @@ static int evaluate_file(const char *path) {{
  * REPL Loop
  * ============================================================================ */
 
-static void repl_loop(editor_ctx_t *syntax_ctx) {{
+static void {name}_repl_loop_pipe(void) {{
+    char line[4096];
+
+    while (fgets(line, sizeof(line), stdin) != NULL) {{
+        size_t len = repl_strip_newlines(line);
+        if (len == 0) continue;
+
+        int result = {name}_process_command(line);
+        if (result == 1) break;
+        if (result == 0) continue;
+
+        evaluate_code(line);
+        fflush(stdout);
+    }}
+}}
+
+static void {name}_repl_loop(editor_ctx_t *syntax_ctx) {{
     ReplLineEditor ed;
     char *input;
+    char history_path[512] = {{0}};
 
+    /* Use non-interactive mode for piped input */
     if (!isatty(STDIN_FILENO)) {{
-        char line[4096];
-        while (fgets(line, sizeof(line), stdin)) {{
-            size_t len = strlen(line);
-            while (len > 0 && (line[len-1] == '\\n' || line[len-1] == '\\r'))
-                line[--len] = '\\0';
-            if (len == 0) continue;
-
-            int result = process_command(line);
-            if (result == 1) break;
-            if (result == 0) continue;
-
-            evaluate_code(line);
-        }}
+        {name}_repl_loop_pipe();
         return;
     }}
 
     repl_editor_init(&ed);
 
-    printf("{Title} REPL (PEG parser). Type :help for commands, :quit to exit.\\n");
+    /* Build history file path and load history */
+    if (repl_get_history_path("{name}", history_path, sizeof(history_path))) {{
+        repl_history_load(&ed, history_path);
+    }}
+
+    printf("{Title} REPL %s (PEG parser). Type :h for help, :q to quit.\\n", PSND_VERSION);
+
+    repl_enable_raw_mode();
 
     while ((input = repl_readline(syntax_ctx, &ed, "{name}> ")) != NULL) {{
         if (input[0] == '\\0') {{
-            free(input);
             continue;
         }}
 
         repl_add_history(&ed, input);
 
-        int result = process_command(input);
-        if (result == 1) {{
-            free(input);
-            break;
-        }}
+        int result = {name}_process_command(input);
+        if (result == 1) break;
         if (result == 0) {{
-            free(input);
+            /* Check Link callbacks */
+            shared_repl_link_check();
             continue;
         }}
 
         evaluate_code(input);
 
-        free(input);
+        /* Check Link callbacks */
+        shared_repl_link_check();
+    }}
+
+    repl_disable_raw_mode();
+
+    /* Save history */
+    if (history_path[0]) {{
+        repl_history_save(&ed, history_path);
     }}
 
     repl_editor_cleanup(&ed);
@@ -891,6 +976,7 @@ int {name}_repl_main(int argc, char **argv) {{
     const char *soundfont = NULL;
     const char *virtual_name = NULL;
     int port = -1;
+    int list_ports = 0;
 
     for (int i = 1; i < argc; i++) {{
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {{
@@ -898,11 +984,8 @@ int {name}_repl_main(int argc, char **argv) {{
             return 0;
         }}
         if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--list") == 0) {{
-            SharedContext tmp_ctx = {{0}};
-            shared_context_init(&tmp_ctx);
-            shared_midi_list_ports(&tmp_ctx);
-            shared_context_cleanup(&tmp_ctx);
-            return 0;
+            list_ports = 1;
+            continue;
         }}
         if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) && i+1 < argc) {{
             port = atoi(argv[++i]);
@@ -921,23 +1004,34 @@ int {name}_repl_main(int argc, char **argv) {{
         }}
     }}
 
-    g_shared_ctx = malloc(sizeof(SharedContext));
-    if (!g_shared_ctx || shared_context_init(g_shared_ctx) != 0) {{
+    g_{name}_shared_ctx = malloc(sizeof(SharedContext));
+    if (!g_{name}_shared_ctx || shared_context_init(g_{name}_shared_ctx) != 0) {{
         fprintf(stderr, "Failed to initialize shared context\\n");
         return 1;
     }}
 
+    /* Handle --list after context is initialized */
+    if (list_ports) {{
+        shared_midi_list_ports(g_{name}_shared_ctx);
+        shared_context_cleanup(g_{name}_shared_ctx);
+        free(g_{name}_shared_ctx);
+        return 0;
+    }}
+
     if (virtual_name) {{
-        shared_midi_open_virtual(g_shared_ctx, virtual_name);
+        shared_midi_open_virtual(g_{name}_shared_ctx, virtual_name);
     }} else if (port >= 0) {{
-        shared_midi_open_port(g_shared_ctx, port);
+        shared_midi_open_port(g_{name}_shared_ctx, port);
     }}
 
     if (soundfont) {{
         shared_tsf_load_soundfont(soundfont);
     }}
 
-    {name}_runtime_init(&g_runtime, g_shared_ctx);
+    {name}_runtime_init(&g_{name}_runtime, g_{name}_shared_ctx);
+
+    /* Initialize Link callbacks */
+    shared_repl_link_init_callbacks(g_{name}_shared_ctx);
 
     if (input_file) {{
         evaluate_file(input_file);
@@ -945,14 +1039,58 @@ int {name}_repl_main(int argc, char **argv) {{
 
     if (!input_file || isatty(STDIN_FILENO)) {{
         editor_ctx_t syntax_ctx = {{0}};
-        repl_loop(&syntax_ctx);
+        syntax_select_for_filename(&syntax_ctx, (char *)".{ext}");
+        {name}_repl_loop(&syntax_ctx);
     }}
 
-    {name}_runtime_stop(&g_runtime);
-    shared_context_cleanup(g_shared_ctx);
-    free(g_shared_ctx);
+    /* Cleanup */
+    shared_repl_link_cleanup_callbacks();
+    {name}_runtime_stop(&g_{name}_runtime);
+    shared_context_cleanup(g_{name}_shared_ctx);
+    free(g_{name}_shared_ctx);
 
     return 0;
+}}
+
+int {name}_play_main(int argc, char **argv) {{
+    /* Simplified play mode - just execute file and exit */
+    const char *soundfont = NULL;
+    const char *input_file = NULL;
+
+    for (int i = 0; i < argc; i++) {{
+        if ((strcmp(argv[i], "-sf") == 0 || strcmp(argv[i], "--soundfont") == 0) && i+1 < argc) {{
+            soundfont = argv[++i];
+            continue;
+        }}
+        if (argv[i][0] != '-') {{
+            input_file = argv[i];
+        }}
+    }}
+
+    if (!input_file) {{
+        fprintf(stderr, "Error: No input file specified\\n");
+        return 1;
+    }}
+
+    g_{name}_shared_ctx = malloc(sizeof(SharedContext));
+    if (!g_{name}_shared_ctx || shared_context_init(g_{name}_shared_ctx) != 0) {{
+        fprintf(stderr, "Failed to initialize shared context\\n");
+        return 1;
+    }}
+
+    if (soundfont) {{
+        shared_tsf_load_soundfont(soundfont);
+    }}
+
+    {name}_runtime_init(&g_{name}_runtime, g_{name}_shared_ctx);
+
+    int result = evaluate_file(input_file);
+
+    {name}_runtime_stop(&g_{name}_runtime);
+    shared_context_cleanup(g_{name}_shared_ctx);
+    free(g_{name}_shared_ctx);
+
+    return result;
 }}
 '''
 
@@ -963,18 +1101,19 @@ DISPATCH_C_TEMPLATE = '''/**
 
 #include "lang_dispatch.h"
 
-/* External entry points from repl.c */
+/* Forward declarations from repl.c */
 extern int {name}_repl_main(int argc, char **argv);
+extern int {name}_play_main(int argc, char **argv);
 
 static const LangDispatchEntry {name}_dispatch = {{
     .commands = {{"{name}"}},
     .command_count = 1,
-    .extensions = {{{extensions_c_short}}},
+    .extensions = {{{extensions_dispatch}}},
     .extension_count = {ext_count},
     .display_name = "{Title}",
     .description = "PEG-based music DSL",
     .repl_main = {name}_repl_main,
-    .play_main = {name}_repl_main,
+    .play_main = {name}_play_main,
 }};
 
 void {name}_dispatch_init(void) {{
@@ -995,7 +1134,7 @@ CMAKE_LANG_TEMPLATE = '''# {Title} language - PEG-based music DSL
 # Build packcc tool from thirdparty (if not already available)
 # ==============================================================================
 if(NOT TARGET packcc_tool)
-    set(PACKCC_SOURCE_DIR "${{PSND_ROOT_DIR}}/thirdparty/packcc-2.2.0")
+    set(PACKCC_SOURCE_DIR "${{PSND_ROOT_DIR}}/source/thirdparty/packcc-2.2.0")
     set(PACKCC_BINARY "${{CMAKE_BINARY_DIR}}/tools/packcc")
 
     add_custom_command(
@@ -1046,12 +1185,12 @@ add_dependencies({name} {name}_parser_gen)
 
 target_include_directories({name}
     PUBLIC
-        ${{PSND_ROOT_DIR}}/include
+        ${{PSND_ROOT_DIR}}/source/core/include
         ${{CMAKE_CURRENT_SOURCE_DIR}}/impl
         ${{CMAKE_BINARY_DIR}}/generated/{name}
     PRIVATE
-        ${{PSND_ROOT_DIR}}/src
-        ${{PSND_ROOT_DIR}}/src/shared
+        ${{PSND_ROOT_DIR}}/source/core
+        ${{PSND_ROOT_DIR}}/source/core/shared
 )
 
 target_link_libraries({name} PUBLIC shared)
@@ -1088,16 +1227,34 @@ psnd_register_language(
 
 TEST_CMAKE_TEMPLATE = '''# {Title} language tests (PEG parser)
 
-add_executable(test_{name}_parser test_parser.c)
-add_dependencies(test_{name}_parser {name}_parser_gen)
-target_link_libraries(test_{name}_parser PRIVATE {name})
-target_include_directories(test_{name}_parser PRIVATE
-    ${{PSND_ROOT_DIR}}/lang/{name}/impl
-    ${{CMAKE_BINARY_DIR}}/generated/{name}
-    ${{PSND_ROOT_DIR}}/tests
-)
-add_test(NAME {name}_parser COMMAND test_{name}_parser)
-set_tests_properties({name}_parser PROPERTIES LABELS "unit")
+# Helper macro for {name} tests
+macro(add_{name}_test TEST_NAME)
+    add_executable(test_{name}_${{TEST_NAME}}
+        test_${{TEST_NAME}}.c
+        ${{PSND_ROOT_DIR}}/source/testing/test_framework.c
+    )
+    add_dependencies(test_{name}_${{TEST_NAME}} {name}_parser_gen)
+    target_link_libraries(test_{name}_${{TEST_NAME}} PRIVATE
+        {name}
+        shared
+        m
+    )
+    target_include_directories(test_{name}_${{TEST_NAME}} PRIVATE
+        ${{PSND_ROOT_DIR}}/source/testing
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/../impl
+        ${{CMAKE_BINARY_DIR}}/generated/{name}
+        ${{PSND_ROOT_DIR}}/source/core/include
+    )
+    add_test(
+        NAME {name}_${{TEST_NAME}}
+        COMMAND $<TARGET_FILE:test_{name}_${{TEST_NAME}}>
+        WORKING_DIRECTORY ${{CMAKE_BINARY_DIR}}
+    )
+    set_tests_properties({name}_${{TEST_NAME}} PROPERTIES LABELS "unit")
+endmacro()
+
+# Add all {name} tests
+add_{name}_test(parser)
 '''
 
 TEST_PARSER_TEMPLATE = '''#include "test_framework.h"
@@ -1268,14 +1425,32 @@ Lines starting with `#` are comments.
 
 ## Modifying the Grammar
 
-The PEG grammar is in `lang/{name}/impl/{name}_grammar.peg`. To iterate:
+The PEG grammar is in `source/langs/{name}/impl/{name}_grammar.peg`. To iterate:
 
 ```bash
 # Edit the grammar
-vim lang/{name}/impl/{name}_grammar.peg
+vim source/langs/{name}/impl/{name}_grammar.peg
 
 # Rebuild - parser regenerates automatically
 make
+```
+
+## REPL Commands
+
+| Command | Description |
+|---------|-------------|
+| `:help` or `:h` | Show help |
+| `:quit` or `:q` | Exit REPL |
+| `:stop` or `:s` | Stop playback |
+| `:midi` | List MIDI ports |
+| `:midi N` | Connect to port N |
+
+## Lua API
+
+```lua
+loki.{name}.init()           -- Initialize
+loki.{name}.eval(code)       -- Evaluate code
+loki.{name}.stop()           -- Stop playback
 ```
 '''
 
@@ -1290,6 +1465,31 @@ loki.register_language({{
     block_comment_end = nil,
     string_delimiters = {{'"', "'"}},
 }})
+'''
+
+EXAMPLE_TEMPLATE = '''# Example {Title} program
+# Play a simple melody using PEG-parsed syntax
+
+tempo 120
+
+# C major arpeggio (using note names)
+note C4 300
+note E4 300
+note G4 300
+note C5 600
+
+rest 200
+
+# C major chord
+chord C4 E4 G4 dur:800
+
+rest 100
+
+# Descending with MIDI numbers
+note 72 300
+note 67 300
+note 64 300
+note 60 600
 '''
 
 # =============================================================================
@@ -1324,7 +1524,7 @@ def generate_language(
     name_title = to_title(name)
 
     ext_c = ", ".join(f'".{e.lstrip(".")}"' for e in extensions) + ", NULL"
-    ext_c_short = ", ".join(f'".{e.lstrip(".")}"' for e in extensions)
+    ext_dispatch = ", ".join(f'".{e.lstrip(".")}"' for e in extensions)
     ext_lua = ", ".join(f'".{e.lstrip(".")}"' for e in extensions)
     ext_space = " ".join(f'.{e.lstrip(".")}' for e in extensions)
     primary_ext = extensions[0].lstrip(".")
@@ -1335,7 +1535,7 @@ def generate_language(
         "NAME": name_upper,
         "Title": name_title,
         "extensions_c": ext_c,
-        "extensions_c_short": ext_c_short,
+        "extensions_dispatch": ext_dispatch,
         "ext_count": str(len(extensions)),
         "extensions_lua": ext_lua,
         "extensions_space": ext_space,
@@ -1344,13 +1544,19 @@ def generate_language(
 
     print(f"\nGenerating PEG-based language: {name_title}")
     print(f"  Extensions: {extensions}")
-    print(f"  Directory: lang/{name_lower}/")
+    print(f"  Directory: source/langs/{name_lower}/")
     print()
 
-    # === Create new files in lang/<name>/ ===
-    print("Creating language files:")
+    # Check if language already exists
+    lang_dir = root / "source" / "langs" / name_lower
+    if lang_dir.exists() and not dry_run:
+        print(f"Error: Language directory already exists: {lang_dir}")
+        print("Remove it first if you want to regenerate.")
+        sys.exit(1)
 
-    lang_dir = root / "lang" / name_lower
+    # === Create new files in source/langs/<name>/ ===
+    print("Creating files:")
+
     impl_dir = lang_dir / "impl"
 
     # PEG grammar
@@ -1360,9 +1566,14 @@ def generate_language(
     create_file(impl_dir / f"{name_lower}_runtime.h", RUNTIME_H_TEMPLATE.format(**subs), dry_run)
     create_file(impl_dir / f"{name_lower}_runtime.c", RUNTIME_C_TEMPLATE.format(**subs), dry_run)
 
-    # Integration files
+    # Register header and implementation
+    create_file(lang_dir / "register.h", REGISTER_H_TEMPLATE.format(**subs), dry_run)
     create_file(lang_dir / "register.c", REGISTER_C_TEMPLATE.format(**subs), dry_run)
+
+    # REPL (no separate header - uses extern declarations in dispatch.c)
     create_file(lang_dir / "repl.c", REPL_C_TEMPLATE.format(**subs), dry_run)
+
+    # Dispatch
     create_file(lang_dir / "dispatch.c", DISPATCH_C_TEMPLATE.format(**subs), dry_run)
 
     # CMakeLists.txt for the language
@@ -1374,22 +1585,19 @@ def generate_language(
     create_file(test_dir / "test_parser.c", TEST_PARSER_TEMPLATE.format(**subs), dry_run)
 
     # Documentation
-    create_file(lang_dir / "docs" / "README.md", DOC_README_TEMPLATE.format(**subs), dry_run)
-
-    # Examples directory
-    (lang_dir / "examples").mkdir(parents=True, exist_ok=True)
-    if not dry_run:
-        print(f"  Created: {lang_dir / 'examples/'}")
-
-    # Include directory (for consistency)
-    (lang_dir / "include").mkdir(parents=True, exist_ok=True)
-    if not dry_run:
-        print(f"  Created: {lang_dir / 'include/'}")
+    create_file(lang_dir / "README.md", DOC_README_TEMPLATE.format(**subs), dry_run)
 
     # Syntax highlighting
     create_file(
         root / ".psnd" / "languages" / f"{name_lower}.lua",
         SYNTAX_LUA_TEMPLATE.format(**subs),
+        dry_run
+    )
+
+    # Examples directory with sample file
+    create_file(
+        lang_dir / "examples" / f"melody.{primary_ext}",
+        EXAMPLE_TEMPLATE.format(**subs),
         dry_run
     )
 
@@ -1403,12 +1611,12 @@ def generate_language(
         print(f"  4. Try: chord C4 E4 G4 # C major chord")
         print(f"")
         print(f"To modify the grammar:")
-        print(f"  1. Edit: lang/{name_lower}/impl/{name_lower}_grammar.peg")
+        print(f"  1. Edit: source/langs/{name_lower}/impl/{name_lower}_grammar.peg")
         print(f"  2. Run: make")
         print(f"     (Parser regenerates automatically when .peg file changes)")
         print(f"")
         print(f"NO modifications to shared files are needed!")
-        print(f"The language is auto-discovered from lang/{name_lower}/CMakeLists.txt")
+        print(f"The language is auto-discovered from source/langs/{name_lower}/CMakeLists.txt")
 
 
 def main():
@@ -1417,9 +1625,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 MODULAR ARCHITECTURE:
-This script uses the new modular language architecture. Creating a new language
-only requires adding files under lang/<name>/ - NO modifications to any shared
-files (lang_config.h, lang_dispatch.c, CMakeLists.txt, etc.) are needed.
+This script uses the modular language architecture. Creating a new language
+only requires adding files under source/langs/<name>/ - NO modifications to any
+shared files (lang_config.h, lang_dispatch.c, CMakeLists.txt, etc.) are needed.
 
 The language is automatically discovered by CMake when you run 'make'.
 
@@ -1432,7 +1640,7 @@ Workflow:
   1. %(prog)s mymusic             # Generate language skeleton
   2. make clean && make test      # Build (auto-discovers and builds language)
   3. ./build/psnd mymusic         # Start the REPL
-  4. Edit lang/mymusic/impl/mymusic_grammar.peg
+  4. Edit source/langs/mymusic/impl/mymusic_grammar.peg
   5. make                         # Parser regenerates automatically
 """
     )
@@ -1460,6 +1668,12 @@ Workflow:
     name = args.name.lower()
     if not re.match(r'^[a-z][a-z0-9]*$', name):
         print("Error: Language name must be lowercase alphanumeric starting with a letter", file=sys.stderr)
+        sys.exit(1)
+
+    # Check for reserved names (existing languages)
+    reserved = ["alda", "joy", "bog", "tr7", "scheme"]
+    if name in reserved:
+        print(f"Error: '{name}' is already a built-in language", file=sys.stderr)
         sys.exit(1)
 
     extensions = args.extensions if args.extensions else [f".{name}"]

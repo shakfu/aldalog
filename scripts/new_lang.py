@@ -2,11 +2,12 @@
 """
 Generate a complete, compilable music programming language for psnd.
 
-This script creates a fully functional minimal language with:
+This script creates a fully functional minimal language module with:
 - Parser (tokenizer + command parsing)
 - Runtime (MIDI note/chord playback)
 - REPL integration
 - Editor integration
+- Dispatch registration
 - Tests
 - Documentation
 
@@ -18,6 +19,8 @@ The generated language supports:
 - # comments
 
 After generation, run 'make clean && make test' to build and verify.
+
+The language is automatically discovered by CMake - no manual registration needed.
 """
 
 import argparse
@@ -60,14 +63,74 @@ def to_lower(name: str) -> str:
 # File Templates
 # =============================================================================
 
+CMAKE_TEMPLATE = '''# {Title} language module
+#
+# This file is auto-discovered by the psnd build system.
+# No modifications to parent CMakeLists.txt files are needed.
+
+# Build the {name} language library
+set({NAME}_LIB_SOURCES
+    ${{CMAKE_CURRENT_SOURCE_DIR}}/impl/{name}_parser.c
+    ${{CMAKE_CURRENT_SOURCE_DIR}}/impl/{name}_runtime.c
+)
+
+add_library({name} STATIC ${{{NAME}_LIB_SOURCES}})
+add_library({name}::{name} ALIAS {name})
+
+target_include_directories({name}
+    PUBLIC
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/impl
+        ${{PSND_ROOT_DIR}}/source/core/include
+    PRIVATE
+        ${{PSND_ROOT_DIR}}/source/core/shared
+)
+
+target_link_libraries({name} PRIVATE shared)
+
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options({name} PRIVATE -Wall -Wextra -pedantic)
+endif()
+
+# Register the language with psnd
+psnd_register_language(
+    NAME {name}
+    DISPLAY_NAME "{Title}"
+    DESCRIPTION "Minimal music programming language"
+    COMMANDS {name}
+    EXTENSIONS {extensions_cmake}
+    SOURCES ${{{NAME}_LIB_SOURCES}}
+    INCLUDE_DIRS ${{CMAKE_CURRENT_SOURCE_DIR}}/impl
+    REPL_SOURCES
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/repl.c
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/dispatch.c
+    REGISTER_SOURCES
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/register.c
+    LINK_LIBRARIES {name}
+)
+'''
+
 REGISTER_H_TEMPLATE = '''#ifndef {NAME}_REGISTER_H
 #define {NAME}_REGISTER_H
 
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
+/* Forward declarations */
+struct editor_ctx;
+typedef struct editor_ctx editor_ctx_t;
+struct lua_State;
+typedef struct lua_State lua_State;
+
 /**
  * Initialize {Title} language registration with the language bridge.
- * Called from loki_lang_init() when LANG_{NAME} is defined.
+ * Called automatically during editor initialization.
  */
 void {name}_loki_lang_init(void);
+
+#ifdef __cplusplus
+}}
+#endif
 
 #endif /* {NAME}_REGISTER_H */
 '''
@@ -77,10 +140,6 @@ REGISTER_C_TEMPLATE = '''/**
  * @brief {Title} language integration with Loki editor.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "register.h"
 #include "psnd.h"
 #include "loki/internal.h"
@@ -88,9 +147,13 @@ REGISTER_C_TEMPLATE = '''/**
 #include "loki/lua.h"
 #include "lauxlib.h"
 
-#include "shared/context.h"
+#include "context.h"
 #include "shared/midi/midi.h"
 #include "{name}_runtime.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* ============================================================================
  * Per-Context State
@@ -312,7 +375,25 @@ void {name}_loki_lang_init(void) {{
 REPL_H_TEMPLATE = '''#ifndef {NAME}_REPL_H
 #define {NAME}_REPL_H
 
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
+/**
+ * {Title} REPL main entry point.
+ * Called when user runs: psnd {name} [options] [file]
+ */
 int {name}_repl_main(int argc, char **argv);
+
+/**
+ * {Title} play mode entry point.
+ * Called when user runs: psnd play file.{ext}
+ */
+int {name}_play_main(int argc, char **argv);
+
+#ifdef __cplusplus
+}}
+#endif
 
 #endif /* {NAME}_REPL_H */
 '''
@@ -322,26 +403,31 @@ REPL_C_TEMPLATE = '''/**
  * @brief {Title} language REPL with shared command handling.
  */
 
-#include "repl.h"
 #include "psnd.h"
+#include "repl.h"  /* Core REPL infrastructure */
 #include "loki/core.h"
 #include "loki/internal.h"
-#include "loki/repl_launcher.h"
+#include "loki/syntax.h"
+#include "loki/lua.h"
+#include "loki/repl_helpers.h"
 #include "shared/repl_commands.h"
-#include "shared/context.h"
+#include "shared/midi/midi.h"
+#include "shared/audio/audio.h"
+#include "context.h"
 #include "{name}_runtime.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 /* ============================================================================
  * REPL State
  * ============================================================================ */
 
-static SharedContext *g_shared_ctx = NULL;
-static {Title}Runtime g_runtime;
+static SharedContext *g_{name}_shared_ctx = NULL;
+static {Title}Runtime g_{name}_runtime;
 
 /* ============================================================================
  * Usage and Help
@@ -375,11 +461,14 @@ static void print_help(void) {{
  * ============================================================================ */
 
 static void {name}_stop_playback(void) {{
-    {name}_runtime_stop(&g_runtime);
+    {name}_runtime_stop(&g_{name}_runtime);
+    if (g_{name}_shared_ctx) {{
+        shared_send_panic(g_{name}_shared_ctx);
+    }}
 }}
 
-static int process_command(const char *input) {{
-    int result = shared_process_command(g_shared_ctx, input, {name}_stop_playback);
+static int {name}_process_command(const char *input) {{
+    int result = shared_process_command(g_{name}_shared_ctx, input, {name}_stop_playback);
     if (result == REPL_CMD_QUIT) return 1;
     if (result == REPL_CMD_HANDLED) return 0;
 
@@ -399,9 +488,9 @@ static int process_command(const char *input) {{
  * ============================================================================ */
 
 static int evaluate_code(const char *code) {{
-    int result = {name}_runtime_eval(&g_runtime, code);
+    int result = {name}_runtime_eval(&g_{name}_runtime, code);
     if (result != 0) {{
-        const char *err = {name}_runtime_get_error(&g_runtime);
+        const char *err = {name}_runtime_get_error(&g_{name}_runtime);
         if (err) {{
             fprintf(stderr, "Error: %s\\n", err);
         }}
@@ -428,8 +517,8 @@ static int evaluate_file(const char *path) {{
         return -1;
     }}
 
-    size_t read = fread(code, 1, size, f);
-    code[read] = '\\0';
+    size_t read_size = fread(code, 1, size, f);
+    code[read_size] = '\\0';
     fclose(f);
 
     int result = evaluate_code(code);
@@ -441,52 +530,70 @@ static int evaluate_file(const char *path) {{
  * REPL Loop
  * ============================================================================ */
 
-static void repl_loop(editor_ctx_t *syntax_ctx) {{
+static void {name}_repl_loop_pipe(void) {{
+    char line[4096];
+
+    while (fgets(line, sizeof(line), stdin) != NULL) {{
+        size_t len = repl_strip_newlines(line);
+        if (len == 0) continue;
+
+        int result = {name}_process_command(line);
+        if (result == 1) break;
+        if (result == 0) continue;
+
+        evaluate_code(line);
+        fflush(stdout);
+    }}
+}}
+
+static void {name}_repl_loop(editor_ctx_t *syntax_ctx) {{
     ReplLineEditor ed;
     char *input;
+    char history_path[512] = {{0}};
 
+    /* Use non-interactive mode for piped input */
     if (!isatty(STDIN_FILENO)) {{
-        char line[4096];
-        while (fgets(line, sizeof(line), stdin)) {{
-            size_t len = strlen(line);
-            while (len > 0 && (line[len-1] == '\\n' || line[len-1] == '\\r'))
-                line[--len] = '\\0';
-            if (len == 0) continue;
-
-            int result = process_command(line);
-            if (result == 1) break;
-            if (result == 0) continue;
-
-            evaluate_code(line);
-        }}
+        {name}_repl_loop_pipe();
         return;
     }}
 
     repl_editor_init(&ed);
 
-    printf("{Title} REPL. Type :help for commands, :quit to exit.\\n");
+    /* Build history file path and load history */
+    if (repl_get_history_path("{name}", history_path, sizeof(history_path))) {{
+        repl_history_load(&ed, history_path);
+    }}
 
-    while ((input = repl_editor_readline(&ed, "{name}> ", syntax_ctx)) != NULL) {{
+    printf("{Title} REPL %s (type :h for help, :q to quit)\\n", PSND_VERSION);
+
+    repl_enable_raw_mode();
+
+    while ((input = repl_readline(syntax_ctx, &ed, "{name}> ")) != NULL) {{
         if (input[0] == '\\0') {{
-            free(input);
             continue;
         }}
 
-        repl_editor_add_history(&ed, input);
+        repl_add_history(&ed, input);
 
-        int result = process_command(input);
-        if (result == 1) {{
-            free(input);
-            break;
-        }}
+        int result = {name}_process_command(input);
+        if (result == 1) break;
         if (result == 0) {{
-            free(input);
+            /* Check Link callbacks */
+            shared_repl_link_check();
             continue;
         }}
 
         evaluate_code(input);
 
-        free(input);
+        /* Check Link callbacks */
+        shared_repl_link_check();
+    }}
+
+    repl_disable_raw_mode();
+
+    /* Save history */
+    if (history_path[0]) {{
+        repl_history_save(&ed, history_path);
     }}
 
     repl_editor_cleanup(&ed);
@@ -501,6 +608,7 @@ int {name}_repl_main(int argc, char **argv) {{
     const char *soundfont = NULL;
     const char *virtual_name = NULL;
     int port = -1;
+    int list_ports = 0;
 
     for (int i = 1; i < argc; i++) {{
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {{
@@ -508,8 +616,8 @@ int {name}_repl_main(int argc, char **argv) {{
             return 0;
         }}
         if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--list") == 0) {{
-            shared_midi_list_ports();
-            return 0;
+            list_ports = 1;
+            continue;
         }}
         if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) && i+1 < argc) {{
             port = atoi(argv[++i]);
@@ -528,73 +636,141 @@ int {name}_repl_main(int argc, char **argv) {{
         }}
     }}
 
-    g_shared_ctx = malloc(sizeof(SharedContext));
-    if (!g_shared_ctx || shared_context_init(g_shared_ctx) != 0) {{
+    g_{name}_shared_ctx = malloc(sizeof(SharedContext));
+    if (!g_{name}_shared_ctx || shared_context_init(g_{name}_shared_ctx) != 0) {{
         fprintf(stderr, "Failed to initialize shared context\\n");
         return 1;
     }}
 
+    /* Handle --list after context is initialized */
+    if (list_ports) {{
+        shared_midi_list_ports(g_{name}_shared_ctx);
+        shared_context_cleanup(g_{name}_shared_ctx);
+        free(g_{name}_shared_ctx);
+        return 0;
+    }}
+
     if (virtual_name) {{
-        shared_midi_open_virtual(g_shared_ctx, virtual_name);
+        shared_midi_open_virtual(g_{name}_shared_ctx, virtual_name);
     }} else if (port >= 0) {{
-        shared_midi_open_port(g_shared_ctx, port);
+        shared_midi_open_port(g_{name}_shared_ctx, port);
     }}
 
     if (soundfont) {{
-        shared_audio_tsf_load(g_shared_ctx, soundfont);
+        shared_tsf_load_soundfont(soundfont);
     }}
 
     /* Initialize the runtime */
-    {name}_runtime_init(&g_runtime, g_shared_ctx);
+    {name}_runtime_init(&g_{name}_runtime, g_{name}_shared_ctx);
+
+    /* Initialize Link callbacks */
+    shared_repl_link_init_callbacks(g_{name}_shared_ctx);
 
     if (input_file) {{
         evaluate_file(input_file);
     }}
 
     if (!input_file || isatty(STDIN_FILENO)) {{
-        editor_ctx_t syntax_ctx = {{0}};
-        repl_loop(&syntax_ctx);
+        editor_ctx_t syntax_ctx;
+        editor_ctx_init(&syntax_ctx);
+        syntax_init_default_colors(&syntax_ctx);
+        syntax_select_for_filename(&syntax_ctx, "input.{ext}");
+
+        /* Load Lua for syntax highlighting and themes */
+        LuaHost *lua_host = lua_host_create();
+        if (lua_host) {{
+            syntax_ctx.lua_host = lua_host;
+            struct loki_lua_opts lua_opts = {{
+                .bind_editor = 1,
+                .load_config = 1,
+            }};
+            lua_host->L = loki_lua_bootstrap(&syntax_ctx, &lua_opts);
+        }}
+
+        {name}_repl_loop(&syntax_ctx);
+
+        if (syntax_ctx.lua_host) {{
+            lua_host_free(syntax_ctx.lua_host);
+            syntax_ctx.lua_host = NULL;
+        }}
     }}
 
-    {name}_runtime_stop(&g_runtime);
-    shared_context_cleanup(g_shared_ctx);
-    free(g_shared_ctx);
+    /* Cleanup */
+    shared_repl_link_cleanup_callbacks();
+    {name}_runtime_stop(&g_{name}_runtime);
+    shared_context_cleanup(g_{name}_shared_ctx);
+    free(g_{name}_shared_ctx);
 
     return 0;
+}}
+
+int {name}_play_main(int argc, char **argv) {{
+    /* Simplified play mode - just execute file and exit */
+    const char *soundfont = NULL;
+    const char *input_file = NULL;
+
+    for (int i = 0; i < argc; i++) {{
+        if ((strcmp(argv[i], "-sf") == 0 || strcmp(argv[i], "--soundfont") == 0) && i+1 < argc) {{
+            soundfont = argv[++i];
+            continue;
+        }}
+        if (argv[i][0] != '-') {{
+            input_file = argv[i];
+        }}
+    }}
+
+    if (!input_file) {{
+        fprintf(stderr, "Error: No input file specified\\n");
+        return 1;
+    }}
+
+    g_{name}_shared_ctx = malloc(sizeof(SharedContext));
+    if (!g_{name}_shared_ctx || shared_context_init(g_{name}_shared_ctx) != 0) {{
+        fprintf(stderr, "Failed to initialize shared context\\n");
+        return 1;
+    }}
+
+    if (soundfont) {{
+        shared_tsf_load_soundfont(soundfont);
+    }}
+
+    {name}_runtime_init(&g_{name}_runtime, g_{name}_shared_ctx);
+
+    int result = evaluate_file(input_file);
+
+    {name}_runtime_stop(&g_{name}_runtime);
+    shared_context_cleanup(g_{name}_shared_ctx);
+    free(g_{name}_shared_ctx);
+
+    return result;
 }}
 '''
 
 DISPATCH_C_TEMPLATE = '''/**
  * @file dispatch.c
- * @brief CLI dispatch for {Title} language.
+ * @brief CLI dispatch registration for {Title} language.
  */
 
-#include "repl.h"
+#include "lang_dispatch.h"
 
-int {name}_dispatch(int argc, char **argv) {{
-    return {name}_repl_main(argc, argv);
+/* Forward declarations from repl.c */
+extern int {name}_repl_main(int argc, char **argv);
+extern int {name}_play_main(int argc, char **argv);
+
+static const LangDispatchEntry {name}_dispatch = {{
+    .commands = {{"{name}"}},
+    .command_count = 1,
+    .extensions = {{{extensions_dispatch}}},
+    .extension_count = {ext_count},
+    .display_name = "{Title}",
+    .description = "Minimal music programming language",
+    .repl_main = {name}_repl_main,
+    .play_main = {name}_play_main,
+}};
+
+void {name}_dispatch_init(void) {{
+    lang_dispatch_register(&{name}_dispatch);
 }}
-'''
-
-CMAKE_LIBRARY_TEMPLATE = '''# {Title} language library
-include_guard(GLOBAL)
-
-set({NAME}_SOURCES
-    ${{PSND_ROOT_DIR}}/src/lang/{name}/impl/{name}_parser.c
-    ${{PSND_ROOT_DIR}}/src/lang/{name}/impl/{name}_runtime.c
-)
-
-add_library({name} STATIC ${{{NAME}_SOURCES}})
-
-target_include_directories({name}
-    PUBLIC
-        ${{PSND_ROOT_DIR}}/include
-        ${{PSND_ROOT_DIR}}/src/lang/{name}/impl
-    PRIVATE
-        ${{PSND_ROOT_DIR}}/src
-)
-
-target_link_libraries({name} PRIVATE shared)
 '''
 
 # =============================================================================
@@ -605,6 +781,10 @@ PARSER_H_TEMPLATE = '''#ifndef {NAME}_PARSER_H
 #define {NAME}_PARSER_H
 
 #include <stddef.h>
+
+#ifdef __cplusplus
+extern "C" {{
+#endif
 
 /**
  * {Title} - A minimal music programming language.
@@ -660,6 +840,10 @@ int {name}_parse_line(const char *line, {Title}Command *cmd);
  */
 typedef int (*{Title}CmdCallback)(const {Title}Command *cmd, void *userdata);
 int {name}_parse_program(const char *code, {Title}CmdCallback callback, void *userdata);
+
+#ifdef __cplusplus
+}}
+#endif
 
 #endif /* {NAME}_PARSER_H */
 '''
@@ -891,6 +1075,10 @@ RUNTIME_H_TEMPLATE = '''#ifndef {NAME}_RUNTIME_H
 
 #include "{name}_parser.h"
 
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
 /* Forward declaration - SharedContext is defined in shared/context.h */
 typedef struct SharedContext SharedContext;
 
@@ -932,6 +1120,10 @@ void {name}_runtime_stop({Title}Runtime *rt);
  */
 const char *{name}_runtime_get_error({Title}Runtime *rt);
 
+#ifdef __cplusplus
+}}
+#endif
+
 #endif /* {NAME}_RUNTIME_H */
 '''
 
@@ -941,7 +1133,7 @@ RUNTIME_C_TEMPLATE = '''/**
  */
 
 #include "{name}_runtime.h"
-#include "shared/context.h"
+#include "context.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -1062,17 +1254,40 @@ const char *{name}_runtime_get_error({Title}Runtime *rt) {{
 
 TEST_CMAKE_TEMPLATE = '''# {Title} language tests
 
-add_executable(test_{name}_parser test_parser.c)
-target_link_libraries(test_{name}_parser PRIVATE {name} test_framework)
-target_include_directories(test_{name}_parser PRIVATE
-    ${{PSND_ROOT_DIR}}/src/lang/{name}/impl
-    ${{PSND_ROOT_DIR}}/tests
-)
-add_test(NAME {name}_parser COMMAND test_{name}_parser)
-set_tests_properties({name}_parser PROPERTIES LABELS "unit")
+# Helper macro for {name} tests
+macro(add_{name}_test TEST_NAME)
+    add_executable(test_{name}_${{TEST_NAME}}
+        test_${{TEST_NAME}}.c
+        ${{PSND_ROOT_DIR}}/source/testing/test_framework.c
+    )
+    target_link_libraries(test_{name}_${{TEST_NAME}} PRIVATE
+        {name}
+        shared
+        m
+    )
+    target_include_directories(test_{name}_${{TEST_NAME}} PRIVATE
+        ${{PSND_ROOT_DIR}}/source/testing
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/../impl
+        ${{PSND_ROOT_DIR}}/source/core/include
+    )
+    add_test(
+        NAME {name}_${{TEST_NAME}}
+        COMMAND $<TARGET_FILE:test_{name}_${{TEST_NAME}}>
+        WORKING_DIRECTORY ${{CMAKE_BINARY_DIR}}
+    )
+    set_tests_properties({name}_${{TEST_NAME}} PROPERTIES LABELS "unit")
+endmacro()
+
+# Add all {name} tests
+add_{name}_test(parser)
 '''
 
-TEST_PARSER_TEMPLATE = '''#include "test_framework.h"
+TEST_PARSER_TEMPLATE = '''/**
+ * @file test_parser.c
+ * @brief Unit tests for {Title} language parser.
+ */
+
+#include "test_framework.h"
 #include "{name}_parser.h"
 
 TEST(test_parse_note_basic) {{
@@ -1276,9 +1491,9 @@ note 60   # Inline comments work too
 
 | Command | Description |
 |---------|-------------|
-| `:help` | Show help |
-| `:quit` | Exit REPL |
-| `:stop` | Stop playback |
+| `:help` or `:h` | Show help |
+| `:quit` or `:q` | Exit REPL |
+| `:stop` or `:s` | Stop playback |
 | `:midi` | List MIDI ports |
 | `:midi N` | Connect to port N |
 
@@ -1373,47 +1588,6 @@ def create_file(path: Path, content: str, dry_run: bool = False) -> None:
     print(f"  Created: {path}")
 
 
-def update_file(path: Path, old: str, new: str, dry_run: bool = False) -> bool:
-    """Update a file by replacing old with new. Returns True if updated."""
-    if not path.exists():
-        print(f"  Warning: {path} does not exist, skipping update")
-        return False
-
-    content = path.read_text()
-    if old not in content:
-        return False
-
-    if dry_run:
-        print(f"  [dry-run] Would update: {path}")
-        return True
-
-    new_content = content.replace(old, new)
-    path.write_text(new_content)
-    print(f"  Updated: {path}")
-    return True
-
-
-def append_to_file(path: Path, marker: str, addition: str, dry_run: bool = False) -> bool:
-    """Append addition after marker in file. Returns True if updated."""
-    if not path.exists():
-        print(f"  Warning: {path} does not exist, skipping update")
-        return False
-
-    content = path.read_text()
-    if marker not in content:
-        print(f"  Warning: Marker not found in {path}")
-        return False
-
-    if dry_run:
-        print(f"  [dry-run] Would update: {path}")
-        return True
-
-    new_content = content.replace(marker, marker + addition)
-    path.write_text(new_content)
-    print(f"  Updated: {path}")
-    return True
-
-
 # =============================================================================
 # Main Generation Logic
 # =============================================================================
@@ -1430,12 +1604,18 @@ def generate_language(
     name_upper = to_upper(name)
     name_title = to_title(name)
 
-    # Format extensions for C code: ".ext", ".ext2", NULL
+    # Format extensions for C code: ".ext", ".ext2", NULL (for LokiLangOps)
     ext_c = ", ".join(f'".{e.lstrip(".")}"' for e in extensions) + ", NULL"
+    # Format extensions for dispatch (no NULL): ".ext", ".ext2"
+    ext_dispatch = ", ".join(f'".{e.lstrip(".")}"' for e in extensions)
+    # Format extensions for CMake: .ext .ext2
+    ext_cmake = " ".join(f".{e.lstrip('.')}" for e in extensions)
     # Format extensions for Lua: ".ext", ".ext2"
     ext_lua = ", ".join(f'".{e.lstrip(".")}"' for e in extensions)
     # Primary extension (without dot)
     primary_ext = extensions[0].lstrip(".")
+    # Extension count
+    ext_count = len(extensions)
 
     # Template substitutions
     subs = {
@@ -1444,19 +1624,36 @@ def generate_language(
         "NAME": name_upper,
         "Title": name_title,
         "extensions_c": ext_c,
+        "extensions_dispatch": ext_dispatch,
+        "extensions_cmake": ext_cmake,
         "extensions_lua": ext_lua,
         "ext": primary_ext,
+        "ext_count": ext_count,
     }
 
     print(f"\nGenerating language: {name_title}")
     print(f"  Extensions: {extensions}")
+    print(f"  Directory: source/langs/{name_lower}/")
     print()
 
+    # Check if language already exists
+    lang_dir = root / "source" / "langs" / name_lower
+    if lang_dir.exists() and not dry_run:
+        print(f"Error: Language directory already exists: {lang_dir}")
+        print("Remove it first if you want to regenerate.")
+        sys.exit(1)
+
     # === Create new files ===
-    print("Creating new files:")
+    print("Creating files:")
 
-    lang_dir = root / "src" / "lang" / name_lower
+    # CMakeLists.txt
+    create_file(
+        lang_dir / "CMakeLists.txt",
+        CMAKE_TEMPLATE.format(**subs),
+        dry_run
+    )
 
+    # register.h and register.c
     create_file(
         lang_dir / "register.h",
         REGISTER_H_TEMPLATE.format(**subs),
@@ -1467,31 +1664,23 @@ def generate_language(
         REGISTER_C_TEMPLATE.format(**subs),
         dry_run
     )
-    create_file(
-        lang_dir / "repl.h",
-        REPL_H_TEMPLATE.format(**subs),
-        dry_run
-    )
+
+    # repl.c (no separate header - uses extern declarations in dispatch.c)
     create_file(
         lang_dir / "repl.c",
         REPL_C_TEMPLATE.format(**subs),
         dry_run
     )
+
+    # dispatch.c
     create_file(
         lang_dir / "dispatch.c",
         DISPATCH_C_TEMPLATE.format(**subs),
         dry_run
     )
 
-    # Create impl directory and implementation files
+    # impl/ directory
     impl_dir = lang_dir / "impl"
-    if not dry_run:
-        impl_dir.mkdir(parents=True, exist_ok=True)
-        print(f"  Created: {impl_dir}/")
-    else:
-        print(f"  [dry-run] Would create: {impl_dir}/")
-
-    # Parser implementation
     create_file(
         impl_dir / f"{name_lower}_parser.h",
         PARSER_H_TEMPLATE.format(**subs),
@@ -1502,8 +1691,6 @@ def generate_language(
         PARSER_C_TEMPLATE.format(**subs),
         dry_run
     )
-
-    # Runtime implementation
     create_file(
         impl_dir / f"{name_lower}_runtime.h",
         RUNTIME_H_TEMPLATE.format(**subs),
@@ -1515,15 +1702,8 @@ def generate_language(
         dry_run
     )
 
-    # CMake library
-    create_file(
-        root / "scripts" / "cmake" / f"psnd_{name_lower}_library.cmake",
-        CMAKE_LIBRARY_TEMPLATE.format(**subs),
-        dry_run
-    )
-
-    # Tests
-    test_dir = root / "tests" / name_lower
+    # tests/ directory
+    test_dir = lang_dir / "tests"
     create_file(
         test_dir / "CMakeLists.txt",
         TEST_CMAKE_TEMPLATE.format(**subs),
@@ -1535,208 +1715,42 @@ def generate_language(
         dry_run
     )
 
-    # Documentation
+    # docs/ directory
     create_file(
-        root / "docs" / name_lower / "README.md",
+        lang_dir / "README.md",
         DOC_README_TEMPLATE.format(**subs),
         dry_run
     )
 
-    # Syntax highlighting
+    # Syntax highlighting in .psnd/languages/
     create_file(
         root / ".psnd" / "languages" / f"{name_lower}.lua",
         SYNTAX_LUA_TEMPLATE.format(**subs),
         dry_run
     )
 
-    # === Update existing files ===
-    print("\nUpdating existing files:")
+    # examples/ directory with sample file
+    example_content = f'''# Example {name_title} program
+# Play a simple melody
 
-    # 1. Update src/lang_config.h
-    lang_config = root / "src" / "lang_config.h"
-    if lang_config.exists():
-        content = lang_config.read_text()
+tempo 120
 
-        # Check if already added
-        if f"LANG_{name_upper}" in content:
-            print(f"  Skipping {lang_config} (already contains LANG_{name_upper})")
-        else:
-            # Find insertion points and add new language
-            new_content = content
+# C major arpeggio
+note 60 300
+note 64 300
+note 67 300
+note 72 600
 
-            # Add helper macro
-            helper_marker = "#define IF_LANG_BOG(x)\n#endif"
-            helper_addition = f'''
+rest 200
 
-#ifdef LANG_{name_upper}
-#define IF_LANG_{name_upper}(x) x
-#else
-#define IF_LANG_{name_upper}(x)
-#endif'''
-            new_content = new_content.replace(helper_marker, helper_marker + helper_addition)
-
-            # Add forward declaration
-            fwd_marker = "IF_LANG_BOG(struct LokiBogState;)"
-            fwd_addition = f"\nIF_LANG_{name_upper}(struct Loki{name_title}State;)"
-            new_content = new_content.replace(fwd_marker, fwd_marker + fwd_addition)
-
-            # Add state field
-            state_marker = "IF_LANG_BOG(struct LokiBogState *bog_state;)"
-            state_addition = f" \\\n    IF_LANG_{name_upper}(struct Loki{name_title}State *{name_lower}_state;)"
-            new_content = new_content.replace(state_marker, state_marker + state_addition)
-
-            # Add init declaration
-            init_decl_marker = "IF_LANG_BOG(void bog_loki_lang_init(void);)"
-            init_decl_addition = f"\nIF_LANG_{name_upper}(void {name_lower}_loki_lang_init(void);)"
-            new_content = new_content.replace(init_decl_marker, init_decl_marker + init_decl_addition)
-
-            # Add init call
-            init_call_marker = "IF_LANG_BOG(bog_loki_lang_init();)"
-            init_call_addition = f" \\\n    IF_LANG_{name_upper}({name_lower}_loki_lang_init();)"
-            new_content = new_content.replace(init_call_marker, init_call_marker + init_call_addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {lang_config}")
-            else:
-                lang_config.write_text(new_content)
-                print(f"  Updated: {lang_config}")
-
-    # 2. Update src/lang_dispatch.c
-    lang_dispatch = root / "src" / "lang_dispatch.c"
-    if lang_dispatch.exists():
-        content = lang_dispatch.read_text()
-        if f'"{name_lower}"' not in content:
-            # Add include
-            include_marker = "#ifdef LANG_BOG\n#include"
-            include_addition = f'''#ifdef LANG_{name_upper}
-#include "lang/{name_lower}/repl.h"
-#endif
-
+# C major chord
+chord 60 64 67 dur:800
 '''
-            new_content = content.replace(include_marker, include_addition + include_marker)
-
-            # Add dispatch case - find the return -1 line
-            dispatch_marker = "    return -1;  /* Unknown language */"
-            dispatch_addition = f'''#ifdef LANG_{name_upper}
-    if (strcmp(lang, "{name_lower}") == 0) {{
-        return {name_lower}_repl_main(argc, argv);
-    }}
-#endif
-
-    '''
-            new_content = new_content.replace(dispatch_marker, dispatch_addition + dispatch_marker)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {lang_dispatch}")
-            else:
-                lang_dispatch.write_text(new_content)
-                print(f"  Updated: {lang_dispatch}")
-        else:
-            print(f"  Skipping {lang_dispatch} (already contains {name_lower})")
-
-    # 3. Update CMakeLists.txt
-    cmakelists = root / "CMakeLists.txt"
-    if cmakelists.exists():
-        content = cmakelists.read_text()
-        if f"LANG_{name_upper}" not in content:
-            # Add option after LANG_BOG
-            option_marker = 'option(LANG_BOG "Include the Bog language" ON)'
-            option_addition = f'\noption(LANG_{name_upper} "Include the {name_title} language" ON)'
-            new_content = content.replace(option_marker, option_marker + option_addition)
-
-            # Add include after bog library include
-            include_marker = "if(LANG_BOG)\n    include(psnd_bog_library)\nendif()"
-            include_addition = f'''
-
-if(LANG_{name_upper})
-    include(psnd_{name_lower}_library)
-endif()'''
-            new_content = new_content.replace(include_marker, include_marker + include_addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {cmakelists}")
-            else:
-                cmakelists.write_text(new_content)
-                print(f"  Updated: {cmakelists}")
-        else:
-            print(f"  Skipping {cmakelists} (already contains LANG_{name_upper})")
-
-    # 4. Update psnd_loki_library.cmake
-    loki_cmake = root / "scripts" / "cmake" / "psnd_loki_library.cmake"
-    if loki_cmake.exists():
-        content = loki_cmake.read_text()
-        if f"LANG_{name_upper}" not in content:
-            # Add source
-            src_marker = "if(LANG_BOG)\n    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/lang/bog/register.c)\nendif()"
-            src_addition = f'''
-
-if(LANG_{name_upper})
-    list(APPEND LOKI_LANG_SOURCES ${{PSND_ROOT_DIR}}/src/lang/{name_lower}/register.c)
-endif()'''
-            new_content = content.replace(src_marker, src_marker + src_addition)
-
-            # Add library link and compile definition
-            link_marker = "if(LANG_BOG)\n    list(APPEND LOKI_PUBLIC_LIBS bog)\n    target_compile_definitions(libloki PUBLIC LANG_BOG=1)\nendif()"
-            link_addition = f'''
-
-if(LANG_{name_upper})
-    list(APPEND LOKI_PUBLIC_LIBS {name_lower})
-    target_compile_definitions(libloki PUBLIC LANG_{name_upper}=1)
-endif()'''
-            new_content = new_content.replace(link_marker, link_marker + link_addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {loki_cmake}")
-            else:
-                loki_cmake.write_text(new_content)
-                print(f"  Updated: {loki_cmake}")
-        else:
-            print(f"  Skipping {loki_cmake} (already contains LANG_{name_upper})")
-
-    # 5. Update psnd_psnd_binary.cmake
-    psnd_cmake = root / "scripts" / "cmake" / "psnd_psnd_binary.cmake"
-    if psnd_cmake.exists():
-        content = psnd_cmake.read_text()
-        if f"LANG_{name_upper}" not in content:
-            marker = "if(LANG_BOG)\n    list(APPEND PSND_LANG_SOURCES\n        ${PSND_ROOT_DIR}/src/lang/bog/repl.c\n        ${PSND_ROOT_DIR}/src/lang/bog/dispatch.c\n    )\nendif()"
-            addition = f'''
-
-if(LANG_{name_upper})
-    list(APPEND PSND_LANG_SOURCES
-        ${{PSND_ROOT_DIR}}/src/lang/{name_lower}/repl.c
-        ${{PSND_ROOT_DIR}}/src/lang/{name_lower}/dispatch.c
+    create_file(
+        lang_dir / "examples" / f"melody.{primary_ext}",
+        example_content,
+        dry_run
     )
-endif()'''
-            new_content = content.replace(marker, marker + addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {psnd_cmake}")
-            else:
-                psnd_cmake.write_text(new_content)
-                print(f"  Updated: {psnd_cmake}")
-        else:
-            print(f"  Skipping {psnd_cmake} (already contains LANG_{name_upper})")
-
-    # 6. Update psnd_tests.cmake
-    tests_cmake = root / "scripts" / "cmake" / "psnd_tests.cmake"
-    if tests_cmake.exists():
-        content = tests_cmake.read_text()
-        if f"tests/{name_lower}" not in content:
-            marker = "if(LANG_BOG)\n    add_subdirectory(${PSND_ROOT_DIR}/tests/bog ${CMAKE_BINARY_DIR}/tests/bog)\nendif()"
-            addition = f'''
-
-if(LANG_{name_upper})
-    add_subdirectory(${{PSND_ROOT_DIR}}/tests/{name_lower} ${{CMAKE_BINARY_DIR}}/tests/{name_lower})
-endif()'''
-            new_content = content.replace(marker, marker + addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {tests_cmake}")
-            else:
-                tests_cmake.write_text(new_content)
-                print(f"  Updated: {tests_cmake}")
-        else:
-            print(f"  Skipping {tests_cmake} (already contains tests/{name_lower})")
 
     print("\nDone!")
     if not dry_run:
@@ -1747,8 +1761,10 @@ endif()'''
         print(f"  4. Try: chord 60 64 67  # Play C major")
         print(f"")
         print(f"To customize the language, edit:")
-        print(f"  - src/lang/{name_lower}/impl/{name_lower}_parser.c  # Add new commands")
-        print(f"  - src/lang/{name_lower}/impl/{name_lower}_runtime.c # Add new behaviors")
+        print(f"  - source/langs/{name_lower}/impl/{name_lower}_parser.c  # Add new commands")
+        print(f"  - source/langs/{name_lower}/impl/{name_lower}_runtime.c # Add new behaviors")
+        print(f"")
+        print(f"The language is auto-discovered - no manual CMake registration needed!")
 
 
 def main():
@@ -1759,6 +1775,9 @@ def main():
 The generated language includes a working parser, runtime, REPL, tests,
 and documentation. After generation, run 'make clean && make test' to
 build and verify everything works.
+
+The language is automatically discovered by the build system - no manual
+modifications to CMakeLists.txt files are needed.
 
 Examples:
   %(prog)s foo                    # Create language 'foo' with extension .foo
@@ -1796,6 +1815,12 @@ After creating a language:
     name = args.name.lower()
     if not re.match(r'^[a-z][a-z0-9]*$', name):
         print(f"Error: Language name must be lowercase alphanumeric starting with a letter", file=sys.stderr)
+        sys.exit(1)
+
+    # Check for reserved names (existing languages)
+    reserved = ["alda", "joy", "bog", "tr7", "scheme"]
+    if name in reserved:
+        print(f"Error: '{name}' is already a built-in language", file=sys.stderr)
         sys.exit(1)
 
     # Default extension is .<name>

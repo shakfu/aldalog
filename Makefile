@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
-.PHONY: all build configure library alda editor repl clean test show-config \
-		csound configure-csound rebuild
+.PHONY: all build configure library alda editor repl clean reset test show-config \
+		csound configure-csound rebuild remake
 
 BUILD_DIR ?= build
 CMAKE ?= cmake
@@ -38,4 +38,9 @@ test: build
 	@$(CMAKE) -E chdir $(BUILD_DIR) ctest --output-on-failure
 
 clean:
+	@$(CMAKE) --build $(BUILD_DIR) --target clean 2>/dev/null || true
+
+reset:
 	@$(CMAKE) -E rm -rf $(BUILD_DIR)
+
+remake: reset build
