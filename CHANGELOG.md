@@ -31,6 +31,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - `event_from_keycode()` - legacy keycode to event
     - `event_to_keycode()` - event back to legacy keycode
   - New entry point `modal_process_event()` for event-based modal processing
+    - Handles Ctrl-X prefix sequences via `pending_prefix` state (no fd required)
+    - Handles Ctrl-T (new buffer), Ctrl-Q (quit) directly
+  - Decoupled `modal_process_keypress()` from file descriptor dependency
+    - Now a thin wrapper that reads from terminal and delegates to `modal_process_event()`
+    - Terminal-specific operations (Ctrl-F find) intercepted before delegation
   - Enables test injection without terminal I/O
   - Foundation for future transports (WebSocket, RPC)
   - **Files Added**: `source/core/loki/event.c`, `source/core/loki/event.h`

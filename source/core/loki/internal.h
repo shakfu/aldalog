@@ -208,6 +208,7 @@ typedef struct EditorView {
     int cmd_length;           /* Length of command */
     int cmd_cursor_pos;       /* Cursor position in command */
     int cmd_history_index;    /* Current history position */
+    int pending_prefix;       /* Pending prefix key (e.g., CTRL_X for Ctrl-X sequences), 0 if none */
 
     /* Status */
     char statusmsg[80];       /* Status message */

@@ -374,7 +374,11 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
 
         /* Global commands (work in all modes) */
         case CTRL_S: editor_save(ctx); break;
-        case CTRL_F: editor_find(ctx, fd); break;
+        case CTRL_F:
+            /* Find requires terminal I/O - handled by modal_process_keypress().
+             * From non-terminal sources (modal_process_event), this is a no-op. */
+            if (fd != 0) editor_find(ctx, fd);
+            break;
         case CTRL_L:
             /* Toggle REPL */
             if (ctx_repl(ctx)) {
@@ -566,7 +570,11 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
 
         /* Global commands */
         case CTRL_S: editor_save(ctx); break;
-        case CTRL_F: editor_find(ctx, fd); break;
+        case CTRL_F:
+            /* Find requires terminal I/O - handled by modal_process_keypress().
+             * From non-terminal sources (modal_process_event), this is a no-op. */
+            if (fd != 0) editor_find(ctx, fd);
+            break;
         case CTRL_W:
             ctx->view.word_wrap = !ctx->view.word_wrap;
             editor_set_status_msg(ctx, "Word wrap %s", ctx->view.word_wrap ? "enabled" : "disabled");
@@ -819,63 +827,71 @@ static void process_visual_mode(editor_ctx_t *ctx, int fd, int c) {
 }
 
 /* Process a single keypress with modal editing support.
- * This is the main entry point for all keyboard input when modal editing is enabled.
- * Dispatches to appropriate mode handler (normal/insert/visual). */
+ *
+ * This is the terminal-specific entry point for keyboard input.
+ * It reads a key from the terminal and delegates to modal_process_event().
+ *
+ * Terminal-specific operations (like interactive find via Ctrl-F) are
+ * intercepted here and handled with the real fd before delegation.
+ *
+ * For non-terminal input sources, use modal_process_event() directly.
+ */
 void modal_process_keypress(editor_ctx_t *ctx, int fd) {
-    /* When the file is modified, requires Ctrl-q to be pressed N times
-     * before actually quitting. */
-    static int quit_times = KILO_QUIT_TIMES;
-
     int c = terminal_read_key(fd);
 
-    /* REPL keypress handling */
-    if (ctx_repl(ctx) && ctx_repl(ctx)->active) {
-        lua_repl_handle_keypress(ctx, c);
+    /* Handle pending Ctrl-X prefix - read second key immediately from terminal */
+    if (ctx->view.pending_prefix == CTRL_X) {
+        /* Already have Ctrl-X pending, this key completes the sequence.
+         * Convert to event and let modal_process_event() handle it. */
+        EditorEvent ev = event_from_keycode(c);
+        modal_process_event(ctx, &ev);
         return;
     }
 
-    /* Handle quit globally (works in all modes) */
-    if (c == CTRL_Q) {
-        if (ctx->model.dirty && quit_times) {
-            editor_set_status_msg(ctx, "WARNING!!! File has unsaved changes. "
-                "Press Ctrl-Q %d more times to quit.", quit_times);
-            quit_times--;
+    /* Intercept CTRL_F for interactive find (requires terminal I/O).
+     * This must be done before delegation because editor_find() has
+     * its own event loop that reads from the terminal. */
+    if (c == CTRL_F) {
+        t_lua_repl *repl = ctx_repl(ctx);
+        if (!repl || !repl->active) {
+            editor_find(ctx, fd);
             return;
         }
-        exit(0);
     }
 
-    /* Handle buffer operations globally */
-    if (c == CTRL_T) {
-        /* Create new buffer */
-        int new_id = buffer_create(NULL);
-        if (new_id >= 0) {
-            buffer_switch(new_id);
-            editor_set_status_msg(ctx, "Created buffer %d", new_id);
-        } else {
-            editor_set_status_msg(ctx, "Error: Could not create buffer (max %d buffers)", MAX_BUFFERS);
-        }
-        quit_times = KILO_QUIT_TIMES;
-        return;
-    }
+    /* Convert keypress to event and delegate to event handler */
+    EditorEvent ev = event_from_keycode(c);
+    modal_process_event(ctx, &ev);
+}
 
-    if (c == CTRL_X) {
-        /* Ctrl-X prefix - read next key for buffer command */
-        int next = terminal_read_key(fd);
+/* ============================================================================
+ * Ctrl-X Prefix Handling
+ * ============================================================================
+ * Ctrl-X is a prefix key for buffer operations. When received, we set
+ * pending_prefix and wait for the next key to complete the command.
+ */
 
-        if (next == 'n') {
+/* Handle the second key of a Ctrl-X sequence.
+ * Returns 1 if handled, 0 if the key was not a valid Ctrl-X command. */
+static int handle_ctrl_x_command(editor_ctx_t *ctx, int c) {
+    switch (c) {
+        case 'n': {
             /* Next buffer */
             int next_id = buffer_next();
             if (next_id >= 0) {
                 editor_set_status_msg(ctx, "Switched to buffer %d", next_id);
             }
-        } else if (next == 'p') {
+            return 1;
+        }
+        case 'p': {
             /* Previous buffer */
             int prev_id = buffer_prev();
             if (prev_id >= 0) {
                 editor_set_status_msg(ctx, "Switched to buffer %d", prev_id);
             }
-        } else if (next == 'k') {
+            return 1;
+        }
+        case 'k': {
             /* Close buffer */
             int current_id = buffer_get_current_id();
             int result = buffer_close(current_id, 0);
@@ -886,7 +902,9 @@ void modal_process_keypress(editor_ctx_t *ctx, int fd) {
             } else {
                 editor_set_status_msg(ctx, "Cannot close last buffer");
             }
-        } else if (next == 'K') {
+            return 1;
+        }
+        case 'K': {
             /* Force close buffer */
             int current_id = buffer_get_current_id();
             int result = buffer_close(current_id, 1);
@@ -895,39 +913,24 @@ void modal_process_keypress(editor_ctx_t *ctx, int fd) {
             } else {
                 editor_set_status_msg(ctx, "Cannot close last buffer");
             }
-        } else if (next >= '1' && next <= '9') {
-            /* Switch to buffer by number (1-9) */
-            int ids[MAX_BUFFERS];
-            int count = buffer_get_list(ids);
-            int index = next - '1';
-            if (index < count) {
-                buffer_switch(ids[index]);
-                editor_set_status_msg(ctx, "Switched to buffer %d", ids[index]);
-            } else {
-                editor_set_status_msg(ctx, "Buffer %d not found", index + 1);
-            }
+            return 1;
         }
-        quit_times = KILO_QUIT_TIMES;
-        return;
+        default:
+            if (c >= '1' && c <= '9') {
+                /* Switch to buffer by number (1-9) */
+                int ids[MAX_BUFFERS];
+                int count = buffer_get_list(ids);
+                int index = c - '1';
+                if (index < count) {
+                    buffer_switch(ids[index]);
+                    editor_set_status_msg(ctx, "Switched to buffer %d", ids[index]);
+                } else {
+                    editor_set_status_msg(ctx, "Buffer %d not found", index + 1);
+                }
+                return 1;
+            }
+            return 0;  /* Not a valid Ctrl-X command */
     }
-
-    /* Dispatch to mode-specific handler */
-    switch(ctx->view.mode) {
-        case MODE_NORMAL:
-            process_normal_mode(ctx, fd, c);
-            break;
-        case MODE_INSERT:
-            process_insert_mode(ctx, fd, c);
-            break;
-        case MODE_VISUAL:
-            process_visual_mode(ctx, fd, c);
-            break;
-        case MODE_COMMAND:
-            command_mode_handle_key(ctx, fd, c);
-            break;
-    }
-
-    quit_times = KILO_QUIT_TIMES; /* Reset it to the original value. */
 }
 
 /* ============================================================================
@@ -944,10 +947,13 @@ void modal_process_keypress(editor_ctx_t *ctx, int fd) {
  * - Test code (inject events without terminal I/O)
  * - Future transports (WebSocket, RPC)
  *
- * Internally converts to keycode and dispatches to existing handlers.
+ * Handles Ctrl-X prefix sequences via pending_prefix state:
+ * - First Ctrl-X sets pending_prefix = CTRL_X
+ * - Next event completes the sequence (e.g., 'n' -> next buffer)
  *
- * Note: For Ctrl-X prefix sequences that require a second key read,
- * this function cannot be used (use modal_process_keypress with fd).
+ * Note: Interactive operations like editor_find() require terminal I/O.
+ * When called from non-terminal sources (fd=0), these are skipped.
+ * Use modal_process_keypress() for full terminal functionality.
  */
 void modal_process_event(editor_ctx_t *ctx, const EditorEvent *event) {
     if (!ctx || !event) return;
@@ -994,6 +1000,16 @@ void modal_process_event(editor_ctx_t *ctx, const EditorEvent *event) {
     /* Static quit counter (must persist across calls) */
     static int quit_times = KILO_QUIT_TIMES;
 
+    /* Handle pending Ctrl-X prefix sequence */
+    if (ctx->view.pending_prefix == CTRL_X) {
+        ctx->view.pending_prefix = 0;  /* Clear prefix */
+        if (handle_ctrl_x_command(ctx, c)) {
+            quit_times = KILO_QUIT_TIMES;
+            return;
+        }
+        /* If not a valid Ctrl-X command, fall through to normal processing */
+    }
+
     /* REPL keypress handling */
     if (ctx_repl(ctx) && ctx_repl(ctx)->active) {
         lua_repl_handle_keypress(ctx, c);
@@ -1011,11 +1027,28 @@ void modal_process_event(editor_ctx_t *ctx, const EditorEvent *event) {
         exit(0);
     }
 
-    /* Note: Ctrl-X prefix sequences cannot be handled here because
-     * they require reading a second key from the terminal fd.
-     * Use modal_process_keypress() for full functionality. */
+    /* Handle buffer operations globally */
+    if (c == CTRL_T) {
+        /* Create new buffer */
+        int new_id = buffer_create(NULL);
+        if (new_id >= 0) {
+            buffer_switch(new_id);
+            editor_set_status_msg(ctx, "Created buffer %d", new_id);
+        } else {
+            editor_set_status_msg(ctx, "Error: Could not create buffer (max %d buffers)", MAX_BUFFERS);
+        }
+        quit_times = KILO_QUIT_TIMES;
+        return;
+    }
 
-    /* Dispatch to mode-specific handler (fd=0, no recursive reads) */
+    /* Handle Ctrl-X prefix */
+    if (c == CTRL_X) {
+        ctx->view.pending_prefix = CTRL_X;
+        quit_times = KILO_QUIT_TIMES;
+        return;
+    }
+
+    /* Dispatch to mode-specific handler (fd=0, no terminal I/O) */
     switch(ctx->view.mode) {
         case MODE_NORMAL:
             process_normal_mode(ctx, 0, c);

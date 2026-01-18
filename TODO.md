@@ -52,12 +52,12 @@ Order reflects dependency chain - earlier tasks unblock later ones.
 
 #### Phase 3: Abstract Input Handling
 
-- [ ] Define `EditorEvent` struct for keystrokes, commands, actions
+- [x] Define `EditorEvent` struct for keystrokes, commands, actions
   - Replace raw key codes with structured events
   - Converter from terminal escape sequences to events in CLI build
   - Other transports (WebSocket, tests) inject their own event stream
 
-- [ ] Decouple `modal_process_keypress()` from file descriptor (`modal.c:820-825`)
+- [x] Decouple `modal_process_keypress()` from file descriptor (`modal.c:820-825`)
   - Current signature: `void modal_process_keypress(editor_ctx_t *ctx, int fd)`
   - New approach: `void editor_handle_event(EditorSession*, const EditorEvent*)`
 
