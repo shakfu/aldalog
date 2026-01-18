@@ -78,8 +78,7 @@ void editor_ctx_init(editor_ctx_t *ctx) {
     ctx->view.statusmsg[0] = '\0';
     ctx->view.statusmsg_time = 0;
     ctx->view.syntax = NULL;
-    ctx->view.L = NULL;
-    memset(&ctx->view.repl, 0, sizeof(t_lua_repl));
+    ctx->lua_host = NULL;  /* Lua host is shared across buffers, set by editor_main */
     ctx->view.mode = MODE_NORMAL;
     ctx->view.word_wrap = 0;
     ctx->view.sel_active = 0;
@@ -111,8 +110,8 @@ void editor_ctx_free(editor_ctx_t *ctx) {
     /* Free filename */
     free(ctx->model.filename);
 
-    /* Note: We don't free ctx->view.L (Lua state) as it's shared across contexts
-     * and managed separately by the editor instance */
+    /* Note: We don't free ctx->lua_host (LuaHost) as it's shared across contexts
+     * and managed separately by editor_cleanup_resources() */
 
     /* Free command mode state */
     command_mode_free(ctx);
@@ -767,7 +766,8 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
         terminal_buffer_append(&ab,ctx->view.statusmsg,msglen <= ctx->view.screencols ? msglen : ctx->view.screencols);
 
     /* Render REPL if active */
-    if (ctx->view.repl.active) lua_repl_render(ctx, &ab);
+    t_lua_repl *repl = ctx_repl(ctx);
+    if (repl && repl->active) lua_repl_render(ctx, &ab);
 
     /* Put cursor at its current position. Note that the horizontal position
      * at which the cursor is displayed may be different compared to 'ctx->view.cx'
@@ -776,10 +776,10 @@ void editor_refresh_screen(editor_ctx_t *ctx) {
     int cursor_col = 1;
 
     /* Calculate cursor position - different for REPL vs editor mode */
-    if (ctx->view.repl.active) {
+    if (repl && repl->active) {
         /* REPL mode: cursor is on the REPL prompt line */
         int prompt_len = (int)strlen(LUA_REPL_PROMPT);
-        int visible = ctx->view.repl.input_len;
+        int visible = repl->input_len;
         if (prompt_len + visible >= ctx->view.screencols) {
             visible = ctx->view.screencols > prompt_len ? ctx->view.screencols - prompt_len : 0;
         }

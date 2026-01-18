@@ -106,6 +106,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Changed
 
+- **LuaHost Architecture Refactoring**: Moved Lua state from EditorView to dedicated LuaHost struct
+  - Previously `lua_State *L` and `t_lua_repl repl` were embedded in `EditorView`, but Lua is a scripting platform, not a presentation concern
+  - New `LuaHost` struct owns both Lua state and REPL state, stored as pointer in `editor_ctx`
+  - Accessor macros `ctx_L(ctx)` and `ctx_repl(ctx)` provide indirect access with NULL safety
+  - LuaHost lifecycle functions: `lua_host_create()`, `lua_host_free()`, `lua_host_init_repl()`
+  - Proper sharing semantics across buffer contexts via pointer assignment
+  - Files modified: `internal.h`, `lua.c`, `editor.c`, `buffers.c`, `core.c`, `modal.c`, `command.c`, `repl_launcher.c`, `alda/repl.c`, `bog/repl.c`
+
 - **Alda Async Migrated to Shared Service**: Alda now uses the shared async playback engine
   - Reduced `src/lang/alda/async.c` from ~570 lines to ~135 lines (thin wrapper)
   - Tick-based timing with tempo change support preserved

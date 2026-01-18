@@ -23,14 +23,18 @@
 /* Helper to initialize context with Lua */
 static void init_ctx_with_lua(editor_ctx_t *ctx) {
     editor_ctx_init(ctx);
-    ctx->view.L = loki_lua_bootstrap(ctx, NULL);
+    LuaHost *lua_host = lua_host_create();
+    if (lua_host) {
+        ctx->lua_host = lua_host;
+        lua_host->L = loki_lua_bootstrap(ctx, NULL);
+    }
 }
 
 /* Helper to cleanup context with Lua */
 static void free_ctx_with_lua(editor_ctx_t *ctx) {
-    if (ctx->view.L) {
-        lua_close(ctx->view.L);
-        ctx->view.L = NULL;
+    if (ctx->lua_host) {
+        lua_host_free(ctx->lua_host);
+        ctx->lua_host = NULL;
     }
     editor_ctx_free(ctx);
 }
@@ -40,12 +44,12 @@ TEST(lua_state_initializes) {
     editor_ctx_t ctx;
     init_ctx_with_lua(&ctx);
 
-    ASSERT_NOT_NULL(ctx.view.L);
+    ASSERT_NOT_NULL(ctx_L(&ctx));
 
     /* Verify loki table exists */
-    lua_getglobal(ctx.view.L, "loki");
-    ASSERT_TRUE(lua_istable(ctx.view.L, -1));
-    lua_pop(ctx.view.L, 1);
+    lua_getglobal(ctx_L(&ctx), "loki");
+    ASSERT_TRUE(lua_istable(ctx_L(&ctx), -1));
+    lua_pop(ctx_L(&ctx), 1);
 
     /* Cleanup */
     free_ctx_with_lua(&ctx);
@@ -58,7 +62,7 @@ TEST(lua_status_sets_message) {
 
     /* Call loki.status("Test message") */
     const char *code = "loki.status('Test message')";
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
 
     ASSERT_EQ(result, 0);
     ASSERT_STR_EQ(ctx.view.statusmsg, "Test message");
@@ -83,11 +87,11 @@ TEST(lua_get_lines_returns_count) {
 
     /* Call loki.get_lines() */
     const char *code = "return loki.get_lines()";
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
 
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isnumber(ctx.view.L, -1));
-    ASSERT_EQ((int)lua_tonumber(ctx.view.L, -1), 3);
+    ASSERT_TRUE(lua_isnumber(ctx_L(&ctx), -1));
+    ASSERT_EQ((int)lua_tonumber(ctx_L(&ctx), -1), 3);
 
     /* Cleanup */
     free_ctx_with_lua(&ctx);
@@ -112,20 +116,20 @@ TEST(lua_get_line_returns_content) {
 
     /* Call loki.get_line(0) */
     const char *code1 = "return loki.get_line(0)";
-    int result1 = luaL_dostring(ctx.view.L, code1);
+    int result1 = luaL_dostring(ctx_L(&ctx), code1);
 
     ASSERT_EQ(result1, 0);
-    ASSERT_TRUE(lua_isstring(ctx.view.L, -1));
-    ASSERT_STR_EQ(lua_tostring(ctx.view.L, -1), "First line");
-    lua_pop(ctx.view.L, 1);
+    ASSERT_TRUE(lua_isstring(ctx_L(&ctx), -1));
+    ASSERT_STR_EQ(lua_tostring(ctx_L(&ctx), -1), "First line");
+    lua_pop(ctx_L(&ctx), 1);
 
     /* Call loki.get_line(1) */
     const char *code2 = "return loki.get_line(1)";
-    int result2 = luaL_dostring(ctx.view.L, code2);
+    int result2 = luaL_dostring(ctx_L(&ctx), code2);
 
     ASSERT_EQ(result2, 0);
-    ASSERT_TRUE(lua_isstring(ctx.view.L, -1));
-    ASSERT_STR_EQ(lua_tostring(ctx.view.L, -1), "Second line");
+    ASSERT_TRUE(lua_isstring(ctx_L(&ctx), -1));
+    ASSERT_STR_EQ(lua_tostring(ctx_L(&ctx), -1), "Second line");
 
     /* Cleanup */
     free_ctx_with_lua(&ctx);
@@ -141,10 +145,10 @@ TEST(lua_get_line_handles_out_of_bounds) {
 
     /* Call loki.get_line(0) should return nil */
     const char *code = "return loki.get_line(0)";
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
 
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isnil(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isnil(ctx_L(&ctx), -1));
 
     /* Cleanup */
     free_ctx_with_lua(&ctx);
@@ -161,13 +165,13 @@ TEST(lua_get_cursor_returns_position) {
 
     /* Call loki.get_cursor() */
     const char *code = "local row, col = loki.get_cursor(); return row, col";
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
 
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isnumber(ctx.view.L, -2));
-    ASSERT_TRUE(lua_isnumber(ctx.view.L, -1));
-    ASSERT_EQ((int)lua_tonumber(ctx.view.L, -2), 10);  /* row */
-    ASSERT_EQ((int)lua_tonumber(ctx.view.L, -1), 5);   /* col */
+    ASSERT_TRUE(lua_isnumber(ctx_L(&ctx), -2));
+    ASSERT_TRUE(lua_isnumber(ctx_L(&ctx), -1));
+    ASSERT_EQ((int)lua_tonumber(ctx_L(&ctx), -2), 10);  /* row */
+    ASSERT_EQ((int)lua_tonumber(ctx_L(&ctx), -1), 5);   /* col */
 
     /* Cleanup */
     free_ctx_with_lua(&ctx);
@@ -194,7 +198,7 @@ TEST(lua_insert_text_adds_content) {
 
     /* Call loki.insert_text("Hello") */
     const char *code = "loki.insert_text('Hello')";
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
 
     ASSERT_EQ(result, 0);
     ASSERT_EQ(ctx.model.row[0].size, 5);
@@ -215,11 +219,11 @@ TEST(lua_get_filename_returns_name) {
 
     /* Call loki.get_filename() */
     const char *code = "return loki.get_filename()";
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
 
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isstring(ctx.view.L, -1));
-    ASSERT_STR_EQ(lua_tostring(ctx.view.L, -1), "/tmp/test.txt");
+    ASSERT_TRUE(lua_isstring(ctx_L(&ctx), -1));
+    ASSERT_STR_EQ(lua_tostring(ctx_L(&ctx), -1), "/tmp/test.txt");
 
     /* Cleanup */
     free_ctx_with_lua(&ctx);
@@ -235,10 +239,10 @@ TEST(lua_get_filename_returns_nil_when_no_file) {
 
     /* Call loki.get_filename() */
     const char *code = "return loki.get_filename()";
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
 
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isnil(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isnil(ctx_L(&ctx), -1));
 
     /* Cleanup */
     free_ctx_with_lua(&ctx);
@@ -251,7 +255,7 @@ TEST(lua_set_color_updates_colors) {
 
     /* Call loki.set_color("keyword1", {r=255, g=0, b=0}) */
     const char *code = "loki.set_color('keyword1', {r=255, g=0, b=0})";
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
 
     ASSERT_EQ(result, 0);
 
@@ -280,7 +284,7 @@ TEST(lua_register_language_adds_syntax) {
         "  highlight_numbers = true\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
 
     ASSERT_EQ(result, 0);
 
@@ -299,7 +303,7 @@ TEST(lua_handles_syntax_errors) {
 
     /* Invalid Lua code */
     const char *code = "this is not valid lua syntax !!!";
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
 
     /* Should return error */
     ASSERT_NEQ(result, 0);

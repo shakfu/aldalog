@@ -30,6 +30,25 @@ static lua_State *create_test_lua_state() {
     return L;
 }
 
+/* Helper to initialize context with Lua for tests */
+static void init_ctx_with_lua(editor_ctx_t *ctx) {
+    editor_ctx_init(ctx);
+    LuaHost *lua_host = lua_host_create();
+    if (lua_host) {
+        ctx->lua_host = lua_host;
+        lua_host->L = loki_lua_bootstrap(ctx, NULL);
+    }
+}
+
+/* Helper to cleanup context with Lua */
+static void free_ctx_with_lua(editor_ctx_t *ctx) {
+    if (ctx->lua_host) {
+        lua_host_free(ctx->lua_host);
+        ctx->lua_host = NULL;
+    }
+    editor_ctx_free(ctx);
+}
+
 /* Test: register_language with valid minimal config */
 TEST(register_language_minimal_config) {
     lua_State *L = create_test_lua_state();
@@ -37,8 +56,7 @@ TEST(register_language_minimal_config) {
 
     /* Push loki table and register_language function */
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     /* Create minimal config table */
     const char *code =
@@ -47,23 +65,21 @@ TEST(register_language_minimal_config) {
         "  extensions = {'.test'}\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
 
     /* Check return value */
-    ASSERT_TRUE(lua_isboolean(ctx.view.L, -1));
-    ASSERT_TRUE(lua_toboolean(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isboolean(ctx_L(&ctx), -1));
+    ASSERT_TRUE(lua_toboolean(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: register_language with full config */
 TEST(register_language_full_config) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -79,67 +95,61 @@ TEST(register_language_full_config) {
         "  highlight_numbers = true\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isboolean(ctx.view.L, -1));
-    ASSERT_TRUE(lua_toboolean(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isboolean(ctx_L(&ctx), -1));
+    ASSERT_TRUE(lua_toboolean(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: missing name field */
 TEST(register_language_missing_name) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
         "  extensions = {'.test'}\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
 
     /* Should return nil and error message */
-    ASSERT_TRUE(lua_isnil(ctx.view.L, -2));
-    ASSERT_TRUE(lua_isstring(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isnil(ctx_L(&ctx), -2));
+    ASSERT_TRUE(lua_isstring(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: missing extensions field */
 TEST(register_language_missing_extensions) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
         "  name = 'TestLang'\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
 
     /* Should return nil and error message */
-    ASSERT_TRUE(lua_isnil(ctx.view.L, -2));
-    ASSERT_TRUE(lua_isstring(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isnil(ctx_L(&ctx), -2));
+    ASSERT_TRUE(lua_isstring(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: empty extensions table */
 TEST(register_language_empty_extensions) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -147,23 +157,21 @@ TEST(register_language_empty_extensions) {
         "  extensions = {}\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
 
     /* Should return nil and error message */
-    ASSERT_TRUE(lua_isnil(ctx.view.L, -2));
-    ASSERT_TRUE(lua_isstring(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isnil(ctx_L(&ctx), -2));
+    ASSERT_TRUE(lua_isstring(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: extension without dot */
 TEST(register_language_extension_without_dot) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -171,23 +179,21 @@ TEST(register_language_extension_without_dot) {
         "  extensions = {'test'}\n"  /* Missing dot */
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
 
     /* Should return nil and error message */
-    ASSERT_TRUE(lua_isnil(ctx.view.L, -2));
-    ASSERT_TRUE(lua_isstring(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isnil(ctx_L(&ctx), -2));
+    ASSERT_TRUE(lua_isstring(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: multiple extensions */
 TEST(register_language_multiple_extensions) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -195,21 +201,19 @@ TEST(register_language_multiple_extensions) {
         "  extensions = {'.t1', '.t2', '.t3'}\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isboolean(ctx.view.L, -1));
-    ASSERT_TRUE(lua_toboolean(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isboolean(ctx_L(&ctx), -1));
+    ASSERT_TRUE(lua_toboolean(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: keywords without types */
 TEST(register_language_keywords_only) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -218,21 +222,19 @@ TEST(register_language_keywords_only) {
         "  keywords = {'if', 'else', 'while'}\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isboolean(ctx.view.L, -1));
-    ASSERT_TRUE(lua_toboolean(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isboolean(ctx_L(&ctx), -1));
+    ASSERT_TRUE(lua_toboolean(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: types without keywords */
 TEST(register_language_types_only) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -241,21 +243,19 @@ TEST(register_language_types_only) {
         "  types = {'int', 'string', 'bool'}\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isboolean(ctx.view.L, -1));
-    ASSERT_TRUE(lua_toboolean(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isboolean(ctx_L(&ctx), -1));
+    ASSERT_TRUE(lua_toboolean(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: line comment only */
 TEST(register_language_line_comment_only) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -264,21 +264,19 @@ TEST(register_language_line_comment_only) {
         "  line_comment = '#'\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isboolean(ctx.view.L, -1));
-    ASSERT_TRUE(lua_toboolean(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isboolean(ctx_L(&ctx), -1));
+    ASSERT_TRUE(lua_toboolean(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: line comment too long */
 TEST(register_language_line_comment_too_long) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -287,23 +285,21 @@ TEST(register_language_line_comment_too_long) {
         "  line_comment = '####'\n"  /* Too long (max 3 chars) */
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
 
     /* Should return nil and error message */
-    ASSERT_TRUE(lua_isnil(ctx.view.L, -2));
-    ASSERT_TRUE(lua_isstring(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isnil(ctx_L(&ctx), -2));
+    ASSERT_TRUE(lua_isstring(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: block comments */
 TEST(register_language_block_comments) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -313,21 +309,19 @@ TEST(register_language_block_comments) {
         "  block_comment_end = '*/'\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isboolean(ctx.view.L, -1));
-    ASSERT_TRUE(lua_toboolean(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isboolean(ctx_L(&ctx), -1));
+    ASSERT_TRUE(lua_toboolean(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: block comment too long */
 TEST(register_language_block_comment_too_long) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -336,23 +330,21 @@ TEST(register_language_block_comment_too_long) {
         "  block_comment_start = '/*****'\n"  /* Too long (max 5 chars) */
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
 
     /* Should return nil and error message */
-    ASSERT_TRUE(lua_isnil(ctx.view.L, -2));
-    ASSERT_TRUE(lua_isstring(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isnil(ctx_L(&ctx), -2));
+    ASSERT_TRUE(lua_isstring(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: custom separators */
 TEST(register_language_custom_separators) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -361,21 +353,19 @@ TEST(register_language_custom_separators) {
         "  separators = ',.()'\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isboolean(ctx.view.L, -1));
-    ASSERT_TRUE(lua_toboolean(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isboolean(ctx_L(&ctx), -1));
+    ASSERT_TRUE(lua_toboolean(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: disable string highlighting */
 TEST(register_language_disable_string_highlighting) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -384,21 +374,19 @@ TEST(register_language_disable_string_highlighting) {
         "  highlight_strings = false\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isboolean(ctx.view.L, -1));
-    ASSERT_TRUE(lua_toboolean(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isboolean(ctx_L(&ctx), -1));
+    ASSERT_TRUE(lua_toboolean(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: disable number highlighting */
 TEST(register_language_disable_number_highlighting) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code =
         "return loki.register_language({\n"
@@ -407,34 +395,31 @@ TEST(register_language_disable_number_highlighting) {
         "  highlight_numbers = false\n"
         "})";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
-    ASSERT_TRUE(lua_isboolean(ctx.view.L, -1));
-    ASSERT_TRUE(lua_toboolean(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isboolean(ctx_L(&ctx), -1));
+    ASSERT_TRUE(lua_toboolean(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 /* Test: invalid argument type (not a table) */
 TEST(register_language_invalid_argument) {
     editor_ctx_t ctx;
-    editor_ctx_init(&ctx);
-    ctx.view.L = loki_lua_bootstrap(&ctx, NULL);
+    init_ctx_with_lua(&ctx);
 
     const char *code = "return loki.register_language('not a table')";
 
-    int result = luaL_dostring(ctx.view.L, code);
+    int result = luaL_dostring(ctx_L(&ctx), code);
     ASSERT_EQ(result, 0);
 
     /* Should return nil and error message */
-    ASSERT_TRUE(lua_isnil(ctx.view.L, -2));
-    ASSERT_TRUE(lua_isstring(ctx.view.L, -1));
+    ASSERT_TRUE(lua_isnil(ctx_L(&ctx), -2));
+    ASSERT_TRUE(lua_isstring(ctx_L(&ctx), -1));
 
     /* Cleanup */
-    if (ctx.view.L) lua_close(ctx.view.L);
-    editor_ctx_free(&ctx);
+    free_ctx_with_lua(&ctx);
 }
 
 BEGIN_TEST_SUITE("Language Registration")

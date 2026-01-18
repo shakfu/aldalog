@@ -150,6 +150,12 @@ typedef struct t_lua_repl {
     char *log[LUA_REPL_LOG_MAX];
 } t_lua_repl;
 
+/* Lua host */
+typedef struct LuaHost {
+    lua_State *L;
+    t_lua_repl repl;
+} LuaHost;
+
 /* ======================= Model/View Separation ============================= */
 
 /* EditorModel - Document state that persists across views.
@@ -202,11 +208,9 @@ typedef struct EditorView {
     int cmd_cursor_pos;       /* Cursor position in command */
     int cmd_history_index;    /* Current history position */
 
-    /* REPL & status */
-    t_lua_repl repl;          /* Lua REPL state - managed by loki_editor.c */
+    /* Status */
     char statusmsg[80];       /* Status message */
     time_t statusmsg_time;    /* Status message timestamp */
-    lua_State *L;             /* Lua state - managed by loki_editor.c */
 } EditorView;
 
 /* Editor context - one instance per editor viewport/buffer.
@@ -222,6 +226,7 @@ typedef struct EditorView {
 struct editor_ctx {
     EditorModel model;        /* Document state (buffer, file, undo, languages) */
     EditorView view;          /* Presentation state (cursor, viewport, UI) */
+    LuaHost *lua_host;        /* Lua host */
 };
 
 /* ======================= Compatibility Macros ============================== */
@@ -260,10 +265,10 @@ struct editor_ctx {
 #define ctx_cmd_length(ctx) ((ctx)->view.cmd_length)
 #define ctx_cmd_cursor_pos(ctx) ((ctx)->view.cmd_cursor_pos)
 #define ctx_cmd_history_index(ctx) ((ctx)->view.cmd_history_index)
-#define ctx_repl(ctx) ((ctx)->view.repl)
+#define ctx_repl(ctx) ((ctx)->lua_host ? &(ctx)->lua_host->repl : NULL)
 #define ctx_statusmsg(ctx) ((ctx)->view.statusmsg)
 #define ctx_statusmsg_time(ctx) ((ctx)->view.statusmsg_time)
-#define ctx_L(ctx) ((ctx)->view.L)
+#define ctx_L(ctx) ((ctx)->lua_host ? (ctx)->lua_host->L : NULL)
 
 /* Legacy type name for compatibility during migration.
  * New code should use editor_ctx_t. */
@@ -304,6 +309,11 @@ void editor_refresh_screen(editor_ctx_t *ctx);
 /* Lua REPL functions */
 void lua_repl_init(t_lua_repl *repl);
 void lua_repl_free(t_lua_repl *repl);
+
+/* LuaHost lifecycle functions */
+LuaHost *lua_host_create(void);
+void lua_host_free(LuaHost *host);
+void lua_host_init_repl(LuaHost *host);
 void lua_repl_handle_keypress(editor_ctx_t *ctx, int key);
 void lua_repl_render(editor_ctx_t *ctx, struct abuf *ab);
 void lua_repl_append_log(editor_ctx_t *ctx, const char *line);

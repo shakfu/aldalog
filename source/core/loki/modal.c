@@ -76,7 +76,7 @@ static int is_joy_file(const char *filename) {
  * Checks _loki_keymaps.{mode}[keycode] for a registered function.
  * Returns 1 if handled by Lua, 0 if not (fall through to built-in). */
 static int try_lua_keymap(editor_ctx_t *ctx, const char *mode, int key) {
-    lua_State *L = ctx->view.L;
+    lua_State *L = ctx_L(ctx);
     if (!L) return 0;
 
     /* Get _loki_keymaps global table */
@@ -377,10 +377,12 @@ static void process_normal_mode(editor_ctx_t *ctx, int fd, int c) {
         case CTRL_F: editor_find(ctx, fd); break;
         case CTRL_L:
             /* Toggle REPL */
-            ctx->view.repl.active = !ctx->view.repl.active;
-            editor_update_repl_layout(ctx);
-            if (ctx->view.repl.active) {
-                editor_set_status_msg(ctx, "Lua REPL active (Ctrl-L or ESC to close)");
+            if (ctx_repl(ctx)) {
+                ctx_repl(ctx)->active = !ctx_repl(ctx)->active;
+                editor_update_repl_layout(ctx);
+                if (ctx_repl(ctx)->active) {
+                    editor_set_status_msg(ctx, "Lua REPL active (Ctrl-L or ESC to close)");
+                }
             }
             break;
         case CTRL_E:
@@ -571,10 +573,12 @@ static void process_insert_mode(editor_ctx_t *ctx, int fd, int c) {
             break;
         case CTRL_L:
             /* Toggle REPL */
-            ctx->view.repl.active = !ctx->view.repl.active;
-            editor_update_repl_layout(ctx);
-            if (ctx->view.repl.active) {
-                editor_set_status_msg(ctx, "Lua REPL active (Ctrl-L or ESC to close)");
+            if (ctx_repl(ctx)) {
+                ctx_repl(ctx)->active = !ctx_repl(ctx)->active;
+                editor_update_repl_layout(ctx);
+                if (ctx_repl(ctx)->active) {
+                    editor_set_status_msg(ctx, "Lua REPL active (Ctrl-L or ESC to close)");
+                }
             }
             break;
         case CTRL_C:
@@ -825,7 +829,7 @@ void modal_process_keypress(editor_ctx_t *ctx, int fd) {
     int c = terminal_read_key(fd);
 
     /* REPL keypress handling */
-    if (ctx->view.repl.active) {
+    if (ctx_repl(ctx) && ctx_repl(ctx)->active) {
         lua_repl_handle_keypress(ctx, c);
         return;
     }

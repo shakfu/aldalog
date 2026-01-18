@@ -603,12 +603,16 @@ int alda_repl_main(int argc, char **argv) {
         syntax_select_for_filename(&syntax_ctx, "input.alda");
 
         /* Load Lua and themes for consistent highlighting */
-        struct loki_lua_opts lua_opts = {
-            .bind_editor = 1,
-            .load_config = 1,
-            .reporter = NULL
-        };
-        syntax_ctx.view.L = loki_lua_bootstrap(&syntax_ctx, &lua_opts);
+        LuaHost *lua_host = lua_host_create();
+        if (lua_host) {
+            syntax_ctx.lua_host = lua_host;
+            struct loki_lua_opts lua_opts = {
+                .bind_editor = 1,
+                .load_config = 1,
+                .reporter = NULL
+            };
+            lua_host->L = loki_lua_bootstrap(&syntax_ctx, &lua_opts);
+        }
 
         /* Initialize Link callbacks for REPL notifications */
         shared_repl_link_init_callbacks(ctx.shared);
@@ -618,9 +622,10 @@ int alda_repl_main(int argc, char **argv) {
         /* Cleanup Link callbacks */
         shared_repl_link_cleanup_callbacks();
 
-        /* Cleanup Lua */
-        if (syntax_ctx.view.L) {
-            lua_close(syntax_ctx.view.L);
+        /* Cleanup Lua host */
+        if (syntax_ctx.lua_host) {
+            lua_host_free(syntax_ctx.lua_host);
+            syntax_ctx.lua_host = NULL;
         }
     }
 

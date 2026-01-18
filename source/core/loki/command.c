@@ -270,8 +270,8 @@ int command_execute(editor_ctx_t *ctx, const char *cmdline) {
     }
 
     /* Store command name for Lua handlers (they need to know which command was called) */
-    if (ctx->view.L) {
-        lua_State *L = ctx->view.L;
+    if (ctx_L(ctx)) {
+        lua_State *L = ctx_L(ctx);
         lua_pushstring(L, cmd_name);
         lua_setglobal(L, "_loki_ex_command_executing");
     }
@@ -280,8 +280,8 @@ int command_execute(editor_ctx_t *ctx, const char *cmdline) {
     int result = cmd->handler(ctx, args);
 
     /* Clear the command name */
-    if (ctx->view.L) {
-        lua_State *L = ctx->view.L;
+    if (ctx_L(ctx)) {
+        lua_State *L = ctx_L(ctx);
         lua_pushnil(L);
         lua_setglobal(L, "_loki_ex_command_executing");
     }

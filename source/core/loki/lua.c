@@ -353,8 +353,8 @@ static int lua_loki_register_command(lua_State *L) {
 
 /* C wrapper for Lua ex-command callbacks */
 static int lua_ex_command_handler(editor_ctx_t *ctx, const char *args) {
-    if (!ctx || !ctx->view.L) return 0;
-    lua_State *L = ctx->view.L;
+    if (!ctx || !ctx_L(ctx)) return 0;
+    lua_State *L = ctx_L(ctx);
 
     /* Get command name from somewhere - for now we'll use a registry */
     /* This is called from C, so we need to look up the Lua function */
@@ -1673,16 +1673,17 @@ lua_State *loki_lua_bootstrap(editor_ctx_t *ctx, const struct loki_lua_opts *opt
 static int lua_repl_handle_builtin(editor_ctx_t *ctx, const char *cmd, size_t len);
 
 void lua_repl_render(editor_ctx_t *ctx, struct abuf *ab) {
-    if (!ctx || !ctx->view.repl.active) return;
+    t_lua_repl *repl = ctx_repl(ctx);
+    if (!ctx || !repl || !repl->active) return;
 
     terminal_buffer_append(ab,"\r\n",2);
 
-    int start = ctx->view.repl.log_len - LUA_REPL_OUTPUT_ROWS;
+    int start = repl->log_len - LUA_REPL_OUTPUT_ROWS;
     if (start < 0) start = 0;
     int rendered = 0;
 
-    for (int i = start; i < ctx->view.repl.log_len; i++) {
-        const char *line = ctx->view.repl.log[i] ? ctx->view.repl.log[i] : "";
+    for (int i = start; i < repl->log_len; i++) {
+        const char *line = repl->log[i] ? repl->log[i] : "";
         int take = (int)strlen(line);
         if (take > ctx->view.screencols) take = ctx->view.screencols;
         terminal_buffer_append(ab,"\x1b[0K",4);
@@ -1702,10 +1703,10 @@ void lua_repl_render(editor_ctx_t *ctx, struct abuf *ab) {
     int prompt_len = (int)strlen(LUA_REPL_PROMPT);
     int available = ctx->view.screencols - prompt_len;
     if (available < 0) available = 0;
-    if (available > 0 && ctx->view.repl.input_len > 0) {
-        int shown = ctx->view.repl.input_len;
+    if (available > 0 && repl->input_len > 0) {
+        int shown = repl->input_len;
         if (shown > available) shown = available;
-        terminal_buffer_append(ab,ctx->view.repl.input,shown);
+        terminal_buffer_append(ab,repl->input,shown);
     }
 }
 
@@ -1717,14 +1718,15 @@ static void lua_repl_clear_input(t_lua_repl *repl) {
 }
 
 static void lua_repl_append_log_owned(editor_ctx_t *ctx, char *line) {
-    if (!ctx || !line) return;
-    if (ctx->view.repl.log_len == LUA_REPL_LOG_MAX) {
-        free(ctx->view.repl.log[0]);
-        memmove(ctx->view.repl.log, ctx->view.repl.log + 1,
+    t_lua_repl *repl = ctx_repl(ctx);
+    if (!ctx || !repl || !line) return;
+    if (repl->log_len == LUA_REPL_LOG_MAX) {
+        free(repl->log[0]);
+        memmove(repl->log, repl->log + 1,
                 sizeof(char*) * (LUA_REPL_LOG_MAX - 1));
-        ctx->view.repl.log_len--;
+        repl->log_len--;
     }
-    ctx->view.repl.log[ctx->view.repl.log_len++] = line;
+    repl->log[repl->log_len++] = line;
 }
 
 void lua_repl_append_log(editor_ctx_t *ctx, const char *line) {
@@ -1795,7 +1797,8 @@ static const char *lua_repl_top_to_string(lua_State *L, size_t *len) {
 }
 
 static void lua_repl_push_history(editor_ctx_t *ctx, const char *cmd) {
-    if (!ctx || !cmd || !*cmd) return;
+    t_lua_repl *repl = ctx_repl(ctx);
+    if (!ctx || !repl || !cmd || !*cmd) return;
     size_t len = strlen(cmd);
     int all_space = 1;
     for (size_t i = 0; i < len; i++) {
@@ -1806,17 +1809,17 @@ static void lua_repl_push_history(editor_ctx_t *ctx, const char *cmd) {
     }
     if (all_space) return;
 
-    if (ctx->view.repl.history_len == LUA_REPL_HISTORY_MAX) {
-        free(ctx->view.repl.history[0]);
-        memmove(ctx->view.repl.history, ctx->view.repl.history + 1,
+    if (repl->history_len == LUA_REPL_HISTORY_MAX) {
+        free(repl->history[0]);
+        memmove(repl->history, repl->history + 1,
                 sizeof(char*) * (LUA_REPL_HISTORY_MAX - 1));
-        ctx->view.repl.history_len--;
+        repl->history_len--;
     }
 
-    if (ctx->view.repl.history_len > 0) {
-        const char *last = ctx->view.repl.history[ctx->view.repl.history_len - 1];
+    if (repl->history_len > 0) {
+        const char *last = repl->history[repl->history_len - 1];
         if (last && strcmp(last, cmd) == 0) {
-            ctx->view.repl.history_index = -1;
+            repl->history_index = -1;
             return;
         }
     }
@@ -1826,8 +1829,8 @@ static void lua_repl_push_history(editor_ctx_t *ctx, const char *cmd) {
         editor_set_status_msg(ctx, "Lua REPL: out of memory");
         return;
     }
-    ctx->view.repl.history[ctx->view.repl.history_len++] = copy;
-    ctx->view.repl.history_index = -1;
+    repl->history[repl->history_len++] = copy;
+    repl->history_index = -1;
 }
 
 static void lua_repl_history_apply(editor_ctx_t *ctx, t_lua_repl *repl) {
@@ -1858,45 +1861,46 @@ static int lua_repl_input_has_content(const t_lua_repl *repl) {
 }
 
 static void lua_repl_emit_registered_help(editor_ctx_t *ctx) {
-    if (!ctx || !ctx->view.L) return;
+    lua_State *L = ctx_L(ctx);
+    if (!ctx || !L) return;
 
-    lua_getglobal(ctx->view.L, "loki");
-    if (!lua_istable(ctx->view.L, -1)) {
-        lua_pop(ctx->view.L, 1);
+    lua_getglobal(L, "loki");
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
         return;
     }
 
-    lua_getfield(ctx->view.L, -1, "__repl_help");
-    if (!lua_istable(ctx->view.L, -1)) {
-        lua_pop(ctx->view.L, 2);
+    lua_getfield(L, -1, "__repl_help");
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 2);
         return;
     }
 
-    int len = (int)lua_rawlen(ctx->view.L, -1);
+    int len = (int)lua_rawlen(L, -1);
     if (len == 0) {
-        lua_pop(ctx->view.L, 2);
+        lua_pop(L, 2);
         return;
     }
 
     lua_repl_log_prefixed(ctx, "= ", "Project commands:");
 
-    lua_pushnil(ctx->view.L);
-    while (lua_next(ctx->view.L, -2) != 0) {
+    lua_pushnil(L);
+    while (lua_next(L, -2) != 0) {
         const char *name = NULL;
         const char *desc = NULL;
         const char *example = NULL;
 
-        lua_getfield(ctx->view.L, -1, "name");
-        if (lua_isstring(ctx->view.L, -1)) name = lua_tostring(ctx->view.L, -1);
-        lua_pop(ctx->view.L, 1);
+        lua_getfield(L, -1, "name");
+        if (lua_isstring(L, -1)) name = lua_tostring(L, -1);
+        lua_pop(L, 1);
 
-        lua_getfield(ctx->view.L, -1, "description");
-        if (lua_isstring(ctx->view.L, -1)) desc = lua_tostring(ctx->view.L, -1);
-        lua_pop(ctx->view.L, 1);
+        lua_getfield(L, -1, "description");
+        if (lua_isstring(L, -1)) desc = lua_tostring(L, -1);
+        lua_pop(L, 1);
 
-        lua_getfield(ctx->view.L, -1, "example");
-        if (lua_isstring(ctx->view.L, -1)) example = lua_tostring(ctx->view.L, -1);
-        lua_pop(ctx->view.L, 1);
+        lua_getfield(L, -1, "example");
+        if (lua_isstring(L, -1)) example = lua_tostring(L, -1);
+        lua_pop(L, 1);
 
         if (name && desc) {
             char buf[256];
@@ -1909,75 +1913,77 @@ static void lua_repl_emit_registered_help(editor_ctx_t *ctx) {
             lua_repl_append_log(ctx, buf);
         }
 
-        lua_pop(ctx->view.L, 1); /* pop value, keep key for next iteration */
+        lua_pop(L, 1); /* pop value, keep key for next iteration */
     }
 
-    lua_pop(ctx->view.L, 2); /* __repl_help, loki */
+    lua_pop(L, 2); /* __repl_help, loki */
 }
 
 static void lua_repl_execute_current(editor_ctx_t *ctx) {
-    if (!ctx || !ctx->view.L) {
+    lua_State *L = ctx_L(ctx);
+    t_lua_repl *repl = ctx_repl(ctx);
+    if (!ctx || !L || !repl) {
         if (ctx) lua_repl_append_log(ctx, "! Lua interpreter not available");
         return;
     }
 
-    if (!lua_repl_input_has_content(&ctx->view.repl)) {
-        lua_repl_clear_input(&ctx->view.repl);
+    if (!lua_repl_input_has_content(repl)) {
+        lua_repl_clear_input(repl);
         return;
     }
 
-    lua_repl_log_prefixed(ctx, LUA_REPL_PROMPT, ctx->view.repl.input);
-    lua_repl_push_history(ctx, ctx->view.repl.input);
+    lua_repl_log_prefixed(ctx, LUA_REPL_PROMPT, repl->input);
+    lua_repl_push_history(ctx, repl->input);
 
-    const char *trim = ctx->view.repl.input;
+    const char *trim = repl->input;
     while (*trim && isspace((unsigned char)*trim)) trim++;
     size_t tlen = strlen(trim);
     while (tlen > 0 && isspace((unsigned char)trim[tlen-1])) tlen--;
 
     if (lua_repl_handle_builtin(ctx, trim, tlen)) {
-        lua_repl_clear_input(&ctx->view.repl);
+        lua_repl_clear_input(repl);
         return;
     }
 
-    int base = lua_gettop(ctx->view.L);
-    if (luaL_loadbuffer(ctx->view.L, ctx->view.repl.input, (size_t)ctx->view.repl.input_len,
+    int base = lua_gettop(L);
+    if (luaL_loadbuffer(L, repl->input, (size_t)repl->input_len,
                         "repl") != LUA_OK) {
-        const char *err = lua_tostring(ctx->view.L, -1);
+        const char *err = lua_tostring(L, -1);
         lua_repl_log_prefixed(ctx, "! ", err ? err : "(unknown error)");
-        lua_pop(ctx->view.L, 1);
-        lua_settop(ctx->view.L, base);
-        lua_repl_clear_input(&ctx->view.repl);
+        lua_pop(L, 1);
+        lua_settop(L, base);
+        lua_repl_clear_input(repl);
         return;
     }
 
-    int status = lua_pcall(ctx->view.L, 0, LUA_MULTRET, 0);
+    int status = lua_pcall(L, 0, LUA_MULTRET, 0);
     if (status != LUA_OK) {
-        const char *err = lua_tostring(ctx->view.L, -1);
+        const char *err = lua_tostring(L, -1);
         lua_repl_log_prefixed(ctx, "! ", err ? err : "(unknown error)");
-        lua_pop(ctx->view.L, 1);
-        lua_settop(ctx->view.L, base);
-        lua_repl_clear_input(&ctx->view.repl);
+        lua_pop(L, 1);
+        lua_settop(L, base);
+        lua_repl_clear_input(repl);
         return;
     }
 
-    int results = lua_gettop(ctx->view.L) - base;
+    int results = lua_gettop(L) - base;
     if (results == 0) {
         lua_repl_log_prefixed(ctx, "= ", "ok");
     } else {
         for (int i = 0; i < results; i++) {
-            lua_pushvalue(ctx->view.L, base + 1 + i);
+            lua_pushvalue(L, base + 1 + i);
             size_t len = 0;
-            const char *res = lua_repl_top_to_string(ctx->view.L, &len);
+            const char *res = lua_repl_top_to_string(L, &len);
             if (res) {
                 lua_repl_log_prefixed(ctx, "= ", res);
             } else {
                 lua_repl_log_prefixed(ctx, "= ", "(non-printable)");
             }
-            lua_settop(ctx->view.L, base + results);
+            lua_settop(L, base + results);
         }
     }
-    lua_settop(ctx->view.L, base);
-    lua_repl_clear_input(&ctx->view.repl);
+    lua_settop(L, base);
+    lua_repl_clear_input(repl);
 }
 
 static int lua_repl_iequals(const char *cmd, size_t len, const char *word) {
@@ -2023,24 +2029,26 @@ static int lua_repl_handle_builtin(editor_ctx_t *ctx, const char *cmd, size_t le
     }
 
     if (lua_repl_iequals(cmd, len, "clear")) {
-        lua_repl_reset_log(&ctx->view.repl);
+        t_lua_repl *repl = ctx_repl(ctx);
+        if (repl) lua_repl_reset_log(repl);
         lua_repl_log_prefixed(ctx, "= ", "Log cleared");
         return 1;
     }
 
     if (lua_repl_iequals(cmd, len, "history")) {
-        if (ctx->view.repl.history_len == 0) {
+        t_lua_repl *repl = ctx_repl(ctx);
+        if (!repl || repl->history_len == 0) {
             lua_repl_log_prefixed(ctx, "= ", "History is empty");
             return 1;
         }
         lua_repl_log_prefixed(ctx, "= ", "History (newest first):");
-        int start = ctx->view.repl.history_len - 1;
+        int start = repl->history_len - 1;
         int shown = 0;
         for (int i = start; i >= 0; i--) {
-            const char *entry = ctx->view.repl.history[i];
+            const char *entry = repl->history[i];
             if (!entry) continue;
             char buf[256];
-            snprintf(buf, sizeof(buf), "  %d: %s", ctx->view.repl.history_len - i, entry);
+            snprintf(buf, sizeof(buf), "  %d: %s", repl->history_len - i, entry);
             lua_repl_append_log(ctx, buf);
             shown++;
             if (shown >= 20) {
@@ -2052,18 +2060,22 @@ static int lua_repl_handle_builtin(editor_ctx_t *ctx, const char *cmd, size_t le
     }
 
     if (lua_repl_iequals(cmd, len, "clear-history")) {
-        for (int i = 0; i < ctx->view.repl.history_len; i++) {
-            free(ctx->view.repl.history[i]);
-            ctx->view.repl.history[i] = NULL;
+        t_lua_repl *repl = ctx_repl(ctx);
+        if (repl) {
+            for (int i = 0; i < repl->history_len; i++) {
+                free(repl->history[i]);
+                repl->history[i] = NULL;
+            }
+            repl->history_len = 0;
+            repl->history_index = -1;
         }
-        ctx->view.repl.history_len = 0;
-        ctx->view.repl.history_index = -1;
         lua_repl_log_prefixed(ctx, "= ", "History cleared");
         return 1;
     }
 
     if (lua_repl_iequals(cmd, len, "exit") || lua_repl_iequals(cmd, len, "quit")) {
-        ctx->view.repl.active = 0;
+        t_lua_repl *repl = ctx_repl(ctx);
+        if (repl) repl->active = 0;
         editor_update_repl_layout(ctx);
         editor_set_status_msg(ctx, "Lua REPL closed");
         return 1;
@@ -2074,8 +2086,9 @@ static int lua_repl_handle_builtin(editor_ctx_t *ctx, const char *cmd, size_t le
 
 /* Tab completion for Lua identifiers */
 static void lua_repl_complete_input(editor_ctx_t *ctx) {
-    if (!ctx || !ctx->view.L) return;
-    t_lua_repl *repl = &ctx->view.repl;
+    if (!ctx || !ctx_L(ctx)) return;
+    t_lua_repl *repl = ctx_repl(ctx);
+    if (!repl) return;
 
     /* Nothing to complete if input is empty */
     if (repl->input_len == 0) return;
@@ -2106,17 +2119,19 @@ static void lua_repl_complete_input(editor_ctx_t *ctx) {
         int table_len = dot - prefix;
         memcpy(table_name, prefix, table_len);
         table_name[table_len] = '\0';
-        strcpy(field_prefix, dot + 1);
+        strncpy(field_prefix, dot + 1, KILO_QUERY_LEN - 1);
+        field_prefix[KILO_QUERY_LEN - 1] = '\0';
     } else {
         table_name[0] = '\0';
-        strcpy(field_prefix, prefix);
+        strncpy(field_prefix, prefix, KILO_QUERY_LEN - 1);
+        field_prefix[KILO_QUERY_LEN - 1] = '\0';
     }
 
     /* Collect matches */
     char matches[100][KILO_QUERY_LEN];
     int match_count = 0;
 
-    lua_State *L = ctx->view.L;
+    lua_State *L = ctx_L(ctx);
 
     if (table_name[0] != '\0') {
         /* Table.field completion - look in specific table */
@@ -2162,9 +2177,8 @@ static void lua_repl_complete_input(editor_ctx_t *ctx) {
 
         if (space_needed < KILO_QUERY_LEN) {
             /* Replace the partial word with the completion */
-            strcpy(repl->input + word_start, completion);
+            memcpy(repl->input + word_start, completion, completion_len + 1);
             repl->input_len = space_needed;
-            repl->input[repl->input_len] = '\0';
         }
     } else {
         /* Multiple matches - find common prefix and show options */
@@ -2205,7 +2219,8 @@ static void lua_repl_complete_input(editor_ctx_t *ctx) {
 
 void lua_repl_handle_keypress(editor_ctx_t *ctx, int key) {
     if (!ctx) return;
-    t_lua_repl *repl = &ctx->view.repl;
+    t_lua_repl *repl = ctx_repl(ctx);
+    if (!repl) return;
     int prompt_len = (int)strlen(LUA_REPL_PROMPT);
 
     switch(key) {
@@ -2289,4 +2304,29 @@ void lua_repl_init(t_lua_repl *repl) {
     repl->active = 0;
     repl->history_index = -1;
     lua_repl_clear_input(repl);
+}
+
+/* ======================= LuaHost Lifecycle Functions ======================= */
+
+LuaHost *lua_host_create(void) {
+    LuaHost *host = calloc(1, sizeof(LuaHost));
+    if (!host) return NULL;
+    host->L = NULL;
+    memset(&host->repl, 0, sizeof(t_lua_repl));
+    return host;
+}
+
+void lua_host_free(LuaHost *host) {
+    if (!host) return;
+    lua_repl_free(&host->repl);
+    if (host->L) {
+        lua_close(host->L);
+        host->L = NULL;
+    }
+    free(host);
+}
+
+void lua_host_init_repl(LuaHost *host) {
+    if (!host) return;
+    lua_repl_init(&host->repl);
 }

@@ -1226,20 +1226,24 @@ int bog_repl_main(int argc, char **argv) {
     syntax_select_for_filename(&syntax_ctx, "input.bog");
 
     /* Load Lua for syntax highlighting */
-    struct loki_lua_opts lua_opts = {
-        .bind_editor = 1,
-        .load_config = 1,
-        .reporter = NULL
-    };
-    syntax_ctx.view.L = loki_lua_bootstrap(&syntax_ctx, &lua_opts);
+    LuaHost *lua_host = lua_host_create();
+    if (lua_host) {
+        syntax_ctx.lua_host = lua_host;
+        struct loki_lua_opts lua_opts = {
+            .bind_editor = 1,
+            .load_config = 1,
+            .reporter = NULL
+        };
+        lua_host->L = loki_lua_bootstrap(&syntax_ctx, &lua_opts);
+    }
 
     /* Enter REPL loop */
     bog_repl_loop(&syntax_ctx);
 
     /* Cleanup */
-    if (syntax_ctx.view.L) {
-        lua_close(syntax_ctx.view.L);
-        syntax_ctx.view.L = NULL;
+    if (syntax_ctx.lua_host) {
+        lua_host_free(syntax_ctx.lua_host);
+        syntax_ctx.lua_host = NULL;
     }
     bog_cb_cleanup(lang_ctx);
 
