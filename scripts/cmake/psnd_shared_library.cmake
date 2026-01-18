@@ -1,28 +1,28 @@
 include_guard(GLOBAL)
 
 set(LIBSHARED_SOURCES
-    ${PSND_ROOT_DIR}/src/shared/context.c
-    ${PSND_ROOT_DIR}/src/shared/repl_commands.c
-    ${PSND_ROOT_DIR}/src/shared/audio/tsf_backend.c
-    ${PSND_ROOT_DIR}/src/shared/audio/csound_backend.c
-    ${PSND_ROOT_DIR}/src/shared/midi/midi.c
-    ${PSND_ROOT_DIR}/src/shared/midi/events.c
-    ${PSND_ROOT_DIR}/src/shared/link/link.c
-    ${PSND_ROOT_DIR}/src/shared/async/shared_async.c
-    ${PSND_ROOT_DIR}/src/shared/music/music_theory.c
+    ${PSND_ROOT_DIR}/source/core/shared/context.c
+    ${PSND_ROOT_DIR}/source/core/shared/repl_commands.c
+    ${PSND_ROOT_DIR}/source/core/shared/audio/tsf_backend.c
+    ${PSND_ROOT_DIR}/source/core/shared/audio/csound_backend.c
+    ${PSND_ROOT_DIR}/source/core/shared/midi/midi.c
+    ${PSND_ROOT_DIR}/source/core/shared/midi/events.c
+    ${PSND_ROOT_DIR}/source/core/shared/link/link.c
+    ${PSND_ROOT_DIR}/source/core/shared/async/shared_async.c
+    ${PSND_ROOT_DIR}/source/core/shared/music/music_theory.c
 )
 
 add_library(shared STATIC ${LIBSHARED_SOURCES})
 add_library(shared::shared ALIAS shared)
 
 set(SHARED_INCLUDE_DIRS
-    ${PSND_ROOT_DIR}/src/shared
-    ${PSND_ROOT_DIR}/include
+    ${PSND_ROOT_DIR}/source/core/shared
+    ${PSND_ROOT_DIR}/source/core/include
 )
 set(SHARED_PRIVATE_INCLUDE_DIRS
-    ${PSND_ROOT_DIR}/thirdparty/TinySoundFont
-    ${PSND_ROOT_DIR}/thirdparty/miniaudio
-    ${PSND_ROOT_DIR}/thirdparty/link-3.1.5/extensions/abl_link/include
+    ${PSND_ROOT_DIR}/source/thirdparty/TinySoundFont
+    ${PSND_ROOT_DIR}/source/thirdparty/miniaudio
+    ${PSND_ROOT_DIR}/source/thirdparty/link-3.1.5/extensions/abl_link/include
 )
 
 target_include_directories(shared
@@ -37,8 +37,8 @@ target_link_libraries(shared PUBLIC libremidi abl_link uv_a Threads::Threads)
 if(BUILD_CSOUND_BACKEND)
     target_compile_definitions(shared PRIVATE BUILD_CSOUND_BACKEND)
     target_include_directories(shared PRIVATE
-        ${PSND_ROOT_DIR}/thirdparty/csound-6.18.1/include
-        ${PSND_ROOT_DIR}/thirdparty/csound-6.18.1/H
+        ${PSND_ROOT_DIR}/source/thirdparty/csound-6.18.1/include
+        ${PSND_ROOT_DIR}/source/thirdparty/csound-6.18.1/H
         ${CMAKE_BINARY_DIR}/thirdparty/csound-6.18.1/include
     )
     if(APPLE)

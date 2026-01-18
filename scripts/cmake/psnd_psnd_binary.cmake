@@ -2,43 +2,17 @@ include_guard(GLOBAL)
 
 # Common infrastructure
 set(PSND_COMMON_SOURCES
-    ${PSND_ROOT_DIR}/src/lang_dispatch.c
-    ${PSND_ROOT_DIR}/src/repl.c
+    ${PSND_ROOT_DIR}/source/core/lang_dispatch.c
+    ${PSND_ROOT_DIR}/source/core/repl.c
 )
 
-# Language-specific REPL and dispatch sources
-set(PSND_LANG_SOURCES)
-if(LANG_ALDA)
-    list(APPEND PSND_LANG_SOURCES
-        ${PSND_ROOT_DIR}/src/lang/alda/repl.c
-        ${PSND_ROOT_DIR}/src/lang/alda/dispatch.c
-    )
-endif()
-if(LANG_JOY)
-    list(APPEND PSND_LANG_SOURCES
-        ${PSND_ROOT_DIR}/src/lang/joy/repl.c
-        ${PSND_ROOT_DIR}/src/lang/joy/dispatch.c
-    )
-endif()
-if(LANG_TR7)
-    list(APPEND PSND_LANG_SOURCES
-        ${PSND_ROOT_DIR}/src/lang/tr7/repl.c
-        ${PSND_ROOT_DIR}/src/lang/tr7/dispatch.c
-        ${PSND_ROOT_DIR}/src/lang/tr7/async.c
-    )
-endif()
-if(LANG_BOG)
-    list(APPEND PSND_LANG_SOURCES
-        ${PSND_ROOT_DIR}/src/lang/bog/repl.c
-        ${PSND_ROOT_DIR}/src/lang/bog/dispatch.c
-        ${PSND_ROOT_DIR}/src/lang/bog/bog_async.c
-    )
-endif()
+# Collect language-specific REPL and dispatch sources from discovered languages
+psnd_collect_lang_sources()
 
 add_executable(psnd_bin
-    ${PSND_ROOT_DIR}/src/main.c
+    ${PSND_ROOT_DIR}/source/core/main.c
     ${PSND_COMMON_SOURCES}
-    ${PSND_LANG_SOURCES}
+    ${PSND_ALL_LANG_REPL_SOURCES}
 )
 set_target_properties(psnd_bin PROPERTIES OUTPUT_NAME "psnd")
 
@@ -51,9 +25,10 @@ endif()
 
 target_include_directories(psnd_bin PRIVATE
     ${PSND_ROOT_DIR}
-    ${PSND_ROOT_DIR}/include
-    ${PSND_ROOT_DIR}/src
-    ${PSND_ROOT_DIR}/src/lang/bog
+    ${PSND_ROOT_DIR}/source/core/include
+    ${PSND_ROOT_DIR}/source/core
+    ${CMAKE_BINARY_DIR}/generated
+    ${PSND_ALL_LANG_INCLUDES}
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -62,16 +37,5 @@ endif()
 
 target_link_libraries(psnd_bin PRIVATE libloki)
 
-# Language availability compile definitions (for lang_dispatch_init)
-if(LANG_ALDA)
-    target_compile_definitions(psnd_bin PRIVATE LANG_ALDA=1)
-endif()
-if(LANG_JOY)
-    target_compile_definitions(psnd_bin PRIVATE LANG_JOY=1)
-endif()
-if(LANG_TR7)
-    target_compile_definitions(psnd_bin PRIVATE LANG_TR7=1)
-endif()
-if(LANG_BOG)
-    target_compile_definitions(psnd_bin PRIVATE LANG_BOG=1)
-endif()
+# Apply language compile definitions (LANG_ALDA=1, LANG_JOY=1, etc.)
+psnd_apply_lang_definitions(psnd_bin)

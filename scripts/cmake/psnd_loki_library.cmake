@@ -7,65 +7,51 @@ endif()
 
 # Core loki sources (always built)
 set(LOKI_CORE_SOURCES
-    ${PSND_ROOT_DIR}/src/loki/core.c
-    ${PSND_ROOT_DIR}/src/loki/lua.c
-    ${PSND_ROOT_DIR}/src/loki/editor.c
-    ${PSND_ROOT_DIR}/src/loki/syntax.c
-    ${PSND_ROOT_DIR}/src/loki/indent.c
-    ${PSND_ROOT_DIR}/src/loki/languages.c
-    ${PSND_ROOT_DIR}/src/loki/selection.c
-    ${PSND_ROOT_DIR}/src/loki/search.c
-    ${PSND_ROOT_DIR}/src/loki/modal.c
-    ${PSND_ROOT_DIR}/src/loki/command.c
-    ${PSND_ROOT_DIR}/src/loki/command/file.c
-    ${PSND_ROOT_DIR}/src/loki/command/basic.c
-    ${PSND_ROOT_DIR}/src/loki/command/goto.c
-    ${PSND_ROOT_DIR}/src/loki/command/substitute.c
-    ${PSND_ROOT_DIR}/src/loki/command/link.c
-    ${PSND_ROOT_DIR}/src/loki/command/csd.c
-    ${PSND_ROOT_DIR}/src/loki/command/export.c
-    ${PSND_ROOT_DIR}/src/loki/terminal.c
-    ${PSND_ROOT_DIR}/src/loki/undo.c
-    ${PSND_ROOT_DIR}/src/loki/buffers.c
-    ${PSND_ROOT_DIR}/src/loki/link.c
-    ${PSND_ROOT_DIR}/src/loki/csound.c
-    ${PSND_ROOT_DIR}/src/loki/export.c
-    ${PSND_ROOT_DIR}/src/loki/midi_export.cpp
-    ${PSND_ROOT_DIR}/src/loki/lang_bridge.c
-    ${PSND_ROOT_DIR}/src/loki/repl_launcher.c
-    ${PSND_ROOT_DIR}/src/loki/serialize.c
+    ${PSND_ROOT_DIR}/source/core/loki/core.c
+    ${PSND_ROOT_DIR}/source/core/loki/lua.c
+    ${PSND_ROOT_DIR}/source/core/loki/editor.c
+    ${PSND_ROOT_DIR}/source/core/loki/syntax.c
+    ${PSND_ROOT_DIR}/source/core/loki/indent.c
+    ${PSND_ROOT_DIR}/source/core/loki/languages.c
+    ${PSND_ROOT_DIR}/source/core/loki/selection.c
+    ${PSND_ROOT_DIR}/source/core/loki/search.c
+    ${PSND_ROOT_DIR}/source/core/loki/modal.c
+    ${PSND_ROOT_DIR}/source/core/loki/command.c
+    ${PSND_ROOT_DIR}/source/core/loki/command/file.c
+    ${PSND_ROOT_DIR}/source/core/loki/command/basic.c
+    ${PSND_ROOT_DIR}/source/core/loki/command/goto.c
+    ${PSND_ROOT_DIR}/source/core/loki/command/substitute.c
+    ${PSND_ROOT_DIR}/source/core/loki/command/link.c
+    ${PSND_ROOT_DIR}/source/core/loki/command/csd.c
+    ${PSND_ROOT_DIR}/source/core/loki/command/export.c
+    ${PSND_ROOT_DIR}/source/core/loki/terminal.c
+    ${PSND_ROOT_DIR}/source/core/loki/undo.c
+    ${PSND_ROOT_DIR}/source/core/loki/buffers.c
+    ${PSND_ROOT_DIR}/source/core/loki/link.c
+    ${PSND_ROOT_DIR}/source/core/loki/csound.c
+    ${PSND_ROOT_DIR}/source/core/loki/export.c
+    ${PSND_ROOT_DIR}/source/core/loki/midi_export.cpp
+    ${PSND_ROOT_DIR}/source/core/loki/lang_bridge.c
+    ${PSND_ROOT_DIR}/source/core/loki/repl_launcher.c
+    ${PSND_ROOT_DIR}/source/core/loki/serialize.c
 )
 
-# Language-specific register sources (in src/lang/*/register.c)
-set(LOKI_LANG_SOURCES)
-if(LANG_ALDA)
-    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/lang/alda/register.c)
-endif()
-if(LANG_JOY)
-    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/lang/joy/register.c)
-endif()
-if(LANG_TR7)
-    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/lang/tr7/register.c)
-endif()
-if(LANG_BOG)
-    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/lang/bog/register.c)
-endif()
+# Collect language-specific register sources from discovered languages
+psnd_collect_lang_sources()
 
 add_library(libloki ${LOKI_LIBRARY_TYPE}
     ${LOKI_CORE_SOURCES}
-    ${LOKI_LANG_SOURCES}
+    ${PSND_ALL_LANG_REGISTER_SOURCES}
 )
 
+# Base include directories
 set(LOKI_PUBLIC_INCLUDES
-    ${PSND_ROOT_DIR}/include
-    ${PSND_ROOT_DIR}/src
-    ${PSND_ROOT_DIR}/src/lang/alda/include
-    ${PSND_ROOT_DIR}/src/lang/joy/impl
-    ${PSND_ROOT_DIR}/src/lang/joy/music
-    ${PSND_ROOT_DIR}/src/lang/joy/midi
-    ${PSND_ROOT_DIR}/src/lang/bog/impl
-    ${PSND_ROOT_DIR}/thirdparty/link-3.1.5/extensions/abl_link/include
-    ${PSND_ROOT_DIR}/thirdparty/midifile/include
+    ${PSND_ROOT_DIR}/source/core/include
+    ${PSND_ROOT_DIR}/source/core
+    ${CMAKE_BINARY_DIR}/generated
+    ${PSND_ROOT_DIR}/source/thirdparty/link-3.1.5/extensions/abl_link/include
+    ${PSND_ROOT_DIR}/source/thirdparty/midifile/include
+    ${PSND_ALL_LANG_INCLUDES}
 )
 
 target_include_directories(libloki PUBLIC ${LOKI_PUBLIC_INCLUDES})
@@ -84,25 +70,13 @@ set(LOKI_PUBLIC_LIBS
     shared
 )
 
-# Language-specific libraries
-if(LANG_ALDA)
-    list(APPEND LOKI_PUBLIC_LIBS alda)
-    target_compile_definitions(libloki PUBLIC LANG_ALDA=1)
-endif()
-if(LANG_JOY)
-    list(APPEND LOKI_PUBLIC_LIBS joy)
-    target_compile_definitions(libloki PUBLIC LANG_JOY=1)
-endif()
-if(LANG_TR7)
-    list(APPEND LOKI_PUBLIC_LIBS tr7)
-    target_compile_definitions(libloki PUBLIC LANG_TR7=1)
-endif()
-if(LANG_BOG)
-    list(APPEND LOKI_PUBLIC_LIBS bog)
-    target_compile_definitions(libloki PUBLIC LANG_BOG=1)
-endif()
+# Add language libraries from discovered languages
+list(APPEND LOKI_PUBLIC_LIBS ${PSND_ALL_LANG_LINK_LIBRARIES})
 
 target_link_libraries(libloki PUBLIC ${LOKI_PUBLIC_LIBS})
+
+# Apply language compile definitions (LANG_ALDA=1, LANG_JOY=1, etc.)
+psnd_apply_lang_definitions(libloki)
 
 set_target_properties(libloki PROPERTIES OUTPUT_NAME "loki")
 

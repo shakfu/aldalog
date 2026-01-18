@@ -19,13 +19,7 @@ endif()
 option(LOKI_BUILD_SHARED "Build libloki as a shared library" OFF)
 option(ENABLE_LTO_IPO "Enable Link-time interprocedural optimization" OFF)
 option(BUILD_CSOUND_BACKEND "Build with Csound synthesis backend (requires libsndfile)" OFF)
-
-# default on
 option(BUILD_TESTING "Build tests (default on)" ON)
-option(LANG_ALDA "Include the Alda language" ON)
-option(LANG_JOY "Include the Joy language" ON)
-option(LANG_TR7 "Include the TR7 Scheme language" ON)
-option(LANG_BOG "Include the Bog language" ON)
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
@@ -46,29 +40,10 @@ endif()
 
 find_package(Threads REQUIRED)
 
-add_subdirectory(${PSND_ROOT_DIR}/thirdparty ${CMAKE_BINARY_DIR}/thirdparty)
-
-# common
-include(psnd_shared_library)
-include(psnd_loki_library)
-
-# langs
-if(LANG_ALDA)
-    include(psnd_alda_library)
-endif()
-
-
-if(LANG_JOY)
-    include(psnd_joy_library)
-endif()
-
-if(LANG_BOG)
-    include(psnd_bog_library)
-endif()
-
-# binary
-include(psnd_psnd_binary)
-
+# Enable testing at the top level
 if(BUILD_TESTING)
-    include(psnd_tests)
+    enable_testing()
 endif()
+
+# Build everything from source/
+add_subdirectory(source)

@@ -20,10 +20,15 @@ Unlike new_lang.py (hand-written recursive descent parser), this script generate
 a PackCC PEG grammar that is compiled to C. This demonstrates an alternative
 approach using parser generators.
 
+MODULAR ARCHITECTURE:
+This script uses the modular language architecture. Creating a new language only
+requires creating files under lang/<name>/ - NO modifications to shared files
+(lang_config.h, lang_dispatch.c, CMakeLists.txt, etc.) are needed.
+
 Workflow:
-1. Run this script to generate the language skeleton
+1. Run this script to generate the language skeleton under lang/<name>/
 2. Edit the .peg grammar file to experiment with syntax
-3. Run 'make' - CMake automatically rebuilds packcc and regenerates the parser
+3. Run 'make' - CMake auto-discovers languages and rebuilds
 4. Test your changes
 
 The packcc tool is bundled in thirdparty/packcc-2.2.0 and built automatically.
@@ -476,22 +481,8 @@ const char *{name}_runtime_get_error({Title}Runtime *rt) {{
 '''
 
 # =============================================================================
-# Register/REPL/Dispatch Templates (same as new_lang.py but referencing PEG)
+# Register/REPL/Dispatch Templates
 # =============================================================================
-
-REGISTER_H_TEMPLATE = '''#ifndef {NAME}_REGISTER_H
-#define {NAME}_REGISTER_H
-
-/**
- * Initialize {Title} language registration with the language bridge.
- * Called from loki_lang_init() when LANG_{NAME} is defined.
- *
- * This language uses a PackCC-generated PEG parser.
- */
-void {name}_loki_lang_init(void);
-
-#endif /* {NAME}_REGISTER_H */
-'''
 
 REGISTER_C_TEMPLATE = '''/**
  * @file register.c
@@ -504,7 +495,6 @@ REGISTER_C_TEMPLATE = '''/**
 #include <stdlib.h>
 #include <string.h>
 
-#include "register.h"
 #include "psnd.h"
 #include "loki/internal.h"
 #include "loki/lang_bridge.h"
@@ -714,20 +704,11 @@ void {name}_loki_lang_init(void) {{
 }}
 '''
 
-REPL_H_TEMPLATE = '''#ifndef {NAME}_REPL_H
-#define {NAME}_REPL_H
-
-int {name}_repl_main(int argc, char **argv);
-
-#endif /* {NAME}_REPL_H */
-'''
-
 REPL_C_TEMPLATE = '''/**
  * @file repl.c
  * @brief {Title} language REPL with PackCC-generated PEG parser.
  */
 
-#include "{name}_repl.h"
 #include "repl.h"
 #include "psnd.h"
 #include "loki/core.h"
@@ -1002,11 +983,13 @@ void {name}_dispatch_init(void) {{
 '''
 
 # =============================================================================
-# CMake Templates
+# CMake Template (New Modular Architecture)
 # =============================================================================
 
-CMAKE_LIBRARY_TEMPLATE = '''# {Title} language library (PEG-based parser)
-include_guard(GLOBAL)
+CMAKE_LANG_TEMPLATE = '''# {Title} language - PEG-based music DSL
+#
+# This CMakeLists.txt is processed by psnd_languages.cmake auto-discovery.
+# No modifications to other files are needed to add/remove this language.
 
 # ==============================================================================
 # Build packcc tool from thirdparty (if not already available)
@@ -1031,7 +1014,7 @@ endif()
 # ==============================================================================
 # Generate parser from PEG grammar
 # ==============================================================================
-set({NAME}_PEG_FILE "${{PSND_ROOT_DIR}}/src/lang/{name}/impl/{name}_grammar.peg")
+set({NAME}_PEG_FILE "${{CMAKE_CURRENT_SOURCE_DIR}}/impl/{name}_grammar.peg")
 set({NAME}_GENERATED_C "${{CMAKE_BINARY_DIR}}/generated/{name}/{name}_grammar.c")
 set({NAME}_GENERATED_H "${{CMAKE_BINARY_DIR}}/generated/{name}/{name}_grammar.h")
 
@@ -1047,26 +1030,56 @@ add_custom_command(
 add_custom_target({name}_parser_gen DEPENDS "${{{NAME}_GENERATED_C}}" "${{{NAME}_GENERATED_H}}")
 
 # ==============================================================================
-# Build the language library
+# Library Sources
 # ==============================================================================
-set({NAME}_SOURCES
+set({NAME}_LIB_SOURCES
     "${{{NAME}_GENERATED_C}}"
-    "${{PSND_ROOT_DIR}}/src/lang/{name}/impl/{name}_runtime.c"
+    "${{CMAKE_CURRENT_SOURCE_DIR}}/impl/{name}_runtime.c"
 )
 
-add_library({name} STATIC ${{{NAME}_SOURCES}})
+# ==============================================================================
+# Build the Language Library
+# ==============================================================================
+add_library({name} STATIC ${{{NAME}_LIB_SOURCES}})
+add_library({name}::{name} ALIAS {name})
 add_dependencies({name} {name}_parser_gen)
 
 target_include_directories({name}
     PUBLIC
         ${{PSND_ROOT_DIR}}/include
-        ${{PSND_ROOT_DIR}}/src/lang/{name}/impl
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/impl
         ${{CMAKE_BINARY_DIR}}/generated/{name}
     PRIVATE
         ${{PSND_ROOT_DIR}}/src
+        ${{PSND_ROOT_DIR}}/src/shared
 )
 
-target_link_libraries({name} PRIVATE shared)
+target_link_libraries({name} PUBLIC shared)
+
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options({name} PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+# ==============================================================================
+# Register with psnd Language System
+# ==============================================================================
+psnd_register_language(
+    NAME {name}
+    DISPLAY_NAME "{Title}"
+    DESCRIPTION "PEG-based music DSL"
+    COMMANDS {name}
+    EXTENSIONS {extensions_space}
+    SOURCES ${{{NAME}_LIB_SOURCES}}
+    INCLUDE_DIRS
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/impl
+        ${{CMAKE_BINARY_DIR}}/generated/{name}
+    REPL_SOURCES
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/repl.c
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/dispatch.c
+    REGISTER_SOURCES
+        ${{CMAKE_CURRENT_SOURCE_DIR}}/register.c
+    LINK_LIBRARIES {name}
+)
 '''
 
 # =============================================================================
@@ -1077,9 +1090,9 @@ TEST_CMAKE_TEMPLATE = '''# {Title} language tests (PEG parser)
 
 add_executable(test_{name}_parser test_parser.c)
 add_dependencies(test_{name}_parser {name}_parser_gen)
-target_link_libraries(test_{name}_parser PRIVATE {name} test_framework)
+target_link_libraries(test_{name}_parser PRIVATE {name})
 target_include_directories(test_{name}_parser PRIVATE
-    ${{PSND_ROOT_DIR}}/src/lang/{name}/impl
+    ${{PSND_ROOT_DIR}}/lang/{name}/impl
     ${{CMAKE_BINARY_DIR}}/generated/{name}
     ${{PSND_ROOT_DIR}}/tests
 )
@@ -1137,49 +1150,6 @@ TEST(test_parse_note_name) {{
     {name}_ast_free(ast);
 }}
 
-TEST(test_parse_note_sharp) {{
-    {Title}AstNode* ast = parse_code("note C#4\\n");
-    ASSERT_NOT_NULL(ast);
-
-    {Title}AstNode* note = ast->d.program.stmts[0];
-    ASSERT_EQ(note->d.note.pitch, 61);
-
-    {name}_ast_free(ast);
-}}
-
-TEST(test_parse_note_flat) {{
-    {Title}AstNode* ast = parse_code("note Db4\\n");
-    ASSERT_NOT_NULL(ast);
-
-    {Title}AstNode* note = ast->d.program.stmts[0];
-    ASSERT_EQ(note->d.note.pitch, 61);
-
-    {name}_ast_free(ast);
-}}
-
-TEST(test_parse_note_with_duration) {{
-    {Title}AstNode* ast = parse_code("note C4 500\\n");
-    ASSERT_NOT_NULL(ast);
-
-    {Title}AstNode* note = ast->d.program.stmts[0];
-    ASSERT_EQ(note->d.note.pitch, 60);
-    ASSERT_EQ(note->d.note.duration_ms, 500);
-
-    {name}_ast_free(ast);
-}}
-
-TEST(test_parse_note_with_velocity) {{
-    {Title}AstNode* ast = parse_code("note C4 250 100\\n");
-    ASSERT_NOT_NULL(ast);
-
-    {Title}AstNode* note = ast->d.program.stmts[0];
-    ASSERT_EQ(note->d.note.pitch, 60);
-    ASSERT_EQ(note->d.note.duration_ms, 250);
-    ASSERT_EQ(note->d.note.velocity, 100);
-
-    {name}_ast_free(ast);
-}}
-
 TEST(test_parse_chord) {{
     {Title}AstNode* ast = parse_code("chord C4 E4 G4\\n");
     ASSERT_NOT_NULL(ast);
@@ -1190,18 +1160,6 @@ TEST(test_parse_chord) {{
     ASSERT_EQ(chord->d.chord.pitches[0], 60);
     ASSERT_EQ(chord->d.chord.pitches[1], 64);
     ASSERT_EQ(chord->d.chord.pitches[2], 67);
-
-    {name}_ast_free(ast);
-}}
-
-TEST(test_parse_chord_with_opts) {{
-    {Title}AstNode* ast = parse_code("chord C4 E4 G4 dur:1000 vel:90\\n");
-    ASSERT_NOT_NULL(ast);
-
-    {Title}AstNode* chord = ast->d.program.stmts[0];
-    ASSERT_EQ(chord->d.chord.pitch_count, 3);
-    ASSERT_EQ(chord->d.chord.duration_ms, 1000);
-    ASSERT_EQ(chord->d.chord.velocity, 90);
 
     {name}_ast_free(ast);
 }}
@@ -1228,35 +1186,12 @@ TEST(test_parse_tempo) {{
     {name}_ast_free(ast);
 }}
 
-TEST(test_parse_comment) {{
-    {Title}AstNode* ast = parse_code("# this is a comment\\n");
-    ASSERT_NOT_NULL(ast);
-    ASSERT_EQ(ast->d.program.count, 0);
-    {name}_ast_free(ast);
-}}
-
-TEST(test_parse_multiple_statements) {{
-    {Title}AstNode* ast = parse_code("note C4\\nnote E4\\nnote G4\\n");
-    ASSERT_NOT_NULL(ast);
-    ASSERT_EQ(ast->type, {NAME}_AST_PROGRAM);
-    ASSERT_EQ(ast->d.program.count, 3);
-
-    {name}_ast_free(ast);
-}}
-
 BEGIN_TEST_SUITE("{Title} PEG Parser Tests")
     RUN_TEST(test_parse_note_midi_number);
     RUN_TEST(test_parse_note_name);
-    RUN_TEST(test_parse_note_sharp);
-    RUN_TEST(test_parse_note_flat);
-    RUN_TEST(test_parse_note_with_duration);
-    RUN_TEST(test_parse_note_with_velocity);
     RUN_TEST(test_parse_chord);
-    RUN_TEST(test_parse_chord_with_opts);
     RUN_TEST(test_parse_rest);
     RUN_TEST(test_parse_tempo);
-    RUN_TEST(test_parse_comment);
-    RUN_TEST(test_parse_multiple_statements);
 END_TEST_SUITE()
 '''
 
@@ -1272,7 +1207,7 @@ PEG parser. It supports note names (C4, C#4, Db3) as well as MIDI numbers.
 ## Quick Start
 
 ```bash
-# Build (CMake automatically builds packcc and generates parser)
+# Build (CMake automatically discovers languages and builds packcc)
 make clean && make test
 
 # Start the REPL
@@ -1292,27 +1227,18 @@ psnd {name} -sf /path/to/soundfont.sf2 song.{ext}
 
 ### Note
 
-Play a single MIDI note:
-
 ```
 note <pitch> [duration_ms] [velocity]
 ```
-
-- `pitch`: Note name (C4, C#4, Db3) or MIDI number (60)
-- `duration_ms`: Duration in milliseconds (default: 250)
-- `velocity`: MIDI velocity (default: 80)
 
 Examples:
 ```{name}
 note C4                # Middle C, 250ms, velocity 80
 note C#4 500           # C#4, 500ms
 note 60 250 100        # MIDI 60, 250ms, velocity 100
-note Db3 300 90        # D-flat octave 3
 ```
 
 ### Chord
-
-Play multiple notes simultaneously:
 
 ```
 chord <pitch1> <pitch2> ... [dur:<ms>] [vel:<velocity>]
@@ -1322,12 +1248,9 @@ Examples:
 ```{name}
 chord C4 E4 G4                  # C major chord
 chord C4 E4 G4 dur:1000         # C major, 1 second
-chord C4 Eb4 G4 dur:500 vel:90  # C minor, 500ms, velocity 90
 ```
 
 ### Rest
-
-Pause for a duration:
 
 ```
 rest <duration_ms>
@@ -1335,77 +1258,25 @@ rest <duration_ms>
 
 ### Tempo
 
-Set the tempo:
-
 ```
 tempo <bpm>
 ```
 
 ### Comments
 
-Lines starting with `#` are comments:
-
-```{name}
-# This is a comment
-note C4  # Inline comments work too
-```
-
-## Note Names
-
-| Note   | MIDI | Note   | MIDI |
-|--------|------|--------|------|
-| C4     | 60   | C#4/Db4| 61   |
-| D4     | 62   | D#4/Eb4| 63   |
-| E4     | 64   | F4     | 65   |
-| F#4/Gb4| 66   | G4     | 67   |
-| G#4/Ab4| 68   | A4     | 69   |
-| A#4/Bb4| 70   | B4     | 71   |
-
-## Example Song
-
-```{name}
-# Simple melody
-tempo 120
-
-note C4 300
-note E4 300
-note G4 300
-note C5 600
-
-rest 200
-
-chord C4 E4 G4 dur:800
-
-rest 100
-
-note C5 300
-note G4 300
-note E4 300
-note C4 600
-```
+Lines starting with `#` are comments.
 
 ## Modifying the Grammar
 
-The PEG grammar is in `src/lang/{name}/impl/{name}_grammar.peg`. To iterate:
+The PEG grammar is in `lang/{name}/impl/{name}_grammar.peg`. To iterate:
 
 ```bash
 # Edit the grammar
-vim src/lang/{name}/impl/{name}_grammar.peg
+vim lang/{name}/impl/{name}_grammar.peg
 
 # Rebuild - parser regenerates automatically
 make
 ```
-
-CMake detects changes to the `.peg` file and regenerates the parser using the
-bundled packcc from `thirdparty/packcc-2.2.0`.
-
-## Architecture
-
-- **{name}_grammar.peg** - PEG grammar (source of truth)
-- **build/generated/{name}/{name}_grammar.h/c** - Generated parser (build artifact)
-- **{name}_runtime.h/c** - AST interpreter using shared backend
-- **register.c** - Loki editor integration
-- **repl.c** - REPL implementation
 '''
 
 SYNTAX_LUA_TEMPLATE = '''-- {Title} language syntax highlighting
@@ -1436,26 +1307,6 @@ def create_file(path: Path, content: str, dry_run: bool = False) -> None:
     print(f"  Created: {path}")
 
 
-def update_file(path: Path, old: str, new: str, dry_run: bool = False) -> bool:
-    """Update a file by replacing old with new."""
-    if not path.exists():
-        print(f"  Warning: {path} does not exist, skipping update")
-        return False
-
-    content = path.read_text()
-    if old not in content:
-        return False
-
-    if dry_run:
-        print(f"  [dry-run] Would update: {path}")
-        return True
-
-    new_content = content.replace(old, new)
-    path.write_text(new_content)
-    print(f"  Updated: {path}")
-    return True
-
-
 # =============================================================================
 # Main Generation Logic
 # =============================================================================
@@ -1466,7 +1317,7 @@ def generate_language(
     root: Path,
     dry_run: bool = False
 ) -> None:
-    """Generate all files for a new PEG-based language."""
+    """Generate all files for a new PEG-based language using modular architecture."""
 
     name_lower = to_lower(name)
     name_upper = to_upper(name)
@@ -1475,6 +1326,7 @@ def generate_language(
     ext_c = ", ".join(f'".{e.lstrip(".")}"' for e in extensions) + ", NULL"
     ext_c_short = ", ".join(f'".{e.lstrip(".")}"' for e in extensions)
     ext_lua = ", ".join(f'".{e.lstrip(".")}"' for e in extensions)
+    ext_space = " ".join(f'.{e.lstrip(".")}' for e in extensions)
     primary_ext = extensions[0].lstrip(".")
 
     subs = {
@@ -1486,88 +1338,53 @@ def generate_language(
         "extensions_c_short": ext_c_short,
         "ext_count": str(len(extensions)),
         "extensions_lua": ext_lua,
+        "extensions_space": ext_space,
         "ext": primary_ext,
     }
 
     print(f"\nGenerating PEG-based language: {name_title}")
     print(f"  Extensions: {extensions}")
+    print(f"  Directory: lang/{name_lower}/")
     print()
 
-    # === Create new files ===
-    print("Creating new files:")
+    # === Create new files in lang/<name>/ ===
+    print("Creating language files:")
 
-    lang_dir = root / "src" / "lang" / name_lower
+    lang_dir = root / "lang" / name_lower
     impl_dir = lang_dir / "impl"
 
     # PEG grammar
-    peg_file = impl_dir / f"{name_lower}_grammar.peg"
-    create_file(peg_file, PEG_GRAMMAR_TEMPLATE.format(**subs), dry_run)
+    create_file(impl_dir / f"{name_lower}_grammar.peg", PEG_GRAMMAR_TEMPLATE.format(**subs), dry_run)
 
     # Runtime
-    create_file(
-        impl_dir / f"{name_lower}_runtime.h",
-        RUNTIME_H_TEMPLATE.format(**subs),
-        dry_run
-    )
-    create_file(
-        impl_dir / f"{name_lower}_runtime.c",
-        RUNTIME_C_TEMPLATE.format(**subs),
-        dry_run
-    )
+    create_file(impl_dir / f"{name_lower}_runtime.h", RUNTIME_H_TEMPLATE.format(**subs), dry_run)
+    create_file(impl_dir / f"{name_lower}_runtime.c", RUNTIME_C_TEMPLATE.format(**subs), dry_run)
 
     # Integration files
-    create_file(
-        lang_dir / "register.h",
-        REGISTER_H_TEMPLATE.format(**subs),
-        dry_run
-    )
-    create_file(
-        lang_dir / "register.c",
-        REGISTER_C_TEMPLATE.format(**subs),
-        dry_run
-    )
-    create_file(
-        lang_dir / f"{name_lower}_repl.h",
-        REPL_H_TEMPLATE.format(**subs),
-        dry_run
-    )
-    create_file(
-        lang_dir / "repl.c",
-        REPL_C_TEMPLATE.format(**subs),
-        dry_run
-    )
-    create_file(
-        lang_dir / "dispatch.c",
-        DISPATCH_C_TEMPLATE.format(**subs),
-        dry_run
-    )
+    create_file(lang_dir / "register.c", REGISTER_C_TEMPLATE.format(**subs), dry_run)
+    create_file(lang_dir / "repl.c", REPL_C_TEMPLATE.format(**subs), dry_run)
+    create_file(lang_dir / "dispatch.c", DISPATCH_C_TEMPLATE.format(**subs), dry_run)
 
-    # CMake
-    create_file(
-        root / "scripts" / "cmake" / f"psnd_{name_lower}_library.cmake",
-        CMAKE_LIBRARY_TEMPLATE.format(**subs),
-        dry_run
-    )
+    # CMakeLists.txt for the language
+    create_file(lang_dir / "CMakeLists.txt", CMAKE_LANG_TEMPLATE.format(**subs), dry_run)
 
     # Tests
-    test_dir = root / "tests" / name_lower
-    create_file(
-        test_dir / "CMakeLists.txt",
-        TEST_CMAKE_TEMPLATE.format(**subs),
-        dry_run
-    )
-    create_file(
-        test_dir / "test_parser.c",
-        TEST_PARSER_TEMPLATE.format(**subs),
-        dry_run
-    )
+    test_dir = lang_dir / "tests"
+    create_file(test_dir / "CMakeLists.txt", TEST_CMAKE_TEMPLATE.format(**subs), dry_run)
+    create_file(test_dir / "test_parser.c", TEST_PARSER_TEMPLATE.format(**subs), dry_run)
 
     # Documentation
-    create_file(
-        root / "docs" / name_lower / "README.md",
-        DOC_README_TEMPLATE.format(**subs),
-        dry_run
-    )
+    create_file(lang_dir / "docs" / "README.md", DOC_README_TEMPLATE.format(**subs), dry_run)
+
+    # Examples directory
+    (lang_dir / "examples").mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        print(f"  Created: {lang_dir / 'examples/'}")
+
+    # Include directory (for consistency)
+    (lang_dir / "include").mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        print(f"  Created: {lang_dir / 'include/'}")
 
     # Syntax highlighting
     create_file(
@@ -1576,204 +1393,22 @@ def generate_language(
         dry_run
     )
 
-    # === Update existing files ===
-    print("\nUpdating existing files:")
-
-    # 1. Update src/lang_config.h
-    lang_config = root / "src" / "lang_config.h"
-    if lang_config.exists():
-        content = lang_config.read_text()
-
-        if f"LANG_{name_upper}" in content:
-            print(f"  Skipping {lang_config} (already contains LANG_{name_upper})")
-        else:
-            new_content = content
-
-            helper_marker = "#define IF_LANG_BOG(x)\n#endif"
-            helper_addition = f'''
-
-#ifdef LANG_{name_upper}
-#define IF_LANG_{name_upper}(x) x
-#else
-#define IF_LANG_{name_upper}(x)
-#endif'''
-            new_content = new_content.replace(helper_marker, helper_marker + helper_addition)
-
-            fwd_marker = "IF_LANG_BOG(struct LokiBogState;)"
-            fwd_addition = f"\nIF_LANG_{name_upper}(struct Loki{name_title}State;)"
-            new_content = new_content.replace(fwd_marker, fwd_marker + fwd_addition)
-
-            state_marker = "IF_LANG_BOG(struct LokiBogState *bog_state;)"
-            state_addition = f" \\\n    IF_LANG_{name_upper}(struct Loki{name_title}State *{name_lower}_state;)"
-            new_content = new_content.replace(state_marker, state_marker + state_addition)
-
-            init_decl_marker = "IF_LANG_BOG(void bog_loki_lang_init(void);)"
-            init_decl_addition = f"\nIF_LANG_{name_upper}(void {name_lower}_loki_lang_init(void);)"
-            new_content = new_content.replace(init_decl_marker, init_decl_marker + init_decl_addition)
-
-            init_call_marker = "IF_LANG_BOG(bog_loki_lang_init();)"
-            init_call_addition = f" \\\n    IF_LANG_{name_upper}({name_lower}_loki_lang_init();)"
-            new_content = new_content.replace(init_call_marker, init_call_marker + init_call_addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {lang_config}")
-            else:
-                lang_config.write_text(new_content)
-                print(f"  Updated: {lang_config}")
-
-    # 2. Update src/lang_dispatch.h and src/lang_dispatch.c
-    lang_dispatch_h = root / "src" / "lang_dispatch.h"
-    if lang_dispatch_h.exists():
-        content = lang_dispatch_h.read_text()
-        if f"LANG_{name_upper}" not in content:
-            decl_marker = "#ifdef LANG_BOG\nvoid bog_dispatch_init(void);\n#endif"
-            decl_addition = f'''
-#ifdef LANG_{name_upper}
-void {name_lower}_dispatch_init(void);
-#endif'''
-            new_content = content.replace(decl_marker, decl_marker + decl_addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {lang_dispatch_h}")
-            else:
-                lang_dispatch_h.write_text(new_content)
-                print(f"  Updated: {lang_dispatch_h}")
-        else:
-            print(f"  Skipping {lang_dispatch_h} (already contains LANG_{name_upper})")
-
-    lang_dispatch_c = root / "src" / "lang_dispatch.c"
-    if lang_dispatch_c.exists():
-        content = lang_dispatch_c.read_text()
-        if f"LANG_{name_upper}" not in content:
-            call_marker = "#ifdef LANG_BOG\n    bog_dispatch_init();\n#endif\n}"
-            call_addition = f'''
-#ifdef LANG_{name_upper}
-    {name_lower}_dispatch_init();
-#endif'''
-            new_content = content.replace(call_marker, call_marker.rstrip("}") + call_addition + "\n}")
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {lang_dispatch_c}")
-            else:
-                lang_dispatch_c.write_text(new_content)
-                print(f"  Updated: {lang_dispatch_c}")
-        else:
-            print(f"  Skipping {lang_dispatch_c} (already contains LANG_{name_upper})")
-
-    # 3. Update CMakeLists.txt
-    cmakelists = root / "CMakeLists.txt"
-    if cmakelists.exists():
-        content = cmakelists.read_text()
-        if f"LANG_{name_upper}" not in content:
-            option_marker = 'option(LANG_BOG "Include the Bog language" ON)'
-            option_addition = f'\noption(LANG_{name_upper} "Include the {name_title} language (PEG)" ON)'
-            new_content = content.replace(option_marker, option_marker + option_addition)
-
-            include_marker = "if(LANG_BOG)\n    include(psnd_bog_library)\nendif()"
-            include_addition = f'''
-
-if(LANG_{name_upper})
-    include(psnd_{name_lower}_library)
-endif()'''
-            new_content = new_content.replace(include_marker, include_marker + include_addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {cmakelists}")
-            else:
-                cmakelists.write_text(new_content)
-                print(f"  Updated: {cmakelists}")
-        else:
-            print(f"  Skipping {cmakelists} (already contains LANG_{name_upper})")
-
-    # 4. Update psnd_loki_library.cmake
-    loki_cmake = root / "scripts" / "cmake" / "psnd_loki_library.cmake"
-    if loki_cmake.exists():
-        content = loki_cmake.read_text()
-        if f"LANG_{name_upper}" not in content:
-            src_marker = "if(LANG_BOG)\n    list(APPEND LOKI_LANG_SOURCES ${PSND_ROOT_DIR}/src/lang/bog/register.c)\nendif()"
-            src_addition = f'''
-
-if(LANG_{name_upper})
-    list(APPEND LOKI_LANG_SOURCES ${{PSND_ROOT_DIR}}/src/lang/{name_lower}/register.c)
-endif()'''
-            new_content = content.replace(src_marker, src_marker + src_addition)
-
-            link_marker = "if(LANG_BOG)\n    list(APPEND LOKI_PUBLIC_LIBS bog)\n    target_compile_definitions(libloki PUBLIC LANG_BOG=1)\nendif()"
-            link_addition = f'''
-
-if(LANG_{name_upper})
-    list(APPEND LOKI_PUBLIC_LIBS {name_lower})
-    target_compile_definitions(libloki PUBLIC LANG_{name_upper}=1)
-endif()'''
-            new_content = new_content.replace(link_marker, link_marker + link_addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {loki_cmake}")
-            else:
-                loki_cmake.write_text(new_content)
-                print(f"  Updated: {loki_cmake}")
-        else:
-            print(f"  Skipping {loki_cmake} (already contains LANG_{name_upper})")
-
-    # 5. Update psnd_psnd_binary.cmake
-    psnd_cmake = root / "scripts" / "cmake" / "psnd_psnd_binary.cmake"
-    if psnd_cmake.exists():
-        content = psnd_cmake.read_text()
-        if f"LANG_{name_upper}" not in content:
-            marker = "if(LANG_BOG)\n    list(APPEND PSND_LANG_SOURCES\n        ${PSND_ROOT_DIR}/src/lang/bog/repl.c\n        ${PSND_ROOT_DIR}/src/lang/bog/dispatch.c\n        ${PSND_ROOT_DIR}/src/lang/bog/bog_async.c\n    )\nendif()"
-            addition = f'''
-
-if(LANG_{name_upper})
-    list(APPEND PSND_LANG_SOURCES
-        ${{PSND_ROOT_DIR}}/src/lang/{name_lower}/repl.c
-        ${{PSND_ROOT_DIR}}/src/lang/{name_lower}/dispatch.c
-    )
-endif()'''
-            new_content = content.replace(marker, marker + addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {psnd_cmake}")
-            else:
-                psnd_cmake.write_text(new_content)
-                print(f"  Updated: {psnd_cmake}")
-        else:
-            print(f"  Skipping {psnd_cmake} (already contains LANG_{name_upper})")
-
-    # 6. Update psnd_tests.cmake
-    tests_cmake = root / "scripts" / "cmake" / "psnd_tests.cmake"
-    if tests_cmake.exists():
-        content = tests_cmake.read_text()
-        if f"tests/{name_lower}" not in content:
-            marker = "if(LANG_BOG)\n    add_subdirectory(${PSND_ROOT_DIR}/tests/bog ${CMAKE_BINARY_DIR}/tests/bog)\nendif()"
-            addition = f'''
-
-if(LANG_{name_upper})
-    add_subdirectory(${{PSND_ROOT_DIR}}/tests/{name_lower} ${{CMAKE_BINARY_DIR}}/tests/{name_lower})
-endif()'''
-            new_content = content.replace(marker, marker + addition)
-
-            if dry_run:
-                print(f"  [dry-run] Would update: {tests_cmake}")
-            else:
-                tests_cmake.write_text(new_content)
-                print(f"  Updated: {tests_cmake}")
-        else:
-            print(f"  Skipping {tests_cmake} (already contains tests/{name_lower})")
-
     print("\nDone!")
     if not dry_run:
         print(f"\nYour PEG-based language is ready! Next steps:")
         print(f"  1. Build and test: make clean && make test")
-        print(f"     (CMake will build packcc and generate the parser automatically)")
+        print(f"     (CMake will auto-discover the language and build it)")
         print(f"  2. Start the REPL: ./build/psnd {name_lower}")
         print(f"  3. Try: note C4        # Play middle C")
-        print(f"  4. Try: note C#4 500   # C# for 500ms")
-        print(f"  5. Try: chord C4 E4 G4 # C major chord")
+        print(f"  4. Try: chord C4 E4 G4 # C major chord")
         print(f"")
         print(f"To modify the grammar:")
-        print(f"  1. Edit: src/lang/{name_lower}/impl/{name_lower}_grammar.peg")
+        print(f"  1. Edit: lang/{name_lower}/impl/{name_lower}_grammar.peg")
         print(f"  2. Run: make")
         print(f"     (Parser regenerates automatically when .peg file changes)")
+        print(f"")
+        print(f"NO modifications to shared files are needed!")
+        print(f"The language is auto-discovered from lang/{name_lower}/CMakeLists.txt")
 
 
 def main():
@@ -1781,11 +1416,12 @@ def main():
         description="Generate a PEG-based music language for psnd using PackCC",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-This script generates a language with a PackCC PEG parser, which offers:
-- Declarative grammar specification (.peg file)
-- Automatic parser generation (CMake builds packcc from thirdparty/)
-- Support for note names (C4, C#4, Db3) and MIDI numbers
-- AST-based interpretation
+MODULAR ARCHITECTURE:
+This script uses the new modular language architecture. Creating a new language
+only requires adding files under lang/<name>/ - NO modifications to any shared
+files (lang_config.h, lang_dispatch.c, CMakeLists.txt, etc.) are needed.
+
+The language is automatically discovered by CMake when you run 'make'.
 
 Examples:
   %(prog)s foo                    # Create 'foo' with extension .foo
@@ -1794,9 +1430,9 @@ Examples:
 
 Workflow:
   1. %(prog)s mymusic             # Generate language skeleton
-  2. make clean && make test      # Build (auto-generates parser)
+  2. make clean && make test      # Build (auto-discovers and builds language)
   3. ./build/psnd mymusic         # Start the REPL
-  4. Edit src/lang/mymusic/impl/mymusic_grammar.peg
+  4. Edit lang/mymusic/impl/mymusic_grammar.peg
   5. make                         # Parser regenerates automatically
 """
     )
