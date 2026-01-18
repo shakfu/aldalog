@@ -12,6 +12,11 @@
  * WebSocket API:
  *   {"cmd": "load", "filename": "..."}
  *   {"cmd": "save", "filename": "...", "content": "..."}
+ *
+ * To embed xterm.js (no CDN dependency), include host_web_xterm.h before this file:
+ *   #include "host_web_xterm.h"
+ *   #include "host_web.c"
+ * Or define LOKI_EMBED_XTERM and ensure host_web_xterm.h is in the include path.
  */
 
 #ifdef LOKI_WEB_HOST
@@ -30,6 +35,11 @@
 #include <string.h>
 #include <pthread.h>
 
+/* Optional embedded xterm - include host_web_xterm.h to enable */
+#if defined(LOKI_EMBED_XTERM) && !defined(XTERM_CSS)
+#include "host_web_xterm.h"
+#endif
+
 /* ======================= Constants ========================================= */
 
 #define WEB_HOST_QUEUE_SIZE 256
@@ -39,6 +49,17 @@
 
 /* ======================= Embedded Web UI =================================== */
 
+/* xterm.js paths - local when embedded, CDN otherwise */
+#ifdef LOKI_EMBED_XTERM
+#define XTERM_CSS_PATH "/xterm.css"
+#define XTERM_JS_PATH "/xterm.js"
+#define XTERM_FIT_JS_PATH "/xterm-fit.js"
+#else
+#define XTERM_CSS_PATH "https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"
+#define XTERM_JS_PATH "https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"
+#define XTERM_FIT_JS_PATH "https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"
+#endif
+
 /* Complete embedded xterm.js-based UI - no external files needed */
 static const char *EMBEDDED_HTML =
 "<!DOCTYPE html>\n"
@@ -47,7 +68,7 @@ static const char *EMBEDDED_HTML =
 "  <meta charset=\"utf-8\">\n"
 "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
 "  <title>psnd editor</title>\n"
-"  <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css\">\n"
+"  <link rel=\"stylesheet\" href=\"" XTERM_CSS_PATH "\">\n"
 "  <style>\n"
 "    * { box-sizing: border-box; margin: 0; padding: 0; }\n"
 "    html, body { height: 100%; background: #1e1e1e; overflow: hidden; }\n"
@@ -96,8 +117,8 @@ static const char *EMBEDDED_HTML =
 "      <span id=\"position\"></span>\n"
 "    </footer>\n"
 "  </div>\n"
-"  <script src=\"https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js\"></script>\n"
-"  <script src=\"https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js\"></script>\n"
+"  <script src=\"" XTERM_JS_PATH "\"></script>\n"
+"  <script src=\"" XTERM_FIT_JS_PATH "\"></script>\n"
 "  <script>\n"
 "(function() {\n"
 "  var statusEl = document.getElementById('status');\n"
@@ -887,6 +908,25 @@ static void web_host_handler(struct mg_connection *c, int ev, void *ev_data) {
             handle_api_load(c, hm, data);
             return;
         }
+
+#ifdef LOKI_EMBED_XTERM
+        /* Serve embedded xterm.js files */
+        if (mg_match(hm->uri, mg_str("/xterm.css"), NULL)) {
+            mg_http_reply(c, 200, "Content-Type: text/css\r\nCache-Control: max-age=86400\r\n",
+                         "%s", XTERM_CSS);
+            return;
+        }
+        if (mg_match(hm->uri, mg_str("/xterm.js"), NULL)) {
+            mg_http_reply(c, 200, "Content-Type: application/javascript\r\nCache-Control: max-age=86400\r\n",
+                         "%s", XTERM_JS);
+            return;
+        }
+        if (mg_match(hm->uri, mg_str("/xterm-fit.js"), NULL)) {
+            mg_http_reply(c, 200, "Content-Type: application/javascript\r\nCache-Control: max-age=86400\r\n",
+                         "%s", XTERM_FIT_JS);
+            return;
+        }
+#endif
 
         /* Serve static files from web_root */
         if (data->web_root) {
