@@ -79,6 +79,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - **Files Added**: `source/core/loki/session.h`, `source/core/loki/session.c`
   - **Files Modified**: `source/core/CMakeLists.txt`
 
+- **EditorHost Abstraction**: Pluggable host layer for alternate editor environments
+  - Separates CLI parsing and terminal orchestration from session logic
+  - Enables alternate hosts: HTTP server, headless scripting, test harness
+  - `EditorHost` interface with callbacks:
+    - `read_event()` - Read next input event (blocking with timeout)
+    - `render()` - Render current session state
+    - `should_continue()` - Check if host should keep running
+    - `destroy()` - Cleanup host resources
+  - Optional lifecycle callbacks: `on_start`, `on_tick`, `on_quit`, `on_error`
+  - Common entry points:
+    - `editor_host_run(host, config)` - Create session and run to completion
+    - `editor_host_loop(host, session)` - Run main loop with existing session
+  - Built-in host implementations:
+    - `editor_host_terminal_create(fd)` - Interactive terminal editing
+    - `editor_host_headless_create()` - Scripted/automated editing with event queue
+  - Headless host API for automation:
+    - `editor_host_headless_queue_event()` - Queue programmatic input
+    - `editor_host_headless_quit()` - Signal quit
+  - CLI argument parsing extracted to separate module:
+    - `EditorCliArgs` struct for parsed arguments
+    - `editor_cli_parse()` - Parse argc/argv into config
+    - `editor_cli_print_usage()` / `editor_cli_print_version()`
+  - **Files Added**: `source/core/loki/host.h`, `source/core/loki/host.c`, `source/core/loki/cli.h`, `source/core/loki/cli.c`
+  - **Files Modified**: `source/core/CMakeLists.txt`
+
 - **Abstract Input Handling Layer**: Structured event abstraction for editor input
   - Replaces raw keycodes with `EditorEvent` objects for cleaner input processing
   - Modifier flags (`MOD_CTRL`, `MOD_SHIFT`, `MOD_ALT`) separated from keycodes
