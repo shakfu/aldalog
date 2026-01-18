@@ -46,6 +46,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - **Files Added**: `source/core/loki/renderer.h`, `source/core/loki/renderer.c`
   - **Files Modified**: `source/core/loki/internal.h`, `source/core/loki/core.c`, `source/core/loki/selection.c`, `source/core/loki/buffers.h`, `source/core/loki/buffers.c`, `source/core/CMakeLists.txt`
 
+- **EditorSession API**: Opaque handle for embedding the editor
+  - Clean, self-contained API that hides all internal implementation details
+  - `EditorSession` opaque handle encapsulates editor state
+  - Session lifecycle:
+    - `editor_session_new(const EditorConfig*)` - Create session with configuration
+    - `editor_session_free(session)` - Free session and resources
+  - Event handling:
+    - `editor_session_handle_event(session, const EditorEvent*)` - Process input
+    - Returns 0 on success, 1 if editor should quit, -1 on error
+  - View model (render state snapshot):
+    - `editor_session_snapshot(session)` - Get deep copy of render state
+    - `editor_viewmodel_free(vm)` - Free view model
+    - `EditorViewModel` contains all data for rendering:
+      - `EditorRowView` array with segments and owned text
+      - `EditorCursor` with screen and file positions
+      - `EditorTabInfo` for tab bar
+      - `StatusInfo`, `ReplInfo` with owned string copies
+  - Configuration via `EditorConfig`:
+    - Screen dimensions (rows, cols)
+    - Initial filename
+    - Line numbers, word wrap flags
+    - Lua scripting enable flag
+    - Undo limits
+  - Convenience accessors:
+    - `editor_session_get_mode()` - Get current mode
+    - `editor_session_is_dirty()` - Check for unsaved changes
+    - `editor_session_get_filename()` - Get current filename
+    - `editor_session_resize()` - Update screen dimensions
+    - `editor_session_open()` / `editor_session_save()` - File operations
+  - Thread-safe view model: snapshot is a deep copy safe to use from any thread
+  - **Files Added**: `source/core/loki/session.h`, `source/core/loki/session.c`
+  - **Files Modified**: `source/core/CMakeLists.txt`
+
 - **Abstract Input Handling Layer**: Structured event abstraction for editor input
   - Replaces raw keycodes with `EditorEvent` objects for cleaner input processing
   - Modifier flags (`MOD_CTRL`, `MOD_SHIFT`, `MOD_ALT`) separated from keycodes

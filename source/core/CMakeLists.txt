@@ -112,6 +112,7 @@ function(psnd_build_loki)
         ${PSND_CORE_DIR}/loki/repl_launcher.c
         ${PSND_CORE_DIR}/loki/repl_helpers.c
         ${PSND_CORE_DIR}/loki/serialize.c
+        ${PSND_CORE_DIR}/loki/session.c
     )
 
     # Collect language-specific register sources
