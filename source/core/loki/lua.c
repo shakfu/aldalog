@@ -66,6 +66,8 @@ editor_ctx_t* loki_lua_get_editor_context(lua_State *L) {
 /* Lua API: loki.status(message) - Set status message */
 static int lua_loki_status(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) return 0;
+
     const char *msg = luaL_checkstring(L, 1);
     editor_set_status_msg(ctx, "%s", msg);
     return 0;
@@ -1005,8 +1007,13 @@ static int lua_loki_keyunmap(lua_State *L) {
 /* Lua API: loki.link.init(bpm) - Initialize Link subsystem */
 static int lua_link_init(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
-    double bpm = 120.0;
+    if (!ctx) {
+        lua_pushnil(L);
+        lua_pushstring(L, "No editor context");
+        return 2;
+    }
 
+    double bpm = 120.0;
     if (lua_gettop(L) >= 1 && lua_isnumber(L, 1)) {
         bpm = lua_tonumber(L, 1);
     }
@@ -1025,6 +1032,8 @@ static int lua_link_init(lua_State *L) {
 /* Lua API: loki.link.cleanup() - Cleanup Link subsystem */
 static int lua_link_cleanup(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) return 0;
+
     loki_link_cleanup(ctx);
     return 0;
 }
@@ -1032,6 +1041,11 @@ static int lua_link_cleanup(lua_State *L) {
 /* Lua API: loki.link.is_initialized() - Check if Link is initialized */
 static int lua_link_is_initialized(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
     lua_pushboolean(L, loki_link_is_initialized(ctx));
     return 1;
 }
@@ -1039,6 +1053,8 @@ static int lua_link_is_initialized(lua_State *L) {
 /* Lua API: loki.link.enable(bool) - Enable/disable Link */
 static int lua_link_enable(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) return 0;
+
     int enable = lua_toboolean(L, 1);
     loki_link_enable(ctx, enable);
     return 0;
@@ -1047,6 +1063,11 @@ static int lua_link_enable(lua_State *L) {
 /* Lua API: loki.link.is_enabled() - Check if Link is enabled */
 static int lua_link_is_enabled(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
     lua_pushboolean(L, loki_link_is_enabled(ctx));
     return 1;
 }
@@ -1054,6 +1075,11 @@ static int lua_link_is_enabled(lua_State *L) {
 /* Lua API: loki.link.tempo() - Get session tempo */
 static int lua_link_tempo(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) {
+        lua_pushnumber(L, 120.0);  /* Default tempo */
+        return 1;
+    }
+
     lua_pushnumber(L, loki_link_get_tempo(ctx));
     return 1;
 }
@@ -1061,6 +1087,8 @@ static int lua_link_tempo(lua_State *L) {
 /* Lua API: loki.link.set_tempo(bpm) - Set session tempo */
 static int lua_link_set_tempo(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) return 0;
+
     double bpm = luaL_checknumber(L, 1);
     loki_link_set_tempo(ctx, bpm);
     return 0;
@@ -1069,8 +1097,12 @@ static int lua_link_set_tempo(lua_State *L) {
 /* Lua API: loki.link.beat(quantum) - Get current beat position */
 static int lua_link_beat(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
-    double quantum = 4.0;
+    if (!ctx) {
+        lua_pushnumber(L, 0.0);
+        return 1;
+    }
 
+    double quantum = 4.0;
     if (lua_gettop(L) >= 1 && lua_isnumber(L, 1)) {
         quantum = lua_tonumber(L, 1);
     }
@@ -1082,8 +1114,12 @@ static int lua_link_beat(lua_State *L) {
 /* Lua API: loki.link.phase(quantum) - Get phase within quantum */
 static int lua_link_phase(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
-    double quantum = 4.0;
+    if (!ctx) {
+        lua_pushnumber(L, 0.0);
+        return 1;
+    }
 
+    double quantum = 4.0;
     if (lua_gettop(L) >= 1 && lua_isnumber(L, 1)) {
         quantum = lua_tonumber(L, 1);
     }
@@ -1095,6 +1131,11 @@ static int lua_link_phase(lua_State *L) {
 /* Lua API: loki.link.peers() - Get number of connected peers */
 static int lua_link_peers(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) {
+        lua_pushinteger(L, 0);
+        return 1;
+    }
+
     lua_pushinteger(L, (lua_Integer)loki_link_num_peers(ctx));
     return 1;
 }
@@ -1102,6 +1143,8 @@ static int lua_link_peers(lua_State *L) {
 /* Lua API: loki.link.start_stop_sync(bool) - Enable start/stop sync */
 static int lua_link_start_stop_sync(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) return 0;
+
     int enable = lua_toboolean(L, 1);
     loki_link_enable_start_stop_sync(ctx, enable);
     return 0;
@@ -1110,6 +1153,11 @@ static int lua_link_start_stop_sync(lua_State *L) {
 /* Lua API: loki.link.is_start_stop_sync_enabled() */
 static int lua_link_is_start_stop_sync_enabled(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
     lua_pushboolean(L, loki_link_is_start_stop_sync_enabled(ctx));
     return 1;
 }
@@ -1117,6 +1165,11 @@ static int lua_link_is_start_stop_sync_enabled(lua_State *L) {
 /* Lua API: loki.link.is_playing() - Get transport state */
 static int lua_link_is_playing(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
     lua_pushboolean(L, loki_link_is_playing(ctx));
     return 1;
 }
@@ -1124,6 +1177,8 @@ static int lua_link_is_playing(lua_State *L) {
 /* Lua API: loki.link.play() - Start transport */
 static int lua_link_play(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) return 0;
+
     loki_link_set_playing(ctx, 1);
     return 0;
 }
@@ -1131,6 +1186,8 @@ static int lua_link_play(lua_State *L) {
 /* Lua API: loki.link.stop() - Stop transport */
 static int lua_link_stop(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx) return 0;
+
     loki_link_set_playing(ctx, 0);
     return 0;
 }
@@ -1138,8 +1195,9 @@ static int lua_link_stop(lua_State *L) {
 /* Lua API: loki.link.on_peers(callback) - Register peers callback */
 static int lua_link_on_peers(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
-    const char *callback = NULL;
+    if (!ctx) return 0;
 
+    const char *callback = NULL;
     if (lua_gettop(L) >= 1 && !lua_isnil(L, 1)) {
         callback = luaL_checkstring(L, 1);
     }
@@ -1151,8 +1209,9 @@ static int lua_link_on_peers(lua_State *L) {
 /* Lua API: loki.link.on_tempo(callback) - Register tempo callback */
 static int lua_link_on_tempo(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
-    const char *callback = NULL;
+    if (!ctx) return 0;
 
+    const char *callback = NULL;
     if (lua_gettop(L) >= 1 && !lua_isnil(L, 1)) {
         callback = luaL_checkstring(L, 1);
     }
@@ -1164,8 +1223,9 @@ static int lua_link_on_tempo(lua_State *L) {
 /* Lua API: loki.link.on_start_stop(callback) - Register start/stop callback */
 static int lua_link_on_start_stop(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
-    const char *callback = NULL;
+    if (!ctx) return 0;
 
+    const char *callback = NULL;
     if (lua_gettop(L) >= 1 && !lua_isnil(L, 1)) {
         callback = luaL_checkstring(L, 1);
     }
@@ -1242,8 +1302,13 @@ static void lua_register_link_module(lua_State *L) {
  * Returns: true on success, nil + error message on failure */
 static int lua_midi_export(lua_State *L) {
     editor_ctx_t *ctx = loki_lua_get_editor_context(L);
-    const char *filename = luaL_checkstring(L, 1);
+    if (!ctx) {
+        lua_pushnil(L);
+        lua_pushstring(L, "No editor context");
+        return 2;
+    }
 
+    const char *filename = luaL_checkstring(L, 1);
     if (loki_export_midi(ctx, filename) == 0) {
         lua_pushboolean(L, 1);
         return 1;

@@ -19,6 +19,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Live Loop Feature**: Re-evaluate buffer content on beat boundaries synced to Ableton Link
+  - `:loop <beats>` - Start live loop that re-evaluates buffer every N beats (e.g., `:loop 4`)
+  - `:unloop` - Stop live loop for current buffer
+  - `:loop` (no args) - Show current loop status
+  - Requires Ableton Link to be enabled first (`:link on`)
+  - Up to 16 concurrent loops across different buffers
+  - Enables concurrent multi-language live coding with synchronized playback
+  - **Files Added**: `src/loki/live_loop.c`, `src/loki/live_loop.h`, `src/loki/command/loop.c`
+
+- **Playback Ex Commands**: Command-line equivalents for playback control keys
+  - `:play` - Play entire buffer (equivalent to Ctrl-P)
+  - `:eval [code]` - Evaluate given code or current line (equivalent to Ctrl-E)
+  - `:stop` - Stop all playback and live loops (equivalent to Ctrl-G)
+  - All commands dispatch through language bridge based on file extension
+
 - **Bog Language Integration**: Prolog-based live coding language for music, inspired by [dogalog](https://github.com/danja/dogalog)
   - **REPL Mode**: `psnd bog` starts interactive Bog REPL with syntax highlighting
     - Declarative event rules: `event(kick, 36, 0.9, T) :- every(T, 1.0).`

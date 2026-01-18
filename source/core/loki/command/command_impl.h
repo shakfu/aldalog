@@ -61,6 +61,15 @@ int cmd_help(editor_ctx_t *ctx, const char *args);
 /* :set - Set editor options */
 int cmd_set(editor_ctx_t *ctx, const char *args);
 
+/* :stop - Stop all playback and live loops */
+int cmd_stop(editor_ctx_t *ctx, const char *args);
+
+/* :play - Play entire buffer */
+int cmd_play(editor_ctx_t *ctx, const char *args);
+
+/* :eval [code] - Evaluate code or current line */
+int cmd_eval(editor_ctx_t *ctx, const char *args);
+
 /* ======================== Navigation Commands (goto.c) ======================== */
 
 /* :goto, :<number> - Go to line number */
@@ -85,6 +94,14 @@ int cmd_csd(editor_ctx_t *ctx, const char *args);
 
 /* :export - Export to MIDI file */
 int cmd_export(editor_ctx_t *ctx, const char *args);
+
+/* ======================== Live Loop Commands (loop.c) ======================== */
+
+/* :loop <beats> - Start live loop every N beats */
+int cmd_loop(editor_ctx_t *ctx, const char *args);
+
+/* :unloop - Stop live loop for current buffer */
+int cmd_unloop(editor_ctx_t *ctx, const char *args);
 
 /* ======================== Helper for find_command (used by cmd_help) ======================== */
 

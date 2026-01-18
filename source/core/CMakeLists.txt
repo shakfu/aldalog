@@ -97,6 +97,7 @@ function(psnd_build_loki)
         ${PSND_CORE_DIR}/loki/command/link.c
         ${PSND_CORE_DIR}/loki/command/csd.c
         ${PSND_CORE_DIR}/loki/command/export.c
+        ${PSND_CORE_DIR}/loki/command/loop.c
         ${PSND_CORE_DIR}/loki/terminal.c
         ${PSND_CORE_DIR}/loki/undo.c
         ${PSND_CORE_DIR}/loki/buffers.c
@@ -105,6 +106,7 @@ function(psnd_build_loki)
         ${PSND_CORE_DIR}/loki/export.c
         ${PSND_CORE_DIR}/loki/midi_export.cpp
         ${PSND_CORE_DIR}/loki/lang_bridge.c
+        ${PSND_CORE_DIR}/loki/live_loop.c
         ${PSND_CORE_DIR}/loki/repl_launcher.c
         ${PSND_CORE_DIR}/loki/serialize.c
     )

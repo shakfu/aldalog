@@ -6,6 +6,7 @@
 
 #include "lang_bridge.h"
 #include "internal.h"  /* For editor_ctx_t full definition */
+#include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -135,6 +136,43 @@ int loki_lang_eval(editor_ctx_t *ctx, const char *code) {
         return ops->eval(ctx, code);
     }
     return -1;
+}
+
+int loki_lang_eval_buffer(editor_ctx_t *ctx) {
+    if (!ctx || !ctx->model.filename) return -1;
+
+    const LokiLangOps *ops = loki_lang_for_file(ctx->model.filename);
+    if (!ops || !ops->eval) return -1;
+
+    /* Ensure initialized */
+    if (ops->is_initialized && !ops->is_initialized(ctx)) {
+        if (ops->init && ops->init(ctx) != 0) {
+            return -1;
+        }
+    }
+
+    /* Build buffer content string */
+    if (ctx->model.numrows == 0) return 0;
+
+    size_t total = 0;
+    for (int i = 0; i < ctx->model.numrows; i++) {
+        total += ctx->model.row[i].size + 1;  /* +1 for newline */
+    }
+
+    char *code = malloc(total + 1);
+    if (!code) return -1;
+
+    char *p = code;
+    for (int i = 0; i < ctx->model.numrows; i++) {
+        memcpy(p, ctx->model.row[i].chars, ctx->model.row[i].size);
+        p += ctx->model.row[i].size;
+        *p++ = '\n';
+    }
+    *p = '\0';
+
+    int ret = ops->eval(ctx, code);
+    free(code);
+    return ret;
 }
 
 void loki_lang_stop_all(editor_ctx_t *ctx) {

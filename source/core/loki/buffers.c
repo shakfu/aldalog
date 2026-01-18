@@ -105,10 +105,17 @@ int buffers_init(editor_ctx_t *initial_ctx) {
     /* Copy display settings */
     first->ctx.view.line_numbers = initial_ctx->view.line_numbers;
 
-    /* Copy buffer content (rows) */
+    /* Transfer ownership of buffer content from initial_ctx to first buffer.
+     * We take ownership of the pointers and NULL them in initial_ctx to prevent
+     * double-free when initial_ctx is cleaned up. */
     first->ctx.model.numrows = initial_ctx->model.numrows;
     first->ctx.model.row = initial_ctx->model.row;
+    initial_ctx->model.row = NULL;  /* Transfer ownership */
+    initial_ctx->model.numrows = 0;
+
     first->ctx.model.filename = initial_ctx->model.filename;
+    initial_ctx->model.filename = NULL;  /* Transfer ownership */
+
     first->ctx.view.syntax = initial_ctx->view.syntax;
     first->ctx.model.dirty = initial_ctx->model.dirty;
 

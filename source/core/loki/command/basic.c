@@ -1,9 +1,11 @@
-/* basic.c - Basic editor commands (:q, :wq, :help, :set)
+/* basic.c - Basic editor commands (:q, :wq, :help, :set, :stop)
  *
- * Core commands for quitting, help, and settings.
+ * Core commands for quitting, help, settings, and playback control.
  */
 
 #include "command_impl.h"
+#include "../live_loop.h"
+#include "../lang_bridge.h"
 
 /* :q, :quit - Quit editor */
 int cmd_quit(editor_ctx_t *ctx, const char *args) {
@@ -89,4 +91,91 @@ int cmd_set(editor_ctx_t *ctx, const char *args) {
     }
 
     return 0;
+}
+
+/* :stop - Stop all playback and live loops */
+int cmd_stop(editor_ctx_t *ctx, const char *args) {
+    (void)args;
+
+    /* Stop all live loops */
+    live_loop_shutdown();
+
+    /* Stop all language playback */
+    loki_lang_stop_all(ctx);
+
+    editor_set_status_msg(ctx, "Stopped");
+    return 1;
+}
+
+/* :play - Play entire buffer (same as Ctrl-P) */
+int cmd_play(editor_ctx_t *ctx, const char *args) {
+    (void)args;
+
+    if (ctx->model.numrows == 0) {
+        editor_set_status_msg(ctx, "Empty buffer");
+        return 0;
+    }
+
+    const LokiLangOps *lang = loki_lang_for_file(ctx->model.filename);
+    if (!lang) {
+        editor_set_status_msg(ctx, "No language support for this file type");
+        return 0;
+    }
+
+    int ret = loki_lang_eval_buffer(ctx);
+    if (ret == 0) {
+        editor_set_status_msg(ctx, "%s: playing", lang->name);
+        return 1;
+    } else {
+        const char *err = loki_lang_get_error(ctx);
+        editor_set_status_msg(ctx, "%s error: %s", lang->name,
+            err ? err : "eval failed");
+        return 0;
+    }
+}
+
+/* :eval [code] - Evaluate code or current line (same as Ctrl-E) */
+int cmd_eval(editor_ctx_t *ctx, const char *args) {
+    const LokiLangOps *lang = loki_lang_for_file(ctx->model.filename);
+    if (!lang) {
+        editor_set_status_msg(ctx, "No language support for this file type");
+        return 0;
+    }
+
+    const char *code = args;
+    char *line_copy = NULL;
+
+    /* If no args, use current line */
+    if (!args || !args[0]) {
+        if (ctx->view.cy >= ctx->model.numrows) {
+            editor_set_status_msg(ctx, "No code to evaluate");
+            return 0;
+        }
+        t_erow *row = &ctx->model.row[ctx->view.cy];
+        if (row->size == 0) {
+            editor_set_status_msg(ctx, "Empty line");
+            return 0;
+        }
+        line_copy = malloc(row->size + 1);
+        if (!line_copy) {
+            editor_set_status_msg(ctx, "Out of memory");
+            return 0;
+        }
+        memcpy(line_copy, row->chars, row->size);
+        line_copy[row->size] = '\0';
+        code = line_copy;
+    }
+
+    int ret = loki_lang_eval(ctx, code);
+    free(line_copy);
+
+    if (ret == 0) {
+        editor_set_status_msg(ctx, "%s: evaluated", lang->name);
+        return 1;
+    } else {
+        const char *err = loki_lang_get_error(ctx);
+        editor_set_status_msg(ctx, "%s error: %s", lang->name,
+            err ? err : "eval failed");
+        return 0;
+    }
 }

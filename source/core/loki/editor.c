@@ -30,6 +30,7 @@
 #include "syntax.h"
 #include "lang_bridge.h"
 #include "loki/link.h"
+#include "live_loop.h"
 
 /* ======================== Main Editor Instance ============================ */
 
@@ -439,6 +440,9 @@ int loki_editor_main(int argc, char **argv) {
             loki_lang_check_callbacks(ctx, ctx_L(ctx));
         }
 
+        /* Check live loops for beat boundary triggers */
+        live_loop_tick();
+
         editor_refresh_screen(ctx);
         editor_process_keypress(ctx, STDIN_FILENO);
     }
@@ -449,6 +453,9 @@ int loki_editor_main(int argc, char **argv) {
 /* Clean up editor resources (called from editor_atexit in loki_core.c) */
 void editor_cleanup_resources(editor_ctx_t *ctx) {
     if (!ctx) return;
+
+    /* Stop all live loops */
+    live_loop_shutdown();
 
     /* Clean up all language subsystems (stops all playback) */
     loki_lang_cleanup_all(ctx);

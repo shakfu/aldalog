@@ -64,6 +64,15 @@ static command_def_t builtin_commands[] = {
     {"csd",    cmd_csd,         "Toggle Csound synthesis",        0, 1},
     {"export", cmd_export,      "Export to MIDI file",            1, 1},
 
+    /* Playback */
+    {"play",   cmd_play,        "Play entire buffer",             0, 0},
+    {"eval",   cmd_eval,        "Evaluate code or current line",  0, -1},
+    {"stop",   cmd_stop,        "Stop all playback and loops",    0, 0},
+
+    /* Live loop (loop.c) */
+    {"loop",   cmd_loop,        "Start live loop (beats)",        0, 1},
+    {"unloop", cmd_unloop,      "Stop live loop",                 0, 0},
+
     {NULL, NULL, NULL, 0, 0}  /* Sentinel */
 };
 

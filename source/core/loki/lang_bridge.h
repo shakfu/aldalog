@@ -140,6 +140,15 @@ void loki_lang_check_callbacks(editor_ctx_t *ctx, lua_State *L);
 int loki_lang_eval(editor_ctx_t *ctx, const char *code);
 
 /**
+ * Evaluate entire buffer content with language for current file.
+ * Concatenates all rows and evaluates as a single string.
+ *
+ * @param ctx Editor context
+ * @return 0 on success, -1 on error
+ */
+int loki_lang_eval_buffer(editor_ctx_t *ctx);
+
+/**
  * Stop playback for all languages.
  *
  * @param ctx Editor context
