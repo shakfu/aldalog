@@ -63,15 +63,7 @@ def to_lower(name: str) -> str:
 # PEG Grammar Template
 # =============================================================================
 
-PEG_GRAMMAR_TEMPLATE = '''/*
- * {Title} Language Grammar (PackCC PEG)
- *
- * A minimal music DSL with note/chord/rest/tempo commands.
- * Compile with: packcc {name}_grammar.peg
- * Generates: {name}_grammar.h, {name}_grammar.c
- */
-
-%prefix "{name}_peg"
+PEG_GRAMMAR_TEMPLATE = '''%prefix "{name}_peg"
 
 %value "struct {Title}AstNode*"
 
@@ -84,97 +76,67 @@ PEG_GRAMMAR_TEMPLATE = '''/*
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdint.h>
 
-/* AST Node Types */
 typedef enum {{
     {NAME}_AST_NOTE,
     {NAME}_AST_CHORD,
     {NAME}_AST_REST,
     {NAME}_AST_TEMPO,
-    {NAME}_AST_PROGRAM,    /* List of statements */
+    {NAME}_AST_PROGRAM,
     {NAME}_AST_ERROR
 }} {Title}AstNodeType;
 
-/* AST Node */
 typedef struct {Title}AstNode {{
     {Title}AstNodeType type;
     union {{
-        struct {{
-            int pitch;
-            int duration_ms;
-            int velocity;
-        }} note;
-        struct {{
-            int pitches[16];
-            int pitch_count;
-            int duration_ms;
-            int velocity;
-        }} chord;
-        struct {{
-            int duration_ms;
-        }} rest;
-        struct {{
-            int bpm;
-        }} tempo;
-        struct {{
-            struct {Title}AstNode** statements;
-            int count;
-            int capacity;
-        }} program;
-        struct {{
-            char message[128];
-        }} error;
-    }} data;
+        struct {{ int pitch; int duration_ms; int velocity; }} note;
+        struct {{ int pitches[16]; int pitch_count; int duration_ms; int velocity; }} chord;
+        struct {{ int duration_ms; }} rest;
+        struct {{ int bpm; }} tempo;
+        struct {{ struct {Title}AstNode** stmts; int count; int cap; }} program;
+        struct {{ char msg[128]; }} error;
+    }} d;
 }} {Title}AstNode;
 
-/* Parse context passed as auxil */
 typedef struct {Title}ParseContext {{
     const char* input;
     int pos;
-    char error_msg[256];
-    int has_error;
 }} {Title}ParseContext;
 
-/* AST construction helpers */
-static inline {Title}AstNode* {name}_ast_new({Title}AstNodeType type) {{
+static inline {Title}AstNode* {name}_ast_new({Title}AstNodeType t) {{
     {Title}AstNode* n = ({Title}AstNode*)calloc(1, sizeof({Title}AstNode));
-    if (n) n->type = type;
+    if (n) n->type = t;
     return n;
 }}
 
-static inline void {name}_ast_free({Title}AstNode* node) {{
-    if (!node) return;
-    if (node->type == {NAME}_AST_PROGRAM) {{
-        for (int i = 0; i < node->data.program.count; i++) {{
-            {name}_ast_free(node->data.program.statements[i]);
-        }}
-        free(node->data.program.statements);
+static inline void {name}_ast_free({Title}AstNode* n) {{
+    if (!n) return;
+    if (n->type == {NAME}_AST_PROGRAM) {{
+        for (int i = 0; i < n->d.program.count; i++) {name}_ast_free(n->d.program.stmts[i]);
+        free(n->d.program.stmts);
     }}
-    free(node);
+    free(n);
 }}
 
-static inline void {name}_program_add({Title}AstNode* prog, {Title}AstNode* stmt) {{
-    if (!prog || !stmt || prog->type != {NAME}_AST_PROGRAM) return;
-    if (prog->data.program.count >= prog->data.program.capacity) {{
-        int newcap = prog->data.program.capacity ? prog->data.program.capacity * 2 : 16;
-        {Title}AstNode** new_stmts = ({Title}AstNode**)realloc(
-            prog->data.program.statements,
-            newcap * sizeof({Title}AstNode*)
-        );
-        if (!new_stmts) return;
-        prog->data.program.statements = new_stmts;
-        prog->data.program.capacity = newcap;
+static inline void {name}_prog_add({Title}AstNode* p, {Title}AstNode* s) {{
+    if (!p || !s || p->type != {NAME}_AST_PROGRAM) return;
+    if (p->d.program.count >= p->d.program.cap) {{
+        int nc = p->d.program.cap ? p->d.program.cap * 2 : 8;
+        {Title}AstNode** ns = ({Title}AstNode**)realloc(p->d.program.stmts, nc * sizeof({Title}AstNode*));
+        if (!ns) return;
+        p->d.program.stmts = ns;
+        p->d.program.cap = nc;
     }}
-    prog->data.program.statements[prog->data.program.count++] = stmt;
+    p->d.program.stmts[p->d.program.count++] = s;
 }}
 
-/* Note name to MIDI pitch conversion */
-static inline int {name}_note_to_midi(const char* name, int len) {{
-    if (len < 1) return -1;
-
-    /* Base pitch: C=0, D=2, E=4, F=5, G=7, A=9, B=11 */
+static inline int {name}_note_to_midi(const char* s, int len) {{
+    if (len < 1) return 60;
     int base;
-    switch (toupper((unsigned char)name[0])) {{
+    char c = s[0];
+    if (c >= 'a' && c <= 'g') c -= 32;
+    switch (c) {{
         case 'C': base = 0; break;
         case 'D': base = 2; break;
         case 'E': base = 4; break;
@@ -182,189 +144,135 @@ static inline int {name}_note_to_midi(const char* name, int len) {{
         case 'G': base = 7; break;
         case 'A': base = 9; break;
         case 'B': base = 11; break;
-        default: return -1;
+        default: return 60;
     }}
-
     int i = 1;
-    /* Accidentals */
-    while (i < len && (name[i] == '#' || name[i] == 'b')) {{
-        if (name[i] == '#') base++;
-        else if (name[i] == 'b') base--;
+    while (i < len && (s[i] == '#' || s[i] == 'b')) {{
+        if (s[i] == '#') base++; else base--;
         i++;
     }}
-
-    /* Octave (default 4) */
-    int octave = 4;
-    if (i < len && isdigit((unsigned char)name[i])) {{
-        octave = name[i] - '0';
-        i++;
-    }}
-
-    return 12 * (octave + 1) + base;
+    int oct = 4;
+    if (i < len && s[i] >= '0' && s[i] <= '9') oct = s[i] - '0';
+    return 12 * (oct + 1) + base;
 }}
 
-#endif /* {NAME}_GRAMMAR_H_INCLUDED */
+#endif
 }}
 
 %source {{
-/* Default values */
-#define {NAME}_DEFAULT_DURATION 250
-#define {NAME}_DEFAULT_VELOCITY 80
-#define {NAME}_DEFAULT_TEMPO    120
+#define PCC_GETCHAR(auxil) ((auxil)->input[(auxil)->pos] ? (int)(unsigned char)(auxil)->input[(auxil)->pos++] : -1)
 }}
 
-/* Entry point: a program is a list of statements */
-program <- sp stmts:statement_list sp eof {{
-    $$ = stmts;
-}}
+program
+    <- p:lines !. {{ $$ = p; }}
 
-statement_list <- s:statement sp more:statement_list {{
-    if (more) {{
-        /* Prepend s to more's list */
-        {Title}AstNode** old = more->data.program.statements;
-        int oldcount = more->data.program.count;
-        more->data.program.statements = ({Title}AstNode**)malloc((oldcount + 1) * sizeof({Title}AstNode*));
-        more->data.program.statements[0] = s;
-        for (int i = 0; i < oldcount; i++) {{
-            more->data.program.statements[i + 1] = old[i];
+lines
+    <- s:stmt NL rest:lines {{
+        if (s) {name}_prog_add(rest, s);
+        $$ = rest;
+    }}
+    / '#' [^\\n\\r]* NL rest:lines {{
+        $$ = rest;
+    }}
+    / [ \\t]* NL rest:lines {{
+        $$ = rest;
+    }}
+    / s:stmt !. {{
+        {Title}AstNode* p = {name}_ast_new({NAME}_AST_PROGRAM);
+        if (s) {name}_prog_add(p, s);
+        $$ = p;
+    }}
+    / '#' [^\\n\\r]* !. {{
+        $$ = {name}_ast_new({NAME}_AST_PROGRAM);
+    }}
+    / [ \\t]* !. {{
+        $$ = {name}_ast_new({NAME}_AST_PROGRAM);
+    }}
+
+stmt
+    <- 'note' [ \\t]+ xp:pitch xd:optnum xv:optnum [ \\t]* {{
+        {Title}AstNode* node = {name}_ast_new({NAME}_AST_NOTE);
+        node->d.note.pitch = (int)(intptr_t)xp;
+        node->d.note.duration_ms = xd ? (int)(intptr_t)xd : 250;
+        node->d.note.velocity = xv ? (int)(intptr_t)xv : 80;
+        $$ = node;
+    }}
+    / 'chord' [ \\t]+ xps:pitchlist xopts:chordopts [ \\t]* {{
+        {Title}AstNode* node = {name}_ast_new({NAME}_AST_CHORD);
+        int* pd = (int*)xps;
+        if (pd) {{
+            node->d.chord.pitch_count = pd[0];
+            for (int i = 0; i < pd[0] && i < 16; i++) node->d.chord.pitches[i] = pd[i+1];
+            free(pd);
         }}
-        more->data.program.count = oldcount + 1;
-        more->data.program.capacity = oldcount + 1;
-        free(old);
-        $$ = more;
-    }} else {{
-        {Title}AstNode* prog = {name}_ast_new({NAME}_AST_PROGRAM);
-        {name}_program_add(prog, s);
-        $$ = prog;
+        int* od = (int*)xopts;
+        node->d.chord.duration_ms = od ? od[0] : 250;
+        node->d.chord.velocity = od ? od[1] : 80;
+        if (od) free(od);
+        $$ = node;
     }}
-}} / {{
-    $$ = {name}_ast_new({NAME}_AST_PROGRAM);
-}}
-
-statement <- note_stmt / chord_stmt / rest_stmt / tempo_stmt / comment / eol {{
-    $$ = NULL;
-}}
-
-/* note C4 [duration] [velocity] OR note 60 [duration] [velocity] */
-note_stmt <- 'note' sp+ pitch:pitch_spec dur:opt_int vel:opt_int sp* eol {{
-    {Title}AstNode* n = {name}_ast_new({NAME}_AST_NOTE);
-    n->data.note.pitch = pitch ? (int)(intptr_t)pitch : 60;
-    n->data.note.duration_ms = dur ? (int)(intptr_t)dur : {NAME}_DEFAULT_DURATION;
-    n->data.note.velocity = vel ? (int)(intptr_t)vel : {NAME}_DEFAULT_VELOCITY;
-    $$ = n;
-}}
-
-/* chord C4 E4 G4 [dur:ms] [vel:v] */
-chord_stmt <- 'chord' sp+ pitches:pitch_list opts:chord_opts sp* eol {{
-    {Title}AstNode* n = {name}_ast_new({NAME}_AST_CHORD);
-    /* pitches is encoded as: pitch_count in high bits, pitches in array */
-    /* We'll decode from the pitch_list helper */
-    int* pdata = (int*)pitches;
-    if (pdata) {{
-        n->data.chord.pitch_count = pdata[0];
-        for (int i = 0; i < pdata[0] && i < 16; i++) {{
-            n->data.chord.pitches[i] = pdata[i + 1];
-        }}
-        free(pdata);
+    / 'rest' [ \\t]+ xd:num [ \\t]* {{
+        {Title}AstNode* node = {name}_ast_new({NAME}_AST_REST);
+        node->d.rest.duration_ms = (int)(intptr_t)xd;
+        $$ = node;
     }}
-    int* odata = (int*)opts;
-    if (odata) {{
-        n->data.chord.duration_ms = odata[0];
-        n->data.chord.velocity = odata[1];
-        free(odata);
-    }} else {{
-        n->data.chord.duration_ms = {NAME}_DEFAULT_DURATION;
-        n->data.chord.velocity = {NAME}_DEFAULT_VELOCITY;
+    / 'tempo' [ \\t]+ xb:num [ \\t]* {{
+        {Title}AstNode* node = {name}_ast_new({NAME}_AST_TEMPO);
+        node->d.tempo.bpm = (int)(intptr_t)xb;
+        $$ = node;
     }}
-    $$ = n;
-}}
 
-/* rest <duration> */
-rest_stmt <- 'rest' sp+ dur:integer sp* eol {{
-    {Title}AstNode* n = {name}_ast_new({NAME}_AST_REST);
-    n->data.rest.duration_ms = (int)(intptr_t)dur;
-    $$ = n;
-}}
-
-/* tempo <bpm> */
-tempo_stmt <- 'tempo' sp+ bpm:integer sp* eol {{
-    {Title}AstNode* n = {name}_ast_new({NAME}_AST_TEMPO);
-    n->data.tempo.bpm = (int)(intptr_t)bpm;
-    $$ = n;
-}}
-
-/* Pitch: note name (C4, C#4, Db3) or MIDI number (60) */
-pitch_spec <- <[A-Ga-g] [#b]* [0-9]?> {{
-    int pitch = {name}_note_to_midi($1, $1e - $1s);
-    $$ = (struct {Title}AstNode*)(intptr_t)pitch;
-}} / n:integer {{
-    $$ = n;
-}}
-
-/* Pitch list for chords */
-pitch_list <- p:pitch_spec sp+ rest:pitch_list {{
-    int* rdata = (int*)rest;
-    int rcount = rdata ? rdata[0] : 0;
-    int* result = (int*)malloc((rcount + 2) * sizeof(int));
-    result[0] = rcount + 1;
-    result[1] = (int)(intptr_t)p;
-    for (int i = 0; i < rcount; i++) {{
-        result[i + 2] = rdata[i + 1];
+pitch
+    <- < [A-Ga-g] [#b]* [0-9] > {{
+        $$ = (struct {Title}AstNode*)(intptr_t){name}_note_to_midi($1, $1e - $1s);
     }}
-    if (rdata) free(rdata);
-    $$ = (struct {Title}AstNode*)result;
-}} / p:pitch_spec {{
-    int* result = (int*)malloc(2 * sizeof(int));
-    result[0] = 1;
-    result[1] = (int)(intptr_t)p;
-    $$ = (struct {Title}AstNode*)result;
-}}
+    / n:num {{ $$ = n; }}
 
-/* Chord options: dur:ms vel:v */
-chord_opts <- sp+ 'dur:' d:integer rest:chord_opts {{
-    int* rdata = (int*)rest;
-    int* result = (int*)malloc(2 * sizeof(int));
-    result[0] = (int)(intptr_t)d;
-    result[1] = rdata ? rdata[1] : {NAME}_DEFAULT_VELOCITY;
-    if (rdata) free(rdata);
-    $$ = (struct {Title}AstNode*)result;
-}} / sp+ 'vel:' v:integer rest:chord_opts {{
-    int* rdata = (int*)rest;
-    int* result = (int*)malloc(2 * sizeof(int));
-    result[0] = rdata ? rdata[0] : {NAME}_DEFAULT_DURATION;
-    result[1] = (int)(intptr_t)v;
-    if (rdata) free(rdata);
-    $$ = (struct {Title}AstNode*)result;
-}} / {{
-    $$ = NULL;
-}}
+pitchlist
+    <- p:pitch [ \\t]+ r:pitchlist {{
+        int* rd = (int*)r;
+        int rc = rd ? rd[0] : 0;
+        int* res = (int*)malloc((rc + 2) * sizeof(int));
+        res[0] = rc + 1;
+        res[1] = (int)(intptr_t)p;
+        for (int i = 0; i < rc; i++) res[i+2] = rd[i+1];
+        free(rd);
+        $$ = (struct {Title}AstNode*)res;
+    }}
+    / p:pitch {{
+        int* res = (int*)malloc(2 * sizeof(int));
+        res[0] = 1;
+        res[1] = (int)(intptr_t)p;
+        $$ = (struct {Title}AstNode*)res;
+    }}
 
-/* Optional integer */
-opt_int <- sp+ n:integer {{
-    $$ = n;
-}} / {{
-    $$ = NULL;
-}}
+chordopts
+    <- [ \\t]+ 'dur:' xd:num r:chordopts {{
+        int* rd = (int*)r;
+        int* res = (int*)malloc(2 * sizeof(int));
+        res[0] = (int)(intptr_t)xd;
+        res[1] = rd ? rd[1] : 80;
+        free(rd);
+        $$ = (struct {Title}AstNode*)res;
+    }}
+    / [ \\t]+ 'vel:' xv:num r:chordopts {{
+        int* rd = (int*)r;
+        int* res = (int*)malloc(2 * sizeof(int));
+        res[0] = rd ? rd[0] : 250;
+        res[1] = (int)(intptr_t)xv;
+        free(rd);
+        $$ = (struct {Title}AstNode*)res;
+    }}
+    / {{ $$ = NULL; }}
 
-/* Integer literal */
-integer <- <'-'? [0-9]+> {{
-    $$ = (struct {Title}AstNode*)(intptr_t)atoi($1);
-}}
+optnum
+    <- [ \\t]+ n:num {{ $$ = n; }}
+    / {{ $$ = NULL; }}
 
-/* Comment */
-comment <- '#' [^\\n\\r]* eol {{
-    $$ = NULL;
-}}
+num
+    <- < '-'? [0-9]+ > {{ $$ = (struct {Title}AstNode*)(intptr_t)atoi($1); }}
 
-/* Whitespace (not including newlines) */
-sp <- [ \\t]*
-
-/* Required whitespace */
-sp+ <- [ \\t]+
-
-/* End of line or input */
-eol <- '\\r\\n' / '\\r' / '\\n' / !.
-eof <- !.
+NL <- '\\r\\n' / '\\r' / '\\n'
 
 %%
 '''
@@ -461,9 +369,9 @@ int {name}_runtime_exec({Title}Runtime *rt, const {Title}AstNode *node) {{
 
     switch (node->type) {{
     case {NAME}_AST_NOTE: {{
-        int pitch = node->data.note.pitch;
-        int velocity = node->data.note.velocity;
-        int duration = node->data.note.duration_ms;
+        int pitch = node->d.note.pitch;
+        int velocity = node->d.note.velocity;
+        int duration = node->d.note.duration_ms;
         int channel = rt->shared ? rt->shared->default_channel : 0;
 
         if (rt->shared) {{
@@ -475,42 +383,38 @@ int {name}_runtime_exec({Title}Runtime *rt, const {Title}AstNode *node) {{
     }}
 
     case {NAME}_AST_CHORD: {{
-        int velocity = node->data.chord.velocity;
-        int duration = node->data.chord.duration_ms;
+        int velocity = node->d.chord.velocity;
+        int duration = node->d.chord.duration_ms;
         int channel = rt->shared ? rt->shared->default_channel : 0;
 
         if (rt->shared) {{
-            /* Note on for all pitches */
-            for (int i = 0; i < node->data.chord.pitch_count; i++) {{
-                shared_send_note_on(rt->shared, channel, node->data.chord.pitches[i], velocity);
+            for (int i = 0; i < node->d.chord.pitch_count; i++) {{
+                shared_send_note_on(rt->shared, channel, node->d.chord.pitches[i], velocity);
             }}
-
             SLEEP_MS(duration);
-
-            /* Note off for all pitches */
-            for (int i = 0; i < node->data.chord.pitch_count; i++) {{
-                shared_send_note_off(rt->shared, channel, node->data.chord.pitches[i]);
+            for (int i = 0; i < node->d.chord.pitch_count; i++) {{
+                shared_send_note_off(rt->shared, channel, node->d.chord.pitches[i]);
             }}
         }}
         break;
     }}
 
     case {NAME}_AST_REST: {{
-        SLEEP_MS(node->data.rest.duration_ms);
+        SLEEP_MS(node->d.rest.duration_ms);
         break;
     }}
 
     case {NAME}_AST_TEMPO: {{
-        rt->tempo_bpm = node->data.tempo.bpm;
+        rt->tempo_bpm = node->d.tempo.bpm;
         if (rt->shared) {{
-            rt->shared->tempo = node->data.tempo.bpm;
+            rt->shared->tempo = node->d.tempo.bpm;
         }}
         break;
     }}
 
     case {NAME}_AST_PROGRAM: {{
-        for (int i = 0; i < node->data.program.count; i++) {{
-            {Title}AstNode *stmt = node->data.program.statements[i];
+        for (int i = 0; i < node->d.program.count; i++) {{
+            {Title}AstNode *stmt = node->d.program.stmts[i];
             if (stmt) {{
                 int result = {name}_runtime_exec(rt, stmt);
                 if (result != 0) return result;
@@ -520,7 +424,7 @@ int {name}_runtime_exec({Title}Runtime *rt, const {Title}AstNode *node) {{
     }}
 
     case {NAME}_AST_ERROR: {{
-        set_error(rt, node->data.error.message);
+        set_error(rt, node->d.error.msg);
         return -1;
     }}
     }}
@@ -532,37 +436,27 @@ int {name}_runtime_exec({Title}Runtime *rt, const {Title}AstNode *node) {{
 int {name}_runtime_eval({Title}Runtime *rt, const char *code) {{
     if (!rt || !code) return -1;
 
-    /* Create parse context */
     {Title}ParseContext pctx = {{0}};
     pctx.input = code;
     pctx.pos = 0;
-    pctx.has_error = 0;
 
-    /* Create parser context */
     {name}_peg_context_t *ctx = {name}_peg_create(&pctx);
     if (!ctx) {{
         set_error(rt, "Failed to create parser context");
         return -1;
     }}
 
-    /* Parse the input */
     {Title}AstNode *ast = NULL;
     int result = {name}_peg_parse(ctx, &ast);
 
-    if (result != 0 || !ast) {{
-        if (pctx.has_error) {{
-            set_error(rt, pctx.error_msg);
-        }} else {{
-            set_error(rt, "Parse error");
-        }}
+    if (result == 0 || !ast) {{
+        set_error(rt, "Parse error");
         {name}_peg_destroy(ctx);
         return -1;
     }}
 
-    /* Execute the AST */
     int exec_result = {name}_runtime_exec(rt, ast);
 
-    /* Cleanup */
     {name}_ast_free(ast);
     {name}_peg_destroy(ctx);
 
@@ -833,6 +727,7 @@ REPL_C_TEMPLATE = '''/**
  * @brief {Title} language REPL with PackCC-generated PEG parser.
  */
 
+#include "{name}_repl.h"
 #include "repl.h"
 #include "psnd.h"
 #include "loki/core.h"
@@ -840,6 +735,8 @@ REPL_C_TEMPLATE = '''/**
 #include "loki/repl_launcher.h"
 #include "shared/repl_commands.h"
 #include "shared/context.h"
+#include "shared/midi/midi.h"
+#include "shared/audio/audio.h"
 #include "{name}_runtime.h"
 
 #include <stdio.h>
@@ -978,13 +875,13 @@ static void repl_loop(editor_ctx_t *syntax_ctx) {{
 
     printf("{Title} REPL (PEG parser). Type :help for commands, :quit to exit.\\n");
 
-    while ((input = repl_editor_readline(&ed, "{name}> ", syntax_ctx)) != NULL) {{
+    while ((input = repl_readline(syntax_ctx, &ed, "{name}> ")) != NULL) {{
         if (input[0] == '\\0') {{
             free(input);
             continue;
         }}
 
-        repl_editor_add_history(&ed, input);
+        repl_add_history(&ed, input);
 
         int result = process_command(input);
         if (result == 1) {{
@@ -1020,7 +917,10 @@ int {name}_repl_main(int argc, char **argv) {{
             return 0;
         }}
         if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--list") == 0) {{
-            shared_midi_list_ports();
+            SharedContext tmp_ctx = {{0}};
+            shared_context_init(&tmp_ctx);
+            shared_midi_list_ports(&tmp_ctx);
+            shared_context_cleanup(&tmp_ctx);
             return 0;
         }}
         if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) && i+1 < argc) {{
@@ -1053,7 +953,7 @@ int {name}_repl_main(int argc, char **argv) {{
     }}
 
     if (soundfont) {{
-        shared_audio_tsf_load(g_shared_ctx, soundfont);
+        shared_tsf_load_soundfont(soundfont);
     }}
 
     {name}_runtime_init(&g_runtime, g_shared_ctx);
@@ -1077,13 +977,27 @@ int {name}_repl_main(int argc, char **argv) {{
 
 DISPATCH_C_TEMPLATE = '''/**
  * @file dispatch.c
- * @brief CLI dispatch for {Title} language.
+ * @brief {Title} language dispatch registration.
  */
 
-#include "repl.h"
+#include "lang_dispatch.h"
 
-int {name}_dispatch(int argc, char **argv) {{
-    return {name}_repl_main(argc, argv);
+/* External entry points from repl.c */
+extern int {name}_repl_main(int argc, char **argv);
+
+static const LangDispatchEntry {name}_dispatch = {{
+    .commands = {{"{name}"}},
+    .command_count = 1,
+    .extensions = {{{extensions_c_short}}},
+    .extension_count = {ext_count},
+    .display_name = "{Title}",
+    .description = "PEG-based music DSL",
+    .repl_main = {name}_repl_main,
+    .play_main = {name}_repl_main,
+}};
+
+void {name}_dispatch_init(void) {{
+    lang_dispatch_register(&{name}_dispatch);
 }}
 '''
 
@@ -1177,8 +1091,7 @@ TEST_PARSER_TEMPLATE = '''#include "test_framework.h"
 #include "{name}_grammar.h"
 #include "{name}_runtime.h"
 
-/* Helper to parse a line and check result */
-static {Title}AstNode* parse_line(const char* input) {{
+static {Title}AstNode* parse_code(const char* input) {{
     {Title}ParseContext pctx = {{0}};
     pctx.input = input;
 
@@ -1189,7 +1102,8 @@ static {Title}AstNode* parse_line(const char* input) {{
     int result = {name}_peg_parse(ctx, &ast);
     {name}_peg_destroy(ctx);
 
-    if (result != 0) {{
+    /* PackCC returns non-zero on success */
+    if (result == 0) {{
         if (ast) {name}_ast_free(ast);
         return NULL;
     }}
@@ -1198,134 +1112,134 @@ static {Title}AstNode* parse_line(const char* input) {{
 }}
 
 TEST(test_parse_note_midi_number) {{
-    {Title}AstNode* ast = parse_line("note 60\\n");
+    {Title}AstNode* ast = parse_code("note 60\\n");
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ(ast->type, {NAME}_AST_PROGRAM);
-    ASSERT_EQ(ast->data.program.count, 1);
+    ASSERT_EQ(ast->d.program.count, 1);
 
-    {Title}AstNode* note = ast->data.program.statements[0];
+    {Title}AstNode* note = ast->d.program.stmts[0];
     ASSERT_NOT_NULL(note);
     ASSERT_EQ(note->type, {NAME}_AST_NOTE);
-    ASSERT_EQ(note->data.note.pitch, 60);
+    ASSERT_EQ(note->d.note.pitch, 60);
 
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_note_name) {{
-    {Title}AstNode* ast = parse_line("note C4\\n");
+    {Title}AstNode* ast = parse_code("note C4\\n");
     ASSERT_NOT_NULL(ast);
-    ASSERT_EQ(ast->data.program.count, 1);
+    ASSERT_EQ(ast->d.program.count, 1);
 
-    {Title}AstNode* note = ast->data.program.statements[0];
+    {Title}AstNode* note = ast->d.program.stmts[0];
     ASSERT_EQ(note->type, {NAME}_AST_NOTE);
-    ASSERT_EQ(note->data.note.pitch, 60);  /* C4 = 60 */
+    ASSERT_EQ(note->d.note.pitch, 60);
 
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_note_sharp) {{
-    {Title}AstNode* ast = parse_line("note C#4\\n");
+    {Title}AstNode* ast = parse_code("note C#4\\n");
     ASSERT_NOT_NULL(ast);
 
-    {Title}AstNode* note = ast->data.program.statements[0];
-    ASSERT_EQ(note->data.note.pitch, 61);  /* C#4 = 61 */
+    {Title}AstNode* note = ast->d.program.stmts[0];
+    ASSERT_EQ(note->d.note.pitch, 61);
 
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_note_flat) {{
-    {Title}AstNode* ast = parse_line("note Db4\\n");
+    {Title}AstNode* ast = parse_code("note Db4\\n");
     ASSERT_NOT_NULL(ast);
 
-    {Title}AstNode* note = ast->data.program.statements[0];
-    ASSERT_EQ(note->data.note.pitch, 61);  /* Db4 = 61 */
+    {Title}AstNode* note = ast->d.program.stmts[0];
+    ASSERT_EQ(note->d.note.pitch, 61);
 
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_note_with_duration) {{
-    {Title}AstNode* ast = parse_line("note C4 500\\n");
+    {Title}AstNode* ast = parse_code("note C4 500\\n");
     ASSERT_NOT_NULL(ast);
 
-    {Title}AstNode* note = ast->data.program.statements[0];
-    ASSERT_EQ(note->data.note.pitch, 60);
-    ASSERT_EQ(note->data.note.duration_ms, 500);
+    {Title}AstNode* note = ast->d.program.stmts[0];
+    ASSERT_EQ(note->d.note.pitch, 60);
+    ASSERT_EQ(note->d.note.duration_ms, 500);
 
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_note_with_velocity) {{
-    {Title}AstNode* ast = parse_line("note C4 250 100\\n");
+    {Title}AstNode* ast = parse_code("note C4 250 100\\n");
     ASSERT_NOT_NULL(ast);
 
-    {Title}AstNode* note = ast->data.program.statements[0];
-    ASSERT_EQ(note->data.note.pitch, 60);
-    ASSERT_EQ(note->data.note.duration_ms, 250);
-    ASSERT_EQ(note->data.note.velocity, 100);
+    {Title}AstNode* note = ast->d.program.stmts[0];
+    ASSERT_EQ(note->d.note.pitch, 60);
+    ASSERT_EQ(note->d.note.duration_ms, 250);
+    ASSERT_EQ(note->d.note.velocity, 100);
 
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_chord) {{
-    {Title}AstNode* ast = parse_line("chord C4 E4 G4\\n");
+    {Title}AstNode* ast = parse_code("chord C4 E4 G4\\n");
     ASSERT_NOT_NULL(ast);
 
-    {Title}AstNode* chord = ast->data.program.statements[0];
+    {Title}AstNode* chord = ast->d.program.stmts[0];
     ASSERT_EQ(chord->type, {NAME}_AST_CHORD);
-    ASSERT_EQ(chord->data.chord.pitch_count, 3);
-    ASSERT_EQ(chord->data.chord.pitches[0], 60);  /* C4 */
-    ASSERT_EQ(chord->data.chord.pitches[1], 64);  /* E4 */
-    ASSERT_EQ(chord->data.chord.pitches[2], 67);  /* G4 */
+    ASSERT_EQ(chord->d.chord.pitch_count, 3);
+    ASSERT_EQ(chord->d.chord.pitches[0], 60);
+    ASSERT_EQ(chord->d.chord.pitches[1], 64);
+    ASSERT_EQ(chord->d.chord.pitches[2], 67);
 
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_chord_with_opts) {{
-    {Title}AstNode* ast = parse_line("chord C4 E4 G4 dur:1000 vel:90\\n");
+    {Title}AstNode* ast = parse_code("chord C4 E4 G4 dur:1000 vel:90\\n");
     ASSERT_NOT_NULL(ast);
 
-    {Title}AstNode* chord = ast->data.program.statements[0];
-    ASSERT_EQ(chord->data.chord.pitch_count, 3);
-    ASSERT_EQ(chord->data.chord.duration_ms, 1000);
-    ASSERT_EQ(chord->data.chord.velocity, 90);
+    {Title}AstNode* chord = ast->d.program.stmts[0];
+    ASSERT_EQ(chord->d.chord.pitch_count, 3);
+    ASSERT_EQ(chord->d.chord.duration_ms, 1000);
+    ASSERT_EQ(chord->d.chord.velocity, 90);
 
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_rest) {{
-    {Title}AstNode* ast = parse_line("rest 500\\n");
+    {Title}AstNode* ast = parse_code("rest 500\\n");
     ASSERT_NOT_NULL(ast);
 
-    {Title}AstNode* rest = ast->data.program.statements[0];
+    {Title}AstNode* rest = ast->d.program.stmts[0];
     ASSERT_EQ(rest->type, {NAME}_AST_REST);
-    ASSERT_EQ(rest->data.rest.duration_ms, 500);
+    ASSERT_EQ(rest->d.rest.duration_ms, 500);
 
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_tempo) {{
-    {Title}AstNode* ast = parse_line("tempo 140\\n");
+    {Title}AstNode* ast = parse_code("tempo 140\\n");
     ASSERT_NOT_NULL(ast);
 
-    {Title}AstNode* tempo = ast->data.program.statements[0];
+    {Title}AstNode* tempo = ast->d.program.stmts[0];
     ASSERT_EQ(tempo->type, {NAME}_AST_TEMPO);
-    ASSERT_EQ(tempo->data.tempo.bpm, 140);
+    ASSERT_EQ(tempo->d.tempo.bpm, 140);
 
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_comment) {{
-    {Title}AstNode* ast = parse_line("# this is a comment\\n");
+    {Title}AstNode* ast = parse_code("# this is a comment\\n");
     ASSERT_NOT_NULL(ast);
-    /* Comments produce empty program or NULL statement */
+    ASSERT_EQ(ast->d.program.count, 0);
     {name}_ast_free(ast);
 }}
 
 TEST(test_parse_multiple_statements) {{
-    {Title}AstNode* ast = parse_line("note C4\\nnote E4\\nnote G4\\n");
+    {Title}AstNode* ast = parse_code("note C4\\nnote E4\\nnote G4\\n");
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ(ast->type, {NAME}_AST_PROGRAM);
-    ASSERT_EQ(ast->data.program.count, 3);
+    ASSERT_EQ(ast->d.program.count, 3);
 
     {name}_ast_free(ast);
 }}
@@ -1559,6 +1473,7 @@ def generate_language(
     name_title = to_title(name)
 
     ext_c = ", ".join(f'".{e.lstrip(".")}"' for e in extensions) + ", NULL"
+    ext_c_short = ", ".join(f'".{e.lstrip(".")}"' for e in extensions)
     ext_lua = ", ".join(f'".{e.lstrip(".")}"' for e in extensions)
     primary_ext = extensions[0].lstrip(".")
 
@@ -1568,6 +1483,8 @@ def generate_language(
         "NAME": name_upper,
         "Title": name_title,
         "extensions_c": ext_c,
+        "extensions_c_short": ext_c_short,
+        "ext_count": str(len(extensions)),
         "extensions_lua": ext_lua,
         "ext": primary_ext,
     }
@@ -1610,7 +1527,7 @@ def generate_language(
         dry_run
     )
     create_file(
-        lang_dir / "repl.h",
+        lang_dir / f"{name_lower}_repl.h",
         REPL_H_TEMPLATE.format(**subs),
         dry_run
     )
@@ -1704,36 +1621,44 @@ def generate_language(
                 lang_config.write_text(new_content)
                 print(f"  Updated: {lang_config}")
 
-    # 2. Update src/lang_dispatch.c
-    lang_dispatch = root / "src" / "lang_dispatch.c"
-    if lang_dispatch.exists():
-        content = lang_dispatch.read_text()
-        if f'"{name_lower}"' not in content:
-            include_marker = "#ifdef LANG_BOG\n#include"
-            include_addition = f'''#ifdef LANG_{name_upper}
-#include "lang/{name_lower}/repl.h"
-#endif
-
-'''
-            new_content = content.replace(include_marker, include_addition + include_marker)
-
-            dispatch_marker = "    return -1;  /* Unknown language */"
-            dispatch_addition = f'''#ifdef LANG_{name_upper}
-    if (strcmp(lang, "{name_lower}") == 0) {{
-        return {name_lower}_repl_main(argc, argv);
-    }}
-#endif
-
-    '''
-            new_content = new_content.replace(dispatch_marker, dispatch_addition + dispatch_marker)
+    # 2. Update src/lang_dispatch.h and src/lang_dispatch.c
+    lang_dispatch_h = root / "src" / "lang_dispatch.h"
+    if lang_dispatch_h.exists():
+        content = lang_dispatch_h.read_text()
+        if f"LANG_{name_upper}" not in content:
+            decl_marker = "#ifdef LANG_BOG\nvoid bog_dispatch_init(void);\n#endif"
+            decl_addition = f'''
+#ifdef LANG_{name_upper}
+void {name_lower}_dispatch_init(void);
+#endif'''
+            new_content = content.replace(decl_marker, decl_marker + decl_addition)
 
             if dry_run:
-                print(f"  [dry-run] Would update: {lang_dispatch}")
+                print(f"  [dry-run] Would update: {lang_dispatch_h}")
             else:
-                lang_dispatch.write_text(new_content)
-                print(f"  Updated: {lang_dispatch}")
+                lang_dispatch_h.write_text(new_content)
+                print(f"  Updated: {lang_dispatch_h}")
         else:
-            print(f"  Skipping {lang_dispatch} (already contains {name_lower})")
+            print(f"  Skipping {lang_dispatch_h} (already contains LANG_{name_upper})")
+
+    lang_dispatch_c = root / "src" / "lang_dispatch.c"
+    if lang_dispatch_c.exists():
+        content = lang_dispatch_c.read_text()
+        if f"LANG_{name_upper}" not in content:
+            call_marker = "#ifdef LANG_BOG\n    bog_dispatch_init();\n#endif\n}"
+            call_addition = f'''
+#ifdef LANG_{name_upper}
+    {name_lower}_dispatch_init();
+#endif'''
+            new_content = content.replace(call_marker, call_marker.rstrip("}") + call_addition + "\n}")
+
+            if dry_run:
+                print(f"  [dry-run] Would update: {lang_dispatch_c}")
+            else:
+                lang_dispatch_c.write_text(new_content)
+                print(f"  Updated: {lang_dispatch_c}")
+        else:
+            print(f"  Skipping {lang_dispatch_c} (already contains LANG_{name_upper})")
 
     # 3. Update CMakeLists.txt
     cmakelists = root / "CMakeLists.txt"
@@ -1795,7 +1720,7 @@ endif()'''
     if psnd_cmake.exists():
         content = psnd_cmake.read_text()
         if f"LANG_{name_upper}" not in content:
-            marker = "if(LANG_BOG)\n    list(APPEND PSND_LANG_SOURCES\n        ${PSND_ROOT_DIR}/src/lang/bog/repl.c\n        ${PSND_ROOT_DIR}/src/lang/bog/dispatch.c\n    )\nendif()"
+            marker = "if(LANG_BOG)\n    list(APPEND PSND_LANG_SOURCES\n        ${PSND_ROOT_DIR}/src/lang/bog/repl.c\n        ${PSND_ROOT_DIR}/src/lang/bog/dispatch.c\n        ${PSND_ROOT_DIR}/src/lang/bog/bog_async.c\n    )\nendif()"
             addition = f'''
 
 if(LANG_{name_upper})
