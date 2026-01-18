@@ -489,6 +489,33 @@ static int lua_loki_repl_register(lua_State *L) {
 }
 
 /* ============================================================================
+ * Lua API Subtable Helpers
+ *
+ * Helper functions for registering language-specific Lua APIs under loki.*.
+ * Reduces boilerplate when adding new language bindings.
+ * ============================================================================ */
+
+int loki_lua_begin_api(lua_State *L, const char *name) {
+    lua_getglobal(L, "loki");
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        return 0;  /* loki table doesn't exist */
+    }
+    lua_newtable(L);  /* Create subtable for this language */
+    return 1;
+}
+
+void loki_lua_end_api(lua_State *L, const char *name) {
+    lua_setfield(L, -2, name);  /* Set subtable as loki.<name> */
+    lua_pop(L, 1);              /* Pop loki table */
+}
+
+void loki_lua_add_func(lua_State *L, const char *name, lua_CFunction fn) {
+    lua_pushcfunction(L, fn);
+    lua_setfield(L, -2, name);
+}
+
+/* ============================================================================
  * Language Registration Helper Functions
  *
  * These functions extract and validate individual components of a language

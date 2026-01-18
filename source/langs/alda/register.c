@@ -1261,66 +1261,40 @@ static void alda_register_scala_module(lua_State *L) {
 
 /* Register alda module as loki.alda subtable */
 static void alda_register_lua_api(lua_State *L) {
-    /* Get loki global table */
+    if (!loki_lua_begin_api(L, "alda")) return;
+
+    loki_lua_add_func(L, "init", lua_alda_init);
+    loki_lua_add_func(L, "cleanup", lua_alda_cleanup);
+    loki_lua_add_func(L, "is_initialized", lua_alda_is_initialized);
+    loki_lua_add_func(L, "eval", lua_alda_eval);
+    loki_lua_add_func(L, "eval_sync", lua_alda_eval_sync);
+    loki_lua_add_func(L, "stop", lua_alda_stop);
+    loki_lua_add_func(L, "stop_all", lua_alda_stop_all);
+    loki_lua_add_func(L, "is_playing", lua_alda_is_playing);
+    loki_lua_add_func(L, "active_count", lua_alda_active_count);
+    loki_lua_add_func(L, "set_tempo", lua_alda_set_tempo);
+    loki_lua_add_func(L, "get_tempo", lua_alda_get_tempo);
+    loki_lua_add_func(L, "set_synth", lua_alda_set_synth);
+    loki_lua_add_func(L, "load_soundfont", lua_alda_load_soundfont);
+    loki_lua_add_func(L, "get_error", lua_alda_get_error);
+    loki_lua_add_func(L, "csound_available", lua_alda_csound_available);
+    loki_lua_add_func(L, "csound_load", lua_alda_csound_load);
+    loki_lua_add_func(L, "set_csound", lua_alda_set_csound);
+    loki_lua_add_func(L, "csound_play", lua_alda_csound_play);
+    loki_lua_add_func(L, "csound_playing", lua_alda_csound_playing);
+    loki_lua_add_func(L, "csound_stop", lua_alda_csound_stop);
+    loki_lua_add_func(L, "set_backend", lua_alda_set_backend);
+    loki_lua_add_func(L, "set_part_scale", lua_alda_set_part_scale);
+    loki_lua_add_func(L, "clear_part_scale", lua_alda_clear_part_scale);
+
+    loki_lua_end_api(L, "alda");
+
+    /* Also register scala module under loki.scala */
     lua_getglobal(L, "loki");
-    if (!lua_istable(L, -1)) {
-        lua_pop(L, 1);
-        return;
+    if (lua_istable(L, -1)) {
+        alda_register_scala_module(L);
     }
-
-    lua_newtable(L);
-    lua_pushcfunction(L, lua_alda_init);
-    lua_setfield(L, -2, "init");
-    lua_pushcfunction(L, lua_alda_cleanup);
-    lua_setfield(L, -2, "cleanup");
-    lua_pushcfunction(L, lua_alda_is_initialized);
-    lua_setfield(L, -2, "is_initialized");
-    lua_pushcfunction(L, lua_alda_eval);
-    lua_setfield(L, -2, "eval");
-    lua_pushcfunction(L, lua_alda_eval_sync);
-    lua_setfield(L, -2, "eval_sync");
-    lua_pushcfunction(L, lua_alda_stop);
-    lua_setfield(L, -2, "stop");
-    lua_pushcfunction(L, lua_alda_stop_all);
-    lua_setfield(L, -2, "stop_all");
-    lua_pushcfunction(L, lua_alda_is_playing);
-    lua_setfield(L, -2, "is_playing");
-    lua_pushcfunction(L, lua_alda_active_count);
-    lua_setfield(L, -2, "active_count");
-    lua_pushcfunction(L, lua_alda_set_tempo);
-    lua_setfield(L, -2, "set_tempo");
-    lua_pushcfunction(L, lua_alda_get_tempo);
-    lua_setfield(L, -2, "get_tempo");
-    lua_pushcfunction(L, lua_alda_set_synth);
-    lua_setfield(L, -2, "set_synth");
-    lua_pushcfunction(L, lua_alda_load_soundfont);
-    lua_setfield(L, -2, "load_soundfont");
-    lua_pushcfunction(L, lua_alda_get_error);
-    lua_setfield(L, -2, "get_error");
-    lua_pushcfunction(L, lua_alda_csound_available);
-    lua_setfield(L, -2, "csound_available");
-    lua_pushcfunction(L, lua_alda_csound_load);
-    lua_setfield(L, -2, "csound_load");
-    lua_pushcfunction(L, lua_alda_set_csound);
-    lua_setfield(L, -2, "set_csound");
-    lua_pushcfunction(L, lua_alda_csound_play);
-    lua_setfield(L, -2, "csound_play");
-    lua_pushcfunction(L, lua_alda_csound_playing);
-    lua_setfield(L, -2, "csound_playing");
-    lua_pushcfunction(L, lua_alda_csound_stop);
-    lua_setfield(L, -2, "csound_stop");
-    lua_pushcfunction(L, lua_alda_set_backend);
-    lua_setfield(L, -2, "set_backend");
-    lua_pushcfunction(L, lua_alda_set_part_scale);
-    lua_setfield(L, -2, "set_part_scale");
-    lua_pushcfunction(L, lua_alda_clear_part_scale);
-    lua_setfield(L, -2, "clear_part_scale");
-    lua_setfield(L, -2, "alda");
-
-    /* Also register scala module */
-    alda_register_scala_module(L);
-
-    lua_pop(L, 1); /* pop loki */
+    lua_pop(L, 1);
 }
 
 /* ======================= Language Bridge Registration ======================= */

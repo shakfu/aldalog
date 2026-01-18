@@ -557,39 +557,17 @@ static int lua_bog_set_swing(lua_State *L) {
 
 /* Register Bog Lua API as loki.bog subtable */
 static void bog_register_lua_api(lua_State *L) {
-    /* Get loki global table */
-    lua_getglobal(L, "loki");
-    if (!lua_istable(L, -1)) {
-        lua_pop(L, 1);
-        return;
-    }
+    if (!loki_lua_begin_api(L, "bog")) return;
 
-    /* Create bog subtable */
-    lua_newtable(L);
+    loki_lua_add_func(L, "init", lua_bog_init);
+    loki_lua_add_func(L, "eval", lua_bog_eval);
+    loki_lua_add_func(L, "stop", lua_bog_stop);
+    loki_lua_add_func(L, "is_playing", lua_bog_is_playing);
+    loki_lua_add_func(L, "is_initialized", lua_bog_is_initialized);
+    loki_lua_add_func(L, "set_tempo", lua_bog_set_tempo);
+    loki_lua_add_func(L, "set_swing", lua_bog_set_swing);
 
-    lua_pushcfunction(L, lua_bog_init);
-    lua_setfield(L, -2, "init");
-
-    lua_pushcfunction(L, lua_bog_eval);
-    lua_setfield(L, -2, "eval");
-
-    lua_pushcfunction(L, lua_bog_stop);
-    lua_setfield(L, -2, "stop");
-
-    lua_pushcfunction(L, lua_bog_is_playing);
-    lua_setfield(L, -2, "is_playing");
-
-    lua_pushcfunction(L, lua_bog_is_initialized);
-    lua_setfield(L, -2, "is_initialized");
-
-    lua_pushcfunction(L, lua_bog_set_tempo);
-    lua_setfield(L, -2, "set_tempo");
-
-    lua_pushcfunction(L, lua_bog_set_swing);
-    lua_setfield(L, -2, "set_swing");
-
-    lua_setfield(L, -2, "bog");  /* Set as loki.bog */
-    lua_pop(L, 1);  /* Pop loki table */
+    loki_lua_end_api(L, "bog");
 }
 
 /* ======================= Language Registration ======================= */

@@ -37,6 +37,34 @@ void loki_lua_install_namespaces(lua_State *L);
  */
 editor_ctx_t *loki_lua_get_editor_context(lua_State *L);
 
+/**
+ * Begin registering a language API subtable under loki.<name>.
+ * Call loki_lua_add_func() to add functions, then loki_lua_end_api() to finish.
+ *
+ * @param L Lua state
+ * @param name Subtable name (e.g., "joy" for loki.joy)
+ * @return 1 on success, 0 if loki table doesn't exist
+ */
+int loki_lua_begin_api(lua_State *L, const char *name);
+
+/**
+ * Finish registering a language API subtable.
+ *
+ * @param L Lua state
+ * @param name Subtable name (must match begin_api call)
+ */
+void loki_lua_end_api(lua_State *L, const char *name);
+
+/**
+ * Add a function to the current API subtable.
+ * Must be called between loki_lua_begin_api() and loki_lua_end_api().
+ *
+ * @param L Lua state
+ * @param name Function name
+ * @param fn C function to register
+ */
+void loki_lua_add_func(lua_State *L, const char *name, lua_CFunction fn);
+
 #ifdef __cplusplus
 }
 #endif

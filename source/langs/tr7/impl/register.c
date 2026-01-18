@@ -843,30 +843,14 @@ static int lua_tr7_is_initialized(lua_State *L) {
 
 /* Register TR7 Lua API as loki.tr7 subtable */
 static void tr7_register_lua_api(lua_State *L) {
-    /* Get loki global table */
-    lua_getglobal(L, "loki");
-    if (!lua_istable(L, -1)) {
-        lua_pop(L, 1);
-        return;
-    }
+    if (!loki_lua_begin_api(L, "tr7")) return;
 
-    /* Create tr7 subtable */
-    lua_newtable(L);
+    loki_lua_add_func(L, "init", lua_tr7_init);
+    loki_lua_add_func(L, "eval", lua_tr7_eval);
+    loki_lua_add_func(L, "stop", lua_tr7_stop);
+    loki_lua_add_func(L, "is_initialized", lua_tr7_is_initialized);
 
-    lua_pushcfunction(L, lua_tr7_init);
-    lua_setfield(L, -2, "init");
-
-    lua_pushcfunction(L, lua_tr7_eval);
-    lua_setfield(L, -2, "eval");
-
-    lua_pushcfunction(L, lua_tr7_stop);
-    lua_setfield(L, -2, "stop");
-
-    lua_pushcfunction(L, lua_tr7_is_initialized);
-    lua_setfield(L, -2, "is_initialized");
-
-    lua_setfield(L, -2, "tr7");  /* Set as loki.tr7 */
-    lua_pop(L, 1);  /* Pop loki table */
+    loki_lua_end_api(L, "tr7");
 }
 
 /* ======================= Language Registration ======================= */

@@ -567,49 +567,25 @@ static int lua_joy_get_error(lua_State *L) {
 
 /* Register joy module as loki.joy subtable */
 static void joy_register_lua_api(lua_State *L) {
-    /* Get loki global table */
-    lua_getglobal(L, "loki");
-    if (!lua_istable(L, -1)) {
-        lua_pop(L, 1);
-        return;
-    }
+    if (!loki_lua_begin_api(L, "joy")) return;
 
-    /* Create joy subtable */
-    lua_newtable(L);
+    loki_lua_add_func(L, "init", lua_joy_init);
+    loki_lua_add_func(L, "cleanup", lua_joy_cleanup);
+    loki_lua_add_func(L, "is_initialized", lua_joy_is_initialized);
+    loki_lua_add_func(L, "eval", lua_joy_eval);
+    loki_lua_add_func(L, "load", lua_joy_load);
+    loki_lua_add_func(L, "define", lua_joy_define);
+    loki_lua_add_func(L, "stop", lua_joy_stop);
+    loki_lua_add_func(L, "open_port", lua_joy_open_port);
+    loki_lua_add_func(L, "open_virtual", lua_joy_open_virtual);
+    loki_lua_add_func(L, "list_ports", lua_joy_list_ports);
+    loki_lua_add_func(L, "push", lua_joy_push);
+    loki_lua_add_func(L, "stack_depth", lua_joy_stack_depth);
+    loki_lua_add_func(L, "stack_clear", lua_joy_stack_clear);
+    loki_lua_add_func(L, "stack_print", lua_joy_stack_print);
+    loki_lua_add_func(L, "get_error", lua_joy_get_error);
 
-    lua_pushcfunction(L, lua_joy_init);
-    lua_setfield(L, -2, "init");
-    lua_pushcfunction(L, lua_joy_cleanup);
-    lua_setfield(L, -2, "cleanup");
-    lua_pushcfunction(L, lua_joy_is_initialized);
-    lua_setfield(L, -2, "is_initialized");
-    lua_pushcfunction(L, lua_joy_eval);
-    lua_setfield(L, -2, "eval");
-    lua_pushcfunction(L, lua_joy_load);
-    lua_setfield(L, -2, "load");
-    lua_pushcfunction(L, lua_joy_define);
-    lua_setfield(L, -2, "define");
-    lua_pushcfunction(L, lua_joy_stop);
-    lua_setfield(L, -2, "stop");
-    lua_pushcfunction(L, lua_joy_open_port);
-    lua_setfield(L, -2, "open_port");
-    lua_pushcfunction(L, lua_joy_open_virtual);
-    lua_setfield(L, -2, "open_virtual");
-    lua_pushcfunction(L, lua_joy_list_ports);
-    lua_setfield(L, -2, "list_ports");
-    lua_pushcfunction(L, lua_joy_push);
-    lua_setfield(L, -2, "push");
-    lua_pushcfunction(L, lua_joy_stack_depth);
-    lua_setfield(L, -2, "stack_depth");
-    lua_pushcfunction(L, lua_joy_stack_clear);
-    lua_setfield(L, -2, "stack_clear");
-    lua_pushcfunction(L, lua_joy_stack_print);
-    lua_setfield(L, -2, "stack_print");
-    lua_pushcfunction(L, lua_joy_get_error);
-    lua_setfield(L, -2, "get_error");
-
-    lua_setfield(L, -2, "joy");  /* Set as loki.joy */
-    lua_pop(L, 1);  /* Pop loki table */
+    loki_lua_end_api(L, "joy");
 }
 
 /* ======================= Language Bridge Registration ======================= */
