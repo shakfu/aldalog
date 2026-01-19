@@ -1,4 +1,4 @@
-# psnd — a polyglot editor & REPL for music programming languages
+# psnd — a polyglot editor for music programming languages
 
 **psnd** is a self-contained modal editor, REPL, and playback environment aimed at music programming languages. The project is a polyglot platform for composing, live-coding, and rendering music DSLs from one binary.
 

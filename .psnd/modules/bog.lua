@@ -4,7 +4,8 @@
 -- loki.bog subsystem which handles Bog Prolog-based music programming
 -- and MIDI playback via the built-in TinySoundFont synthesizer.
 --
--- Bog is a Prolog-based live coding language for music where patterns
+-- Bog is a C implementation of [dogalog](https://github.com/danja/dogalog),
+-- a Prolog-based live coding language for music where patterns
 -- emerge from declarative rules rather than imperative sequencing.
 -- The underlying C API (loki.bog.*) is automatically available when
 -- the editor starts. This module adds higher-level helpers.
