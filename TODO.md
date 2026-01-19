@@ -77,12 +77,6 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 
 ### Refactoring
 
-- [ ] Move to dynamic language registry (`src/lang_dispatch.h:12-14`)
-  - Currently limited to 8 languages, 4 commands/extensions each (compiled-in limits)
-  - New DSLs require recompilation and tuning macros
-  - Makes plugin-style language packs or user modules impossible
-  - Fix: Consider dynamically-sized registry backed by Lua extension system
-
 ### Build System
 
 - [x] Add AddressSanitizer build target
@@ -120,10 +114,6 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 
 ### Code Consolidation
 
-- [ ] Consolidate dispatch boilerplate
-  - 4 files x 26 lines = 104 lines of identical structure
-  - Consider macro template in `lang_dispatch.h`
-
 - [ ] Extract shared REPL loop skeleton
   - ~150 lines of help functions still duplicated per language
   - Interactive loop structure still duplicated (could use callback pattern)
@@ -131,10 +121,6 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 - [ ] Centralize platform CMake logic
   - Platform detection repeated in 6+ CMakeLists.txt files
   - Create `psnd_platform.cmake` module
-
-- [ ] Remove Joy music notation duplication
-  - 405 lines duplicated from Alda's music theory code
-  - Extract to shared module
 
 ### Platform Support
 
@@ -162,8 +148,9 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 
 ### Documentation
 
-- [ ] Architecture diagram
-  - Visual overview of module relationships
+- [x] Architecture diagram
+  - Created `docs/architecture.d2` using D2 language
+  - Renders to SVG/PNG: `d2 architecture.d2 architecture.svg`
 
 - [ ] API reference generation
   - Consider Doxygen for generated docs
@@ -174,6 +161,13 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
   - Platform-specific guidance
 
 ### Future Architecture
+
+- [ ] Lua-to-language primitive callbacks
+  - Allow registering Lua functions as language primitives
+  - Joy: `loki.joy.register_primitive("name", lua_callback)` with stack access
+  - TR7: `loki.tr7.register_primitive("name", lua_callback, arity)` with args/return
+  - Bog: `lua_call/N` predicate or registered predicates
+  - Enables extending languages with Lua's ecosystem (HTTP, JSON, etc.)
 
 - [ ] Plugin architecture for language modules
   - Dynamic loading of language support

@@ -88,6 +88,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Matches existing `alda.lua` module pattern
   - **Files Added**: `.psnd/modules/joy.lua`, `.psnd/modules/tr7.lua`, `.psnd/modules/bog.lua`
 
+- **Architecture Diagram**: Added D2 language diagram of system architecture
+  - Shows entry points, editor core, language bridge, shared backends, Lua config
+  - Render with: `d2 docs/architecture.d2 docs/architecture.svg`
+  - **Files Added**: `docs/architecture.d2`, `docs/architecture.svg`, `docs/architecture.png`
+
 ### Changed
 
 - **Unified MIDI Port Name**: All languages now use `PSND_MIDI` as the default virtual MIDI port name

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
 .PHONY: all build configure library alda editor repl clean reset test show-config \
-		csound configure-csound web configure-web rebuild remake
+		csound configure-csound web configure-web rebuild remake docs
 
 BUILD_DIR ?= build
 CMAKE ?= cmake
@@ -51,3 +51,9 @@ reset:
 	@$(CMAKE) -E rm -rf $(BUILD_DIR)
 
 remake: reset build
+
+# Generate architecture diagrams from D2 sources
+docs:
+	@command -v d2 >/dev/null 2>&1 || { echo "d2 not found. Install from https://d2lang.com"; exit 1; }
+	@echo "Generating architecture diagrams..."
+	d2 docs/arch-highlevel.d2 docs/arch-highlevel.svg

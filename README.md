@@ -820,6 +820,10 @@ The `.psnd/scales/` directory includes example scales:
 
 Feedback and experiments are welcome - polyglot support will be guided by real-world usage.
 
+## Project Architecture
+
+![PSND Architecture](docs/arch-highlevel.svg)
+
 ## Project Structure
 
 ```text

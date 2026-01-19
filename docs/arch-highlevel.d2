@@ -1,0 +1,164 @@
+# PSND High-Level Architecture
+# Render with: d2 architecture-high-level.d2 architecture-high-level.svg
+
+direction: down
+
+title: {
+  label: PSND - Polyglot Music Editor
+  near: top-center
+  shape: text
+  style: {
+    font-size: 28
+    bold: true
+  }
+}
+
+# =============================================================================
+# User Entry
+# =============================================================================
+
+user: User {
+  shape: person
+}
+
+cli: CLI {
+  shape: rectangle
+  style.fill: "#e3f2fd"
+  label: |md
+    psnd song.alda
+    psnd joy
+    psnd play file
+    psnd --web
+  |
+}
+
+user -> cli
+
+# =============================================================================
+# Core Components
+# =============================================================================
+
+editor: Loki Editor {
+  shape: rectangle
+  style.fill: "#e8f5e9"
+  label: |md
+    Modal editing (vim-like)
+    Buffer management
+    Syntax highlighting
+  |
+}
+
+lua: Lua Scripting {
+  shape: rectangle
+  style.fill: "#efebe9"
+  label: |md
+    Configuration
+    Keybindings
+    Extensions
+  |
+}
+
+cli -> editor
+editor <-> lua
+
+# =============================================================================
+# Language Bridge
+# =============================================================================
+
+bridge: Language Bridge {
+  shape: hexagon
+  style.fill: "#f3e5f5"
+}
+
+editor -> bridge
+
+# =============================================================================
+# Languages
+# =============================================================================
+
+languages: {
+  style.fill: "#fff8e1"
+
+  alda: Alda {
+    label: "Music notation"
+  }
+  joy: Joy {
+    label: "Stack-based"
+  }
+  tr7: TR7 {
+    label: "Scheme"
+  }
+  bog: Bog {
+    label: "Prolog patterns"
+  }
+}
+
+bridge -> languages.alda
+bridge -> languages.joy
+bridge -> languages.tr7
+bridge -> languages.bog
+
+# =============================================================================
+# Shared Backend
+# =============================================================================
+
+backend: Shared Backend {
+  shape: rectangle
+  style.fill: "#e0f7fa"
+
+  audio: Audio {
+    label: "TSF / Csound"
+  }
+  midi_out: MIDI Out {
+    label: "libremidi"
+  }
+  ableton: Ableton Link {
+    label: "Tempo sync"
+  }
+}
+
+languages.alda -> backend
+languages.joy -> backend
+languages.tr7 -> backend
+languages.bog -> backend
+
+# =============================================================================
+# Output
+# =============================================================================
+
+output: {
+  style.fill: "#fafafa"
+
+  speakers: Speakers {
+    shape: rectangle
+  }
+  daw: External DAW {
+    shape: rectangle
+  }
+  midi_file: MIDI File {
+    shape: document
+  }
+}
+
+backend.audio -> output.speakers
+backend.midi_out -> output.daw
+backend -> output.midi_file: export
+
+# =============================================================================
+# Hosts
+# =============================================================================
+
+hosts: {
+  style.fill: "#fce4ec"
+
+  terminal: Terminal {
+    shape: rectangle
+  }
+  browser: Browser {
+    shape: rectangle
+    label: "xterm.js"
+  }
+}
+
+editor -> hosts.terminal
+editor -> hosts.browser
