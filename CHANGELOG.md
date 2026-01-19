@@ -80,6 +80,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Shortens commands in Ctrl-L REPL: `midi.list_ports()` instead of `loki.midi.list_ports()`
   - **Files Modified**: `source/core/loki/lua.c`
 
+- **Lua Modules for All Languages**: Added `.psnd/modules/` wrappers for Joy, TR7, and Bog
+  - `joy.lua` - Stack-based music programming helpers (`joy.eval()`, `joy.define()`, `joy.ports()`)
+  - `tr7.lua` - Scheme music programming helpers (`tr7.eval()`, `tr7.play_note()`, `tr7.play_chord()`)
+  - `bog.lua` - Prolog pattern helpers (`bog.eval()`, `bog.kick()`, `bog.euclidean()`)
+  - Each module documents the C API, provides convenience functions, and registers REPL help
+  - Matches existing `alda.lua` module pattern
+  - **Files Added**: `.psnd/modules/joy.lua`, `.psnd/modules/tr7.lua`, `.psnd/modules/bog.lua`
+
 ### Changed
 
 - **Unified MIDI Port Name**: All languages now use `PSND_MIDI` as the default virtual MIDI port name
