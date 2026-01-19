@@ -17,11 +17,11 @@
 void alda_context_init(AldaContext* ctx) {
     if (!ctx) return;
 
-    /* Allocate and initialize shared context */
-    ctx->shared = (SharedContext*)malloc(sizeof(SharedContext));
-    if (ctx->shared) {
-        shared_context_init(ctx->shared);
-    }
+    /* SharedContext is NOT allocated here - caller must provide it.
+     * Editor mode: ctx->model.shared is set before language init.
+     * REPL mode: REPL creates its own SharedContext and sets ctx->shared.
+     * Initialize to NULL so caller can detect if it wasn't set. */
+    ctx->shared = NULL;
 
     /* Legacy MIDI fields - unused, kept for ABI compatibility */
     ctx->midi_observer = NULL;
@@ -78,12 +78,11 @@ void alda_context_cleanup(AldaContext* ctx) {
     ctx->event_count = 0;
     ctx->event_capacity = 0;
 
-    /* Cleanup and free shared context */
-    if (ctx->shared) {
-        shared_context_cleanup(ctx->shared);
-        free(ctx->shared);
-        ctx->shared = NULL;
-    }
+    /* SharedContext is NOT cleaned up here - caller owns it.
+     * Editor mode: editor cleans up ctx->model.shared.
+     * REPL mode: REPL cleans up its own SharedContext.
+     * Just clear the pointer to avoid dangling reference. */
+    ctx->shared = NULL;
 
     /* Note: Legacy MIDI cleanup is handled separately by midi_backend */
 }

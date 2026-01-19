@@ -344,10 +344,10 @@ static void *joy_cb_init(const SharedReplArgs *args) {
             }
         } else {
             /* Try to open a virtual port by default */
-            if (joy_midi_open_virtual(g_joy_repl_shared, "JoyMIDI") == 0) {
+            if (joy_midi_open_virtual(g_joy_repl_shared, PSND_MIDI_PORT_NAME) == 0) {
                 midi_opened = 1;
                 if (args->verbose) {
-                    printf("Created virtual MIDI output: JoyMIDI\n");
+                    printf("Created virtual MIDI output: " PSND_MIDI_PORT_NAME "\n");
                 }
             }
         }

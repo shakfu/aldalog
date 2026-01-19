@@ -402,7 +402,7 @@ static tr7_C_return_t scm_midi_virtual(tr7_engine_t tsc, int nvalues, const tr7_
         return tr7_C_raise_error(tsc, "Music backend not initialized", TR7_NIL, 0);
     }
 
-    const char *name = PSND_MIDI_PORT_NAME "-tr7";
+    const char *name = PSND_MIDI_PORT_NAME;
     if (TR7_IS_STRING(values[0])) {
         name = tr7_string_buffer(values[0]);
     }
@@ -649,13 +649,16 @@ static int tr7_lang_init(editor_ctx_t *ctx) {
     /* Initialize music context */
     music_context_init(&state->music);
 
-    /* Initialize shared MIDI/audio context */
-    state->shared = (SharedContext *)malloc(sizeof(SharedContext));
-    if (state->shared) {
-        if (shared_context_init(state->shared) != 0) {
-            free(state->shared);
-            state->shared = NULL;
-        }
+    /* Use editor-owned SharedContext instead of allocating our own.
+     * This centralizes audio/MIDI/Link state across all languages. */
+    if (ctx->model.shared) {
+        state->shared = ctx->model.shared;
+    } else {
+        set_error(state, "No shared context available");
+        tr7_engine_destroy(state->engine);
+        free(state);
+        ctx->model.tr7_state = NULL;
+        return -1;
     }
 
     /* Set global state for C callbacks */
@@ -694,10 +697,11 @@ static void tr7_lang_cleanup(editor_ctx_t *ctx) {
     /* Send panic before cleanup */
     if (state->shared) {
         shared_send_panic(state->shared);
-        shared_context_cleanup(state->shared);
-        free(state->shared);
-        state->shared = NULL;
     }
+
+    /* SharedContext is NOT cleaned up here - editor owns it.
+     * Just clear the pointer to avoid dangling reference. */
+    state->shared = NULL;
 
     /* Destroy TR7 engine */
     if (state->engine) {

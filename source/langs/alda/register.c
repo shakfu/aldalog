@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include <time.h>
 
+#include "psnd.h"
 #include "register.h"
 #include "loki/internal.h"
 #include "loki/link.h"
@@ -176,6 +177,18 @@ int loki_alda_init(editor_ctx_t *ctx, const char *port_name) {
     /* Initialize alda context */
     alda_context_init(&state->alda_ctx);
 
+    /* Use editor-owned SharedContext instead of allocating our own.
+     * This centralizes audio/MIDI/Link state across all languages. */
+    if (ctx->model.shared) {
+        state->alda_ctx.shared = ctx->model.shared;
+    } else {
+        set_state_error(state, "No shared context available");
+        pthread_mutex_destroy(&state->mutex);
+        free(state);
+        ctx->model.alda_state = NULL;
+        return -1;
+    }
+
     /* Initialize async system (creates libuv thread) */
     if (alda_async_init() != 0) {
         set_state_error(state, "Failed to initialize async playback");
@@ -190,7 +203,7 @@ int loki_alda_init(editor_ctx_t *ctx, const char *port_name) {
     alda_async_set_concurrent(1);
 
     /* Open MIDI output */
-    const char *name = port_name ? port_name : "Loki";
+    const char *name = port_name ? port_name : PSND_MIDI_PORT_NAME;
     if (alda_midi_open_auto(&state->alda_ctx, name) != 0) {
         set_state_error(state, "Failed to open MIDI output");
         alda_async_cleanup();

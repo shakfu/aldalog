@@ -99,23 +99,12 @@ int loki_joy_init(editor_ctx_t *ctx) {
     /* Set parser dictionary for DEFINE support */
     joy_set_parser_dict(state->joy_ctx->dictionary);
 
-    /*
-     * Create editor-owned SharedContext for this Joy instance.
-     * This ensures multiple editor buffers don't stomp each other's context.
-     */
-    state->shared = (SharedContext*)malloc(sizeof(SharedContext));
-    if (!state->shared) {
-        set_state_error(state, "Failed to allocate shared context");
-        music_notation_cleanup(state->joy_ctx);
-        joy_context_free(state->joy_ctx);
-        free(state);
-        ctx->model.joy_state = NULL;
-        return -1;
-    }
-
-    if (shared_context_init(state->shared) != 0) {
-        set_state_error(state, "Failed to initialize shared context");
-        free(state->shared);
+    /* Use editor-owned SharedContext instead of allocating our own.
+     * This centralizes audio/MIDI/Link state across all languages. */
+    if (ctx->model.shared) {
+        state->shared = ctx->model.shared;
+    } else {
+        set_state_error(state, "No shared context available");
         music_notation_cleanup(state->joy_ctx);
         joy_context_free(state->joy_ctx);
         free(state);
@@ -130,7 +119,7 @@ int loki_joy_init(editor_ctx_t *ctx) {
     }
 
     /* Open virtual MIDI port for Joy output */
-    if (joy_midi_open_virtual(state->shared, PSND_MIDI_PORT_NAME "-joy") != 0) {
+    if (joy_midi_open_virtual(state->shared, PSND_MIDI_PORT_NAME) != 0) {
         /* Non-fatal - can still use real ports */
     }
 
@@ -150,12 +139,9 @@ void loki_joy_cleanup(editor_ctx_t *ctx) {
     /* Stop MIDI and send panic */
     joy_midi_panic(state->shared);
 
-    /* Free editor-owned SharedContext */
-    if (state->shared) {
-        shared_context_cleanup(state->shared);
-        free(state->shared);
-        state->shared = NULL;
-    }
+    /* SharedContext is NOT cleaned up here - editor owns it.
+     * Just clear the pointer to avoid dangling reference. */
+    state->shared = NULL;
 
     /* Clean up music notation (frees MusicContext) */
     if (state->joy_ctx) {

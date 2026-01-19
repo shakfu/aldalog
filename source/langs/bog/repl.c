@@ -934,10 +934,10 @@ static void *bog_cb_init(const SharedReplArgs *args) {
             }
         } else {
             /* Try to open a virtual port by default */
-            if (shared_midi_open_virtual(g_bog_repl_shared, "BogMIDI") == 0) {
+            if (shared_midi_open_virtual(g_bog_repl_shared, PSND_MIDI_PORT_NAME) == 0) {
                 midi_opened = 1;
                 if (args->verbose) {
-                    printf("Created virtual MIDI output: BogMIDI\n");
+                    printf("Created virtual MIDI output: " PSND_MIDI_PORT_NAME "\n");
                 }
             }
         }

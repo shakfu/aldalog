@@ -22,6 +22,9 @@
 #include "alda/interpreter.h"
 #include "alda/async.h"
 
+/* Shared context for REPL-owned state */
+#include "shared/context.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -308,6 +311,15 @@ int alda_play_main(int argc, char **argv) {
     alda_context_init(&ctx);
     ctx.verbose_mode = verbose;
 
+    /* Create REPL-owned SharedContext for audio/MIDI/Link */
+    SharedContext shared;
+    if (shared_context_init(&shared) != 0) {
+        fprintf(stderr, "Error: Failed to initialize shared context\n");
+        alda_context_cleanup(&ctx);
+        return 1;
+    }
+    ctx.shared = &shared;
+
     if (alda_tsf_init() != 0) {
         fprintf(stderr, "Warning: Failed to initialize built-in synth\n");
     }
@@ -335,7 +347,7 @@ int alda_play_main(int argc, char **argv) {
             printf("Using built-in synth: %s\n", soundfont_path);
         }
     } else {
-        if (alda_midi_open_auto(&ctx, "Alda") != 0) {
+        if (alda_midi_open_auto(&ctx, PSND_MIDI_PORT_NAME) != 0) {
             fprintf(stderr, "Warning: No MIDI output available\n");
             fprintf(stderr, "Hint: Use -sf <soundfont.sf2> for built-in synth\n");
         }
@@ -367,6 +379,7 @@ int alda_play_main(int argc, char **argv) {
     alda_tsf_cleanup();
     alda_midi_cleanup(&ctx);
     alda_context_cleanup(&ctx);
+    shared_context_cleanup(&shared);
 
     return result < 0 ? 1 : 0;
 }
@@ -481,6 +494,15 @@ int alda_repl_main(int argc, char **argv) {
     alda_context_init(&ctx);
     ctx.verbose_mode = verbose;
 
+    /* Create REPL-owned SharedContext for audio/MIDI/Link */
+    SharedContext shared;
+    if (shared_context_init(&shared) != 0) {
+        fprintf(stderr, "Error: Failed to initialize shared context\n");
+        alda_context_cleanup(&ctx);
+        return 1;
+    }
+    ctx.shared = &shared;
+
     if (alda_tsf_init() != 0) {
         fprintf(stderr, "Warning: Failed to initialize built-in synth\n");
     }
@@ -493,6 +515,7 @@ int alda_repl_main(int argc, char **argv) {
         alda_tsf_cleanup();
         alda_midi_cleanup(&ctx);
         alda_context_cleanup(&ctx);
+        shared_context_cleanup(&shared);
         return 0;
     }
 
@@ -503,6 +526,7 @@ int alda_repl_main(int argc, char **argv) {
             alda_tsf_cleanup();
             alda_midi_cleanup(&ctx);
             alda_context_cleanup(&ctx);
+            shared_context_cleanup(&shared);
             return 1;
         }
         if (alda_tsf_enable() != 0) {
@@ -510,6 +534,7 @@ int alda_repl_main(int argc, char **argv) {
             alda_tsf_cleanup();
             alda_midi_cleanup(&ctx);
             alda_context_cleanup(&ctx);
+            shared_context_cleanup(&shared);
             return 1;
         }
         ctx.tsf_enabled = 1;
@@ -535,7 +560,7 @@ int alda_repl_main(int argc, char **argv) {
                 midi_opened = 1;
             }
         } else {
-            if (alda_midi_open_auto(&ctx, "Alda") == 0) {
+            if (alda_midi_open_auto(&ctx, PSND_MIDI_PORT_NAME) == 0) {
                 midi_opened = 1;
             }
         }
@@ -567,6 +592,7 @@ int alda_repl_main(int argc, char **argv) {
             fprintf(stderr, "Error: Failed to interpret file\n");
             alda_midi_cleanup(&ctx);
             alda_context_cleanup(&ctx);
+            shared_context_cleanup(&shared);
             return 1;
         }
 
@@ -614,6 +640,7 @@ int alda_repl_main(int argc, char **argv) {
     alda_tsf_cleanup();
     alda_midi_cleanup(&ctx);
     alda_context_cleanup(&ctx);
+    shared_context_cleanup(&shared);
 
     return result < 0 ? 1 : 0;
 }

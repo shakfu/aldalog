@@ -32,6 +32,7 @@
 #include "loki/link.h"
 #include "live_loop.h"
 #include "async_queue.h"
+#include "shared/context.h"
 
 /* ======================== Main Editor Instance ============================ */
 
@@ -386,6 +387,22 @@ int loki_editor_main(int argc, char **argv) {
     {
         editor_ctx_t *ctx = buffer_get_current();
         if (ctx) {
+            /* Create editor-owned SharedContext for all languages to share.
+             * This centralizes audio/MIDI/Link state so switching between
+             * language buffers doesn't cause conflicts. */
+            if (!ctx->model.shared) {
+                ctx->model.shared = (SharedContext *)malloc(sizeof(SharedContext));
+                if (ctx->model.shared) {
+                    if (shared_context_init(ctx->model.shared) != 0) {
+                        fprintf(stderr, "Warning: Failed to initialize shared context\n");
+                        free(ctx->model.shared);
+                        ctx->model.shared = NULL;
+                    }
+                } else {
+                    fprintf(stderr, "Warning: Failed to allocate shared context\n");
+                }
+            }
+
             int ret = loki_lang_init_for_file(ctx);
             if (ret == 0) {
                 const LokiLangOps *lang = loki_lang_for_file(ctx->model.filename);
@@ -469,6 +486,13 @@ void editor_cleanup_resources(editor_ctx_t *ctx) {
 
     /* Clean up all language subsystems (stops all playback) */
     loki_lang_cleanup_all(ctx);
+
+    /* Clean up editor-owned SharedContext after languages are done */
+    if (ctx->model.shared) {
+        shared_context_cleanup(ctx->model.shared);
+        free(ctx->model.shared);
+        ctx->model.shared = NULL;
+    }
 
     /* Clean up async event queue */
     async_queue_cleanup();

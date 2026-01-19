@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <unistd.h>
 
 /* Strip leading whitespace */
 static const char* skip_whitespace(const char* s) {
@@ -35,6 +36,10 @@ void shared_print_command_help(void) {
     printf("  :l :list          List MIDI ports\n");
     printf("  :s :stop          Stop current playback\n");
     printf("  :p :panic         All notes off\n");
+    printf("\n");
+    printf("Language Commands:\n");
+    printf("  :lang NAME        Switch to another language REPL\n");
+    printf("  :langs            List available languages\n");
     printf("\n");
     printf("Synth Commands:\n");
     printf("  :sf PATH          Load soundfont and use built-in synth\n");
@@ -110,6 +115,40 @@ int shared_process_command(SharedContext* ctx, const char* input,
         }
         shared_send_panic(ctx);
         printf("All notes off\n");
+        return REPL_CMD_HANDLED;
+    }
+
+    /* List available languages - use psnd --help for the list */
+    if (strcmp(cmd, "langs") == 0 || strcmp(cmd, "languages") == 0) {
+        printf("Available languages: alda, joy, tr7, bog\n");
+        printf("Use ':lang NAME' to switch.\n");
+        return REPL_CMD_HANDLED;
+    }
+
+    /* Switch language: :lang NAME */
+    if (starts_with(cmd, "lang ")) {
+        const char* lang_name = skip_whitespace(cmd + 5);
+        if (*lang_name == '\0') {
+            printf("Usage: :lang NAME\n");
+            printf("Use ':langs' to list available languages.\n");
+            return REPL_CMD_HANDLED;
+        }
+
+        /* Clean up current state before switching */
+        if (stop_callback) {
+            stop_callback();
+        }
+        shared_send_panic(ctx);
+
+        printf("Switching to %s...\n", lang_name);
+        fflush(stdout);
+
+        /* Use exec to restart with the new language.
+         * The new process will validate the language name. */
+        execlp(PSND_NAME, PSND_NAME, lang_name, NULL);
+
+        /* If exec fails, print error and continue */
+        perror("Failed to switch language");
         return REPL_CMD_HANDLED;
     }
 

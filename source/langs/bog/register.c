@@ -267,13 +267,19 @@ static int bog_lang_init(editor_ctx_t *ctx) {
         return -1;
     }
 
-    /* Initialize shared MIDI/audio context */
-    state->shared = (SharedContext *)malloc(sizeof(SharedContext));
-    if (state->shared) {
-        if (shared_context_init(state->shared) != 0) {
-            free(state->shared);
-            state->shared = NULL;
-        }
+    /* Use editor-owned SharedContext instead of allocating our own.
+     * This centralizes audio/MIDI/Link state across all languages. */
+    if (ctx->model.shared) {
+        state->shared = ctx->model.shared;
+    } else {
+        set_error(state, "No shared context available");
+        bog_transition_manager_destroy(state->transition_manager);
+        bog_scheduler_destroy(state->scheduler);
+        bog_state_manager_destroy(state->state_manager);
+        bog_arena_destroy(state->arena);
+        free(state);
+        ctx->model.bog_state = NULL;
+        return -1;
     }
 
     /* Set global state for audio callbacks */
@@ -305,10 +311,11 @@ static void bog_lang_cleanup(editor_ctx_t *ctx) {
     /* Send panic before cleanup */
     if (state->shared) {
         shared_send_panic(state->shared);
-        shared_context_cleanup(state->shared);
-        free(state->shared);
-        state->shared = NULL;
     }
+
+    /* SharedContext is NOT cleaned up here - editor owns it.
+     * Just clear the pointer to avoid dangling reference. */
+    state->shared = NULL;
 
     /* Cleanup bog resources */
     if (state->transition_manager) {

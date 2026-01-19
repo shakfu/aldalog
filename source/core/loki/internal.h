@@ -104,6 +104,9 @@ enum KEY_ACTION{
 /* Undo/redo state - opaque pointer, defined in loki_undo.c */
 struct undo_state;
 
+/* Shared audio/MIDI/Link context - see shared/context.h */
+struct SharedContext;
+
 /* Language state forward declarations - see src/lang_config.h */
 #include "../lang_config.h"
 
@@ -170,6 +173,11 @@ typedef struct EditorModel {
     int dirty;                /* File modified but not saved */
     struct undo_state *undo_state;        /* Undo/redo state (NULL if disabled) */
     struct indent_config *indent_config;  /* Auto-indent settings */
+
+    /* Shared audio/MIDI/Link context - single instance for all languages.
+     * Owned by the editor, shared by all language subsystems.
+     * See shared/context.h for details. */
+    struct SharedContext *shared;
 
     /* Language states - per-context state (NULL until initialized)
      * See lang_config.h to add new languages */

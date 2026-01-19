@@ -17,6 +17,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **REPL Language Switching**: Switch between language REPLs without exiting
+  - `:lang NAME` - Switch to another language REPL (e.g., `:lang joy`, `:lang alda`)
+  - `:langs` - List available languages
+  - Uses `exec` to restart the process with the new language, preserving terminal state
+  - Available in all language REPLs (Alda, Joy, TR7, Bog)
+  - **Files Modified**: `source/core/shared/repl_commands.c`
+
+### Changed
+
+- **Unified MIDI Port Name**: All languages now use `PSND_MIDI` as the default virtual MIDI port name
+  - Previously each language used its own port name (Alda, Loki, JoyMIDI, TR7MIDI, BogMIDI, etc.)
+  - Now all languages share `PSND_MIDI_PORT_NAME` ("PSND_MIDI") for consistency
+  - Simplifies DAW setup: connect once, works with all languages
+  - Language switching via `:lang` preserves MIDI connection
+  - **Files Modified**:
+    - `source/langs/alda/repl.c`, `source/langs/alda/register.c`
+    - `source/langs/joy/repl.c`, `source/langs/joy/register.c`
+    - `source/langs/joy/midi/joy_midi_backend.c`, `source/langs/joy/midi/midi_primitives.c`
+    - `source/langs/tr7/impl/repl.c`, `source/langs/tr7/impl/register.c`
+    - `source/langs/bog/repl.c`
+
+- **Centralized SharedContext Ownership**: Single SharedContext instance shared across all languages in editor mode
+  - Previously each language (Alda, Joy, TR7, Bog) allocated its own SharedContext, causing conflicts on singleton backends (TSF, Csound, Link)
+  - `EditorModel` now owns a single `SharedContext*` that all languages share
+  - Editor creates SharedContext in `loki_editor_main()` before language initialization
+  - Editor cleans up SharedContext in `editor_cleanup_resources()` after language cleanup
+  - Each language's `register.c` now uses `ctx->model.shared` instead of allocating its own
+  - REPL mode unchanged: each REPL process still owns its own SharedContext (appropriate for standalone processes)
+  - Eliminates undefined behavior when switching between language buffers
+  - Prevents inconsistent audio routing based on buffer/language initialization order
+  - **Files Modified**:
+    - `source/core/loki/internal.h` - Added `SharedContext *shared` to `EditorModel`
+    - `source/core/loki/editor.c` - SharedContext creation and cleanup
+    - `source/langs/alda/impl/context.c` - Removed SharedContext allocation/cleanup
+    - `source/langs/alda/register.c` - Use `ctx->model.shared`
+    - `source/langs/alda/repl.c` - Create REPL-owned SharedContext
+    - `source/langs/joy/register.c` - Use `ctx->model.shared`
+    - `source/langs/tr7/impl/register.c` - Use `ctx->model.shared`
+    - `source/langs/bog/register.c` - Use `ctx->model.shared`
+
 ## [0.1.3]
 
 ### Added

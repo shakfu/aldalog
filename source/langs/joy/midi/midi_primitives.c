@@ -12,6 +12,7 @@
 #include "music/music_theory.h"
 #include "music_context.h"
 #include "music_notation.h"
+#include "psnd.h"         /* PSND_MIDI_PORT_NAME */
 #include "context.h"      /* SharedContext, shared_send_* */
 #include "midi/midi.h"    /* shared_midi_* */
 #include <stdio.h>
@@ -71,8 +72,8 @@ void midi_list_(JoyContext* ctx) {
 void midi_virtual_(JoyContext* ctx) {
     MusicContext* mctx = (MusicContext*)ctx->user_data;
     if (mctx && mctx->shared) {
-        if (shared_midi_open_virtual(mctx->shared, "JoyMIDI") == 0) {
-            printf("Created virtual MIDI port: JoyMIDI\n");
+        if (shared_midi_open_virtual(mctx->shared, PSND_MIDI_PORT_NAME) == 0) {
+            printf("Created virtual MIDI port: " PSND_MIDI_PORT_NAME "\n");
         }
     }
 }

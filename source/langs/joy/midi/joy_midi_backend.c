@@ -9,6 +9,7 @@
  */
 
 #include "joy_midi_backend.h"
+#include "psnd.h"           /* PSND_MIDI_PORT_NAME */
 #include "context.h"        /* SharedContext */
 #include "midi/midi.h"      /* shared_midi_* */
 #include "audio/audio.h"    /* shared_tsf_*, shared_csound_* */
@@ -40,9 +41,9 @@ int joy_midi_open_port(SharedContext* ctx, int port_idx) {
 int joy_midi_open_virtual(SharedContext* ctx, const char* name) {
     if (!ctx) return -1;
 
-    int ret = shared_midi_open_virtual(ctx, name ? name : "JoyMIDI");
+    int ret = shared_midi_open_virtual(ctx, name ? name : PSND_MIDI_PORT_NAME);
     if (ret == 0) {
-        printf("Joy MIDI: Created virtual port '%s'\n", name ? name : "JoyMIDI");
+        printf("Joy MIDI: Created virtual port '%s'\n", name ? name : PSND_MIDI_PORT_NAME);
     }
     return ret;
 }
