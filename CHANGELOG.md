@@ -93,6 +93,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Render with: `d2 docs/architecture.d2 docs/architecture.svg`
   - **Files Added**: `docs/architecture.d2`, `docs/architecture.svg`, `docs/architecture.png`
 
+- **Synthesis Backend Tests**: Added unit tests for TSF and Csound audio backends
+  - `test_tsf_backend.c` - 19 tests covering initialization, soundfont loading, enable/disable, MIDI messages, boundary conditions
+  - `test_csound_backend.c` - 31 tests covering availability, initialization, CSD/orchestra loading, enable/disable, MIDI messages, render, playback control
+  - Tests verify API behavior without crashing; full audio output requires manual verification
+  - Csound tests handle conditional compilation (`BUILD_CSOUND_BACKEND`)
+  - **Files Added**: `source/core/tests/shared/test_tsf_backend.c`, `source/core/tests/shared/test_csound_backend.c`
+  - **Files Modified**: `source/core/tests/shared/CMakeLists.txt`
+
 ### Changed
 
 - **Unified MIDI Port Name**: All languages now use `PSND_MIDI` as the default virtual MIDI port name

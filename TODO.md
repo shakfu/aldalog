@@ -33,10 +33,10 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 
 ### Testing
 
-- [ ] Add synthesis backend tests
-  - `csound_backend.c` - untested
-  - `tsf_backend.c` - untested
-  - Critical for verifying audio output
+- [x] Add synthesis backend tests
+  - `test_tsf_backend.c` - 19 tests (init, cleanup, loading, enable/disable, MIDI messages, boundaries)
+  - `test_csound_backend.c` - 31 tests (availability, init, loading, enable/disable, MIDI, render, playback)
+  - Tests verify API behavior without crashing; full audio testing requires manual verification
 
 - [ ] Add scanner/lexer unit tests for all languages
   - Alda scanner vulnerable to malformed input
