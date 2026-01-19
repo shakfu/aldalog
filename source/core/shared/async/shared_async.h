@@ -74,6 +74,15 @@ typedef struct SharedAsyncEvent {
 } SharedAsyncEvent;
 
 /**
+ * Launch quantization options for beat-aligned start.
+ */
+typedef enum {
+    LAUNCH_QUANT_IMMEDIATE = 0,  /* Start immediately (no quantization) */
+    LAUNCH_QUANT_BEAT = 1,       /* Start on next beat */
+    LAUNCH_QUANT_BAR = 4,        /* Start on next bar (4/4 time) */
+} LaunchQuantize;
+
+/**
  * Schedule of events for playback.
  */
 typedef struct SharedAsyncSchedule {
@@ -83,6 +92,7 @@ typedef struct SharedAsyncSchedule {
     int total_duration_ms;
     int use_ticks;          /* Non-zero to use tick-based timing */
     int initial_tempo;      /* Starting tempo in BPM (for tick mode) */
+    int launch_quantize;    /* Beat quantization (0=immediate, 1=beat, 4=bar, etc.) */
 } SharedAsyncSchedule;
 
 /* ============================================================================
@@ -181,6 +191,15 @@ void shared_async_schedule_tempo(SharedAsyncSchedule* sched, int tick, int tempo
  * @return Duration in milliseconds.
  */
 int shared_async_ticks_to_ms(int ticks, int tempo);
+
+/**
+ * Set launch quantization for beat-aligned start.
+ * When Link is enabled, playback will wait until the next beat boundary.
+ *
+ * @param sched Schedule to configure.
+ * @param quantize Beat quantum (0=immediate, 1=next beat, 4=next bar in 4/4).
+ */
+void shared_async_schedule_set_launch_quantize(SharedAsyncSchedule* sched, int quantize);
 
 /* ============================================================================
  * Async Playback System

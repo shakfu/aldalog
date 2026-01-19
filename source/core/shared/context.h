@@ -43,6 +43,7 @@ typedef struct SharedContext {
     /* Musical state */
     int tempo;              /* Current tempo in BPM (Link can override) */
     int default_channel;    /* Default MIDI channel (1-16) */
+    int launch_quantize;    /* Beat quantization (0=immediate, 1=beat, 4=bar) */
 
     /* Optional: microtuning scale (void* to avoid circular deps) */
     void* scale;

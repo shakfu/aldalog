@@ -26,6 +26,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Available in all language REPLs (Alda, Joy, TR7, Bog)
   - **Files Modified**: `source/core/shared/repl_commands.c`
 
+- **Ableton Link Beat-Aligned Start**: Playback can quantize to the Link beat grid
+  - `loki.link.launch_quantize(quantum)` - Set launch quantization (0=immediate, 1=beat, 4=bar)
+  - When Link is enabled and launch_quantize > 0, playback waits for the next beat boundary
+  - Ensures notes land on the same beats as other Link peers
+  - Works with both Alda and Joy async playback
+  - **New API**: `shared_link_ms_to_next_beat(quantum)` - Calculate ms until next boundary
+  - **Files Modified**:
+    - `source/core/shared/link/link.c`, `source/core/shared/link/link.h`
+    - `source/core/shared/async/shared_async.c`, `source/core/shared/async/shared_async.h`
+    - `source/core/shared/context.h`
+    - `source/core/loki/lua.c`
+    - `source/langs/alda/async.c`
+    - `source/langs/joy/midi/joy_async.c`
+
 ### Changed
 
 - **Unified MIDI Port Name**: All languages now use `PSND_MIDI` as the default virtual MIDI port name

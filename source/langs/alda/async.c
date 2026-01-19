@@ -67,6 +67,11 @@ int alda_events_play_async_ex(AldaContext* ctx, AldaAsyncCompletionCallback call
     int tempo = (int)(shared_link_effective_tempo((double)local_tempo) + 0.5);
     shared_async_schedule_set_tick_mode(sched, tempo);
 
+    /* Set launch quantization from context (0 = immediate, 1 = beat, 4 = bar) */
+    if (ctx->shared->launch_quantize > 0) {
+        shared_async_schedule_set_launch_quantize(sched, ctx->shared->launch_quantize);
+    }
+
     /* Convert Alda events to shared events */
     /* Note: Alda uses 0-based channels (0-15), shared service uses 1-based (1-16) */
     for (int i = 0; i < ctx->event_count; i++) {

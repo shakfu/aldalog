@@ -246,6 +246,34 @@ double shared_link_get_phase(double quantum) {
     return abl_link_phase_at_time(g_link.session_state, now, quantum);
 }
 
+int shared_link_ms_to_next_beat(double quantum) {
+    if (!g_link.initialized || !shared_link_is_enabled()) return 0;
+
+    if (quantum <= 0.0) quantum = 1.0;
+
+    abl_link_capture_app_session_state(g_link.link, g_link.session_state);
+    int64_t now = abl_link_clock_micros(g_link.link);
+
+    /* Get current phase within the quantum (0 to quantum) */
+    double phase = abl_link_phase_at_time(g_link.session_state, now, quantum);
+
+    /* Calculate beats remaining until next boundary */
+    double beats_remaining = quantum - phase;
+    if (beats_remaining <= 0.0001) {
+        /* Already at boundary (within tolerance), wait for next one */
+        beats_remaining = quantum;
+    }
+
+    /* Get tempo to convert beats to milliseconds */
+    double tempo = abl_link_tempo(g_link.session_state);
+    if (tempo <= 0.0) tempo = 120.0;
+
+    /* beats_remaining * (60000 ms/min) / (tempo beats/min) = ms */
+    double ms = beats_remaining * 60000.0 / tempo;
+
+    return (int)(ms + 0.5);  /* Round to nearest ms */
+}
+
 /* ============================================================================
  * Transport (Start/Stop Sync)
  * ============================================================================ */

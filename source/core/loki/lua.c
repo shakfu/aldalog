@@ -37,6 +37,7 @@
 #include "loki/link.h"       /* Ableton Link integration */
 #include "export.h"          /* MIDI export control */
 #include "buffers.h"    /* Buffer management for buffer_get_current() */
+#include "shared/context.h"  /* SharedContext for launch_quantize */
 
 /* ======================= Lua API bindings ================================ */
 
@@ -1261,6 +1262,28 @@ static int lua_link_on_start_stop(lua_State *L) {
     return 0;
 }
 
+/* Lua API: loki.link.launch_quantize(quantum) - Set launch quantization
+ * quantum: 0 = immediate, 1 = next beat, 4 = next bar (4/4), etc.
+ * Returns current value if called with no args */
+static int lua_link_launch_quantize(lua_State *L) {
+    editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (!ctx || !ctx->model.shared) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    if (lua_gettop(L) >= 1) {
+        /* Set mode */
+        int quantum = (int)luaL_checkinteger(L, 1);
+        if (quantum < 0) quantum = 0;
+        ctx->model.shared->launch_quantize = quantum;
+    }
+
+    /* Return current value */
+    lua_pushinteger(L, ctx->model.shared->launch_quantize);
+    return 1;
+}
+
 /* Register link module as loki.link subtable */
 static void lua_register_link_module(lua_State *L) {
     /* Assumes loki table is on top of stack */
@@ -1319,6 +1342,9 @@ static void lua_register_link_module(lua_State *L) {
 
     lua_pushcfunction(L, lua_link_on_start_stop);
     lua_setfield(L, -2, "on_start_stop");
+
+    lua_pushcfunction(L, lua_link_launch_quantize);
+    lua_setfield(L, -2, "launch_quantize");
 
     lua_setfield(L, -2, "link");  /* Set as loki.link */
 }

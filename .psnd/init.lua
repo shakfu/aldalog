@@ -56,6 +56,54 @@ if MODE == "editor" then
 end
 
 -- ==============================================================================
+-- Ableton Link Configuration
+-- ==============================================================================
+-- Ableton Link enables tempo synchronization with other Link-enabled apps
+-- (Ableton Live, other DAWs, iOS apps, etc.) on the same network.
+
+if MODE == "editor" then
+    -- Initialize Link with starting tempo (required before other Link calls)
+    -- loki.link.init(120)
+
+    -- Enable Link network synchronization
+    -- When enabled, tempo syncs with other Link peers on the network
+    -- loki.link.enable(true)
+
+    -- Set session tempo (propagates to all connected peers)
+    -- loki.link.set_tempo(120)
+
+    -- Launch Quantization: wait for beat/bar boundary before starting playback
+    -- This ensures notes land on the same beats as other Link peers
+    -- Values: 0 = immediate (default), 1 = next beat, 4 = next bar (4/4 time)
+    -- loki.link.launch_quantize(4)
+
+    -- Enable start/stop sync (transport sync with peers)
+    -- When enabled, play/stop commands sync across all Link peers
+    -- loki.link.start_stop_sync(true)
+
+    -- Register callbacks for Link events (optional)
+    -- These functions will be called when Link state changes:
+    --
+    -- Peer count changed (num_peers = number of other connected apps):
+    -- function on_link_peers(num_peers)
+    --     loki.status("Link peers: " .. num_peers)
+    -- end
+    -- loki.link.on_peers("on_link_peers")
+    --
+    -- Tempo changed (tempo = new BPM from network):
+    -- function on_link_tempo(tempo)
+    --     loki.status(string.format("Link tempo: %.1f", tempo))
+    -- end
+    -- loki.link.on_tempo("on_link_tempo")
+    --
+    -- Transport state changed (is_playing = true/false):
+    -- function on_link_transport(is_playing)
+    --     loki.status("Link transport: " .. (is_playing and "playing" or "stopped"))
+    -- end
+    -- loki.link.on_start_stop("on_link_transport")
+end
+
+-- ==============================================================================
 -- Load Keybindings
 -- ==============================================================================
 

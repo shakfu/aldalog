@@ -104,6 +104,15 @@ double shared_link_get_beat(double quantum);
  */
 double shared_link_get_phase(double quantum);
 
+/**
+ * @brief Calculate milliseconds until next beat boundary.
+ * Used for launch quantization - waiting until the next beat/bar to start playback.
+ *
+ * @param quantum Beat subdivision (e.g., 1 for next beat, 4 for next bar in 4/4).
+ * @return Milliseconds until next boundary, or 0 if Link is not enabled.
+ */
+int shared_link_ms_to_next_beat(double quantum);
+
 /* ============================================================================
  * Transport (Start/Stop Sync)
  * ============================================================================ */

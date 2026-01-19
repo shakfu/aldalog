@@ -42,6 +42,11 @@ int joy_async_play(MidiSchedule* sched, MusicContext* mctx) {
     SharedAsyncSchedule* async_sched = shared_async_schedule_new();
     if (!async_sched) return -1;
 
+    /* Set launch quantization from context (0 = immediate, 1 = beat, 4 = bar) */
+    if (mctx->shared->launch_quantize > 0) {
+        shared_async_schedule_set_launch_quantize(async_sched, mctx->shared->launch_quantize);
+    }
+
     for (size_t i = 0; i < sched->count; i++) {
         ScheduledEvent* ev = &sched->events[i];
         /* Skip rests (pitch == -1) */

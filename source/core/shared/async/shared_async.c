@@ -8,6 +8,7 @@
 
 #include "shared_async.h"
 #include "context.h"
+#include "link/link.h"
 #include <uv.h>
 #include <stdlib.h>
 #include <string.h>
@@ -419,6 +420,7 @@ SharedAsyncSchedule* shared_async_schedule_new(void) {
     sched->total_duration_ms = 0;
     sched->use_ticks = 0;
     sched->initial_tempo = SHARED_ASYNC_DEFAULT_TEMPO;
+    sched->launch_quantize = LAUNCH_QUANT_IMMEDIATE;
     return sched;
 }
 
@@ -548,6 +550,11 @@ void shared_async_schedule_set_tick_mode(SharedAsyncSchedule* sched, int initial
     if (!sched) return;
     sched->use_ticks = 1;
     sched->initial_tempo = initial_tempo > 0 ? initial_tempo : SHARED_ASYNC_DEFAULT_TEMPO;
+}
+
+void shared_async_schedule_set_launch_quantize(SharedAsyncSchedule* sched, int quantize) {
+    if (!sched) return;
+    sched->launch_quantize = quantize >= 0 ? quantize : 0;
 }
 
 void shared_async_schedule_note_on_tick(SharedAsyncSchedule* sched, int tick,
@@ -801,6 +808,12 @@ int shared_async_play_ex(SharedAsyncSchedule* sched, SharedContext* ctx,
                 slot->current_time_ms = slot->events[0].time_ms;
             }
         }
+    }
+
+    /* Apply launch quantization if enabled */
+    if (sched->launch_quantize > 0) {
+        int quant_delay = shared_link_ms_to_next_beat((double)sched->launch_quantize);
+        first_delay += quant_delay;
     }
 
     uv_timer_start(&slot->timer, on_timer, first_delay, 0);

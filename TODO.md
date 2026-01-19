@@ -20,11 +20,6 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 
 ### Architecture
 
-- [ ] Centralize SharedContext ownership
-  - Multiple `SharedContext` instances created (one per language) can conflict on singleton backends
-  - Editor should own single context, languages share it
-  - Location: `source/core/shared/context.c`
-
 - [ ] Extract buffer manager to injectable service
   - Remove global `buffer_state` in `buffers.c`
   - Enables multi-editor and better testability
@@ -53,10 +48,11 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 
 ### Ableton Link Integration
 
-- [ ] **Beat-Aligned Start** - Playback quantizes to Link beat grid
-  - Use `shared_link_get_phase()` to wait for next beat/bar boundary before starting
-  - Add launch quantization option (1 beat, 1 bar, etc.)
-  - Align tick 0 with Link's beat grid so notes land on same beats as peers
+- [x] **Beat-Aligned Start** - Playback quantizes to Link beat grid
+  - Added `shared_link_ms_to_next_beat(quantum)` function
+  - Added `launch_quantize` field to SharedContext and SharedAsyncSchedule
+  - Added `loki.link.launch_quantize(quantum)` Lua API (0=immediate, 1=beat, 4=bar)
+  - Alda and Joy async playback now respects launch quantization
 
 - [ ] **Full Transport Sync** - Start/stop from any Link peer controls all
   - Wire transport callbacks to actually start/stop playback
@@ -230,6 +226,17 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 - Added mouse click-to-position support
 - Added language switching commands (`:alda`, `:joy`, `:langs`)
 - Added first-line directive support (`#alda`, `#joy`)
+
+### SharedContext Centralization
+- EditorModel now owns single SharedContext for all languages
+- Languages share context instead of creating separate instances
+- Prevents conflicts on singleton backends (TSF, Csound, Link)
+- REPLs still own their own SharedContext for standalone mode
+
+### REPL Enhancements
+- Added `:lang NAME` command to switch between language REPLs
+- Added `:langs` command to list available languages
+- Unified MIDI port name to `PSND_MIDI` across all languages
 
 ### Other Completed Items
 - Standardized error return conventions
