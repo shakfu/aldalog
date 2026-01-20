@@ -28,7 +28,17 @@
 #include <libgen.h>
 #include <unistd.h>
 
-#if defined(VFS_USE_PKG) && defined(VFS_USE_ZSTD)
+/* Include the appropriate embedded header based on compile mode.
+ * MHS_EMBEDDED_HEADER can be defined to override the default selection.
+ */
+#ifdef MHS_EMBEDDED_HEADER
+/* Custom header specified via -DMHS_EMBEDDED_HEADER="filename.h" */
+#if defined(VFS_USE_ZSTD)
+#define ZSTD_STATIC_LINKING_ONLY
+#include "zstd.h"
+#endif
+#include MHS_EMBEDDED_HEADER
+#elif defined(VFS_USE_PKG) && defined(VFS_USE_ZSTD)
 /* Compressed packages mode - smallest binary + fast startup */
 #define ZSTD_STATIC_LINKING_ONLY
 #include "zstd.h"

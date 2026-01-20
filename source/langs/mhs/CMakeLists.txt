@@ -93,21 +93,76 @@ if(ENABLE_MHS_INTEGRATION)
 # ==============================================================================
 # Embedded MHS Configuration for psnd
 # ==============================================================================
-# psnd embeds MHS libraries using VFS (Virtual File System) with zstd compression
-# This makes psnd mhs self-contained with fast ~2s startup (vs ~17s from source)
+# psnd embeds MHS libraries using VFS (Virtual File System)
+#
+# Options:
+#   MHS_EMBED_MODE - Choose embedding mode:
+#     PKG_ZSTD (default) - Precompiled packages + zstd compression (~2s startup)
+#     PKG                - Precompiled packages, no compression (~2s startup)
+#     SRC_ZSTD           - Compressed .hs sources (~17s startup, smaller binary)
+#     SRC                - Uncompressed .hs sources (~17s startup)
+#
+#   MHS_ENABLE_COMPILATION - Enable compilation to standalone executables:
+#     ON (default)       - Embed libremidi/libmidi_ffi for -o support
+#     OFF                - No library embedding, smaller binary, no -o support
+
+set(MHS_EMBED_MODE "PKG_ZSTD" CACHE STRING "MHS embedding mode: PKG_ZSTD, PKG, SRC_ZSTD, SRC")
+set_property(CACHE MHS_EMBED_MODE PROPERTY STRINGS "PKG_ZSTD" "PKG" "SRC_ZSTD" "SRC")
+
+option(MHS_ENABLE_COMPILATION "Enable MHS compilation to executable (embeds MIDI libraries)" ON)
 
 set(MHS_IMPL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/impl)
 set(ZSTD_DIR ${CMAKE_SOURCE_DIR}/source/thirdparty/zstd-1.5.7)
 set(MHS_SCRIPTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/scripts)
 set(MHS_VERSION_PSND "0.15.0.0")
 
-# Check for zstd availability
-if(EXISTS "${ZSTD_DIR}/zstd.c")
+# Parse embedding mode
+if(MHS_EMBED_MODE STREQUAL "PKG_ZSTD")
+    set(PSND_MHS_USE_PKG TRUE)
     set(PSND_MHS_USE_ZSTD TRUE)
-    message(STATUS "MHS psnd: Using zstd compression for embedded libraries")
-else()
+elseif(MHS_EMBED_MODE STREQUAL "PKG")
+    set(PSND_MHS_USE_PKG TRUE)
     set(PSND_MHS_USE_ZSTD FALSE)
-    message(STATUS "MHS psnd: zstd not found, using uncompressed embedding")
+elseif(MHS_EMBED_MODE STREQUAL "SRC_ZSTD")
+    set(PSND_MHS_USE_PKG FALSE)
+    set(PSND_MHS_USE_ZSTD TRUE)
+elseif(MHS_EMBED_MODE STREQUAL "SRC")
+    set(PSND_MHS_USE_PKG FALSE)
+    set(PSND_MHS_USE_ZSTD FALSE)
+else()
+    message(FATAL_ERROR "Invalid MHS_EMBED_MODE: ${MHS_EMBED_MODE}. Use PKG_ZSTD, PKG, SRC_ZSTD, or SRC")
+endif()
+
+# Check for zstd availability if needed
+if(PSND_MHS_USE_ZSTD AND NOT EXISTS "${ZSTD_DIR}/zstd.c")
+    message(WARNING "MHS: zstd requested but not found at ${ZSTD_DIR}, falling back to uncompressed")
+    set(PSND_MHS_USE_ZSTD FALSE)
+    if(PSND_MHS_USE_PKG)
+        set(MHS_EMBED_MODE "PKG")
+    else()
+        set(MHS_EMBED_MODE "SRC")
+    endif()
+endif()
+
+# Report configuration
+if(PSND_MHS_USE_PKG)
+    if(PSND_MHS_USE_ZSTD)
+        message(STATUS "MHS psnd: PKG_ZSTD mode (precompiled packages + zstd, ~2s startup)")
+    else()
+        message(STATUS "MHS psnd: PKG mode (precompiled packages, ~2s startup)")
+    endif()
+else()
+    if(PSND_MHS_USE_ZSTD)
+        message(STATUS "MHS psnd: SRC_ZSTD mode (compressed sources, ~17s startup)")
+    else()
+        message(STATUS "MHS psnd: SRC mode (uncompressed sources, ~17s startup)")
+    endif()
+endif()
+
+if(MHS_ENABLE_COMPILATION)
+    message(STATUS "MHS psnd: Compilation to executable enabled (embeds MIDI libraries)")
+else()
+    message(STATUS "MHS psnd: Compilation to executable disabled (smaller binary)")
 endif()
 
 # Platform-specific config.h location
@@ -176,11 +231,36 @@ target_include_directories(mhs_runtime PRIVATE
     ${CMAKE_SOURCE_DIR}/source/thirdparty/libremidi/include
 )
 
-# VFS compile definitions
-target_compile_definitions(mhs_runtime PRIVATE MHS_EMBEDDED_VFS VFS_USE_PKG)
+# VFS compile definitions based on MHS_EMBED_MODE
+target_compile_definitions(mhs_runtime PRIVATE MHS_EMBEDDED_VFS)
+if(PSND_MHS_USE_PKG)
+    target_compile_definitions(mhs_runtime PRIVATE VFS_USE_PKG)
+endif()
 if(PSND_MHS_USE_ZSTD)
     target_compile_definitions(mhs_runtime PRIVATE VFS_USE_ZSTD)
     target_include_directories(mhs_runtime PRIVATE ${ZSTD_DIR})
+endif()
+
+# Pass compilation support flag to repl.c
+if(NOT MHS_ENABLE_COMPILATION)
+    target_compile_definitions(mhs_runtime PRIVATE MHS_NO_COMPILATION)
+
+    # Use psnd-specific headers without libraries
+    # Set header filename based on mode
+    if(PSND_MHS_USE_PKG)
+        if(PSND_MHS_USE_ZSTD)
+            set(PSND_HEADER_FILE "mhs_psnd_pkg_zstd.h")
+        else()
+            set(PSND_HEADER_FILE "mhs_psnd_pkg.h")
+        endif()
+    else()
+        if(PSND_MHS_USE_ZSTD)
+            set(PSND_HEADER_FILE "mhs_psnd_src_zstd.h")
+        else()
+            set(PSND_HEADER_FILE "mhs_psnd_src.h")
+        endif()
+    endif()
+    target_compile_definitions(mhs_runtime PRIVATE MHS_EMBEDDED_HEADER="${PSND_HEADER_FILE}")
 endif()
 
 target_link_libraries(mhs_runtime PUBLIC midi_ffi_psnd)
@@ -189,18 +269,63 @@ target_link_libraries(mhs_runtime PUBLIC midi_ffi_psnd)
 # Embedded Header Generation for psnd
 # ==============================================================================
 # Generate the embedded library header that vfs.c includes
-# We reuse the same header as standalone builds (mhs_embedded_pkgs_zstd.h)
-# The header generation happens in the standalone section below
+# Header selection based on MHS_EMBED_MODE:
+#   PKG_ZSTD -> mhs_embedded_pkgs_zstd.h
+#   PKG      -> mhs_embedded_pkgs.h
+#   SRC_ZSTD -> mhs_embedded_zstd.h
+#   SRC      -> mhs_embedded_libs.h
 
-# For now, set the path - the actual generation happens later
-set(PSND_EMBEDDED_HEADER ${CMAKE_CURRENT_BINARY_DIR}/mhs_embedded_pkgs_zstd.h)
-if(NOT PSND_MHS_USE_ZSTD)
-    set(PSND_EMBEDDED_HEADER ${CMAKE_CURRENT_BINARY_DIR}/mhs_embedded_pkgs.h)
+if(PSND_MHS_USE_PKG)
+    if(PSND_MHS_USE_ZSTD)
+        set(PSND_EMBEDDED_HEADER ${CMAKE_CURRENT_BINARY_DIR}/mhs_embedded_pkgs_zstd.h)
+    else()
+        set(PSND_EMBEDDED_HEADER ${CMAKE_CURRENT_BINARY_DIR}/mhs_embedded_pkgs.h)
+    endif()
+else()
+    if(PSND_MHS_USE_ZSTD)
+        set(PSND_EMBEDDED_HEADER ${CMAKE_CURRENT_BINARY_DIR}/mhs_embedded_zstd.h)
+    else()
+        set(PSND_EMBEDDED_HEADER ${CMAKE_CURRENT_BINARY_DIR}/mhs_embedded_libs.h)
+    endif()
 endif()
 
 # The mhs_runtime needs the header to exist before compilation
 # We'll add a dependency after the header generation target is created
 # (see mhs-psnd-embedded-header target below)
+
+# ==============================================================================
+# psnd-specific Header Generation (respects MHS_ENABLE_COMPILATION)
+# ==============================================================================
+# When MHS_ENABLE_COMPILATION=OFF, we generate headers without libraries
+# to reduce binary size (no libremidi.a, ~1.3MB savings)
+
+if(NOT MHS_ENABLE_COMPILATION)
+    # Generate psnd-specific headers without library embedding
+    # These are generated by mhs-embed without --lib flags
+
+    set(PSND_SRC_HEADER ${CMAKE_CURRENT_BINARY_DIR}/mhs_psnd_src.h)
+    set(PSND_SRC_ZSTD_HEADER ${CMAKE_CURRENT_BINARY_DIR}/mhs_psnd_src_zstd.h)
+    set(PSND_PKG_HEADER ${CMAKE_CURRENT_BINARY_DIR}/mhs_psnd_pkg.h)
+    set(PSND_PKG_ZSTD_HEADER ${CMAKE_CURRENT_BINARY_DIR}/mhs_psnd_pkg_zstd.h)
+
+    # Override the header selection to use psnd-specific headers (no libs)
+    if(PSND_MHS_USE_PKG)
+        if(PSND_MHS_USE_ZSTD)
+            set(PSND_EMBEDDED_HEADER ${PSND_PKG_ZSTD_HEADER})
+        else()
+            set(PSND_EMBEDDED_HEADER ${PSND_PKG_HEADER})
+        endif()
+    else()
+        if(PSND_MHS_USE_ZSTD)
+            set(PSND_EMBEDDED_HEADER ${PSND_SRC_ZSTD_HEADER})
+        else()
+            set(PSND_EMBEDDED_HEADER ${PSND_SRC_HEADER})
+        endif()
+    endif()
+
+    message(STATUS "MHS psnd: No library embedding (MHS_ENABLE_COMPILATION=OFF)")
+    message(STATUS "MHS psnd: Using ${PSND_EMBEDDED_HEADER}")
+endif()
 
 # ==============================================================================
 # MIDI FFI Library for psnd (with SharedContext routing)
@@ -930,15 +1055,120 @@ install(DIRECTORY ${MIDI_LIB_DIR}/
 # ==============================================================================
 # When ENABLE_MHS_INTEGRATION is ON, mhs_runtime needs the embedded header
 # before it can compile. Add dependency from mhs_runtime to the header.
+#
+# Header selection based on MHS_EMBED_MODE and MHS_ENABLE_COMPILATION:
+#   MHS_ENABLE_COMPILATION=ON uses standard headers (with libs):
+#     PKG_ZSTD -> mhs_embedded_pkgs_zstd.h
+#     PKG      -> mhs_embedded_pkgs.h
+#     SRC_ZSTD -> mhs_embedded_zstd.h
+#     SRC      -> mhs_embedded_libs.h
+#
+#   MHS_ENABLE_COMPILATION=OFF uses psnd-specific headers (no libs):
+#     PKG_ZSTD -> mhs_psnd_pkg_zstd.h
+#     PKG      -> mhs_psnd_pkg.h
+#     SRC_ZSTD -> mhs_psnd_src_zstd.h
+#     SRC      -> mhs_psnd_src.h
+
 if(ENABLE_MHS_INTEGRATION AND NOT WIN32)
-    # Create a custom target for the embedded header
-    if(HAVE_ZSTD)
-        add_custom_target(mhs-psnd-embedded-header DEPENDS ${EMBEDDED_PKG_ZSTD_HEADER})
+    if(MHS_ENABLE_COMPILATION)
+        # Use standard headers with libraries
+        if(PSND_MHS_USE_PKG)
+            if(PSND_MHS_USE_ZSTD)
+                set(PSND_HEADER_TARGET ${EMBEDDED_PKG_ZSTD_HEADER})
+            else()
+                set(PSND_HEADER_TARGET ${EMBEDDED_PKG_HEADER})
+            endif()
+        else()
+            if(PSND_MHS_USE_ZSTD)
+                set(PSND_HEADER_TARGET ${EMBEDDED_SRC_ZSTD_HEADER})
+            else()
+                set(PSND_HEADER_TARGET ${EMBEDDED_SRC_HEADER})
+            endif()
+        endif()
+
+        # Create a custom target for the embedded header
+        add_custom_target(mhs-psnd-embedded-header DEPENDS ${PSND_HEADER_TARGET})
     else()
-        add_custom_target(mhs-psnd-embedded-header DEPENDS ${EMBEDDED_PKG_HEADER})
+        # Generate psnd-specific headers without libraries
+        # This reduces binary size by ~1.3MB (no libremidi.a)
+
+        if(PSND_MHS_USE_PKG)
+            # Package mode (fast startup) without libs
+            if(PSND_MHS_USE_ZSTD)
+                set(PSND_HEADER_TARGET ${CMAKE_CURRENT_BINARY_DIR}/mhs_psnd_pkg_zstd.h)
+                add_custom_command(
+                    OUTPUT ${PSND_HEADER_TARGET}
+                    COMMAND ${MHS_EMBED}
+                        ${PSND_HEADER_TARGET}
+                        --pkg-mode
+                        --pkg packages/base-${MHS_VERSION}.pkg=${BASE_PKG}
+                        --pkg packages/music-0.1.0.pkg=${MUSIC_PKG}
+                        --txt-dir ${BASE_DIR}
+                        --music-modules music-0.1.0.pkg:Async,Midi,MidiPerform,Music,MusicPerform
+                        --runtime ${MHS_DATA_DIR}/src/runtime
+                        --header ${CMAKE_CURRENT_SOURCE_DIR}/midi_ffi.h
+                    DEPENDS ${MHS_EMBED} ${LOCAL_MCABAL_STAMP} ${MUSIC_PKG} ${CMAKE_CURRENT_SOURCE_DIR}/midi_ffi.h
+                    COMMENT "Generating mhs_psnd_pkg_zstd.h (packages, no libs)"
+                    VERBATIM
+                )
+            else()
+                set(PSND_HEADER_TARGET ${CMAKE_CURRENT_BINARY_DIR}/mhs_psnd_pkg.h)
+                add_custom_command(
+                    OUTPUT ${PSND_HEADER_TARGET}
+                    COMMAND ${MHS_EMBED}
+                        ${PSND_HEADER_TARGET}
+                        --no-compress
+                        --pkg-mode
+                        --pkg packages/base-${MHS_VERSION}.pkg=${BASE_PKG}
+                        --pkg packages/music-0.1.0.pkg=${MUSIC_PKG}
+                        --txt-dir ${BASE_DIR}
+                        --music-modules music-0.1.0.pkg:Async,Midi,MidiPerform,Music,MusicPerform
+                        --runtime ${MHS_DATA_DIR}/src/runtime
+                        --header ${CMAKE_CURRENT_SOURCE_DIR}/midi_ffi.h
+                    DEPENDS ${MHS_EMBED} ${LOCAL_MCABAL_STAMP} ${MUSIC_PKG} ${CMAKE_CURRENT_SOURCE_DIR}/midi_ffi.h
+                    COMMENT "Generating mhs_psnd_pkg.h (packages, no libs)"
+                    VERBATIM
+                )
+            endif()
+        else()
+            # Source mode (slower startup) without libs
+            if(PSND_MHS_USE_ZSTD)
+                set(PSND_HEADER_TARGET ${CMAKE_CURRENT_BINARY_DIR}/mhs_psnd_src_zstd.h)
+                add_custom_command(
+                    OUTPUT ${PSND_HEADER_TARGET}
+                    COMMAND ${MHS_EMBED}
+                        ${PSND_HEADER_TARGET}
+                        ${MHS_LIB}
+                        ${MIDI_LIB_DIR}
+                        --runtime ${MHS_RUNTIME}
+                        --header ${CMAKE_CURRENT_SOURCE_DIR}/midi_ffi.h
+                    DEPENDS ${MHS_EMBED} ${CMAKE_CURRENT_SOURCE_DIR}/midi_ffi.h
+                    COMMENT "Generating mhs_psnd_src_zstd.h (sources, no libs)"
+                    VERBATIM
+                )
+            else()
+                set(PSND_HEADER_TARGET ${CMAKE_CURRENT_BINARY_DIR}/mhs_psnd_src.h)
+                add_custom_command(
+                    OUTPUT ${PSND_HEADER_TARGET}
+                    COMMAND ${MHS_EMBED}
+                        ${PSND_HEADER_TARGET}
+                        ${MHS_LIB}
+                        ${MIDI_LIB_DIR}
+                        --no-compress
+                        --runtime ${MHS_RUNTIME}
+                        --header ${CMAKE_CURRENT_SOURCE_DIR}/midi_ffi.h
+                    DEPENDS ${MHS_EMBED} ${CMAKE_CURRENT_SOURCE_DIR}/midi_ffi.h
+                    COMMENT "Generating mhs_psnd_src.h (sources, no libs)"
+                    VERBATIM
+                )
+            endif()
+        endif()
+
+        # Create a custom target for the embedded header
+        add_custom_target(mhs-psnd-embedded-header DEPENDS ${PSND_HEADER_TARGET})
     endif()
 
     # mhs_runtime depends on the embedded header being generated
     add_dependencies(mhs_runtime mhs-psnd-embedded-header)
-    message(STATUS "MHS psnd: mhs_runtime depends on embedded header generation")
+    message(STATUS "MHS psnd: mhs_runtime depends on ${PSND_HEADER_TARGET}")
 endif()

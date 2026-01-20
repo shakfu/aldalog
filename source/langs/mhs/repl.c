@@ -59,6 +59,7 @@ static int set_env(const char *name, const char *value) {
 #endif
 }
 
+#ifndef MHS_NO_COMPILATION
 /**
  * @brief Check if we need to extract files for compilation.
  *
@@ -90,6 +91,7 @@ static int needs_extraction(int argc, char **argv) {
     }
     return 0;  /* No -o flag, VFS works fine */
 }
+#endif /* MHS_NO_COMPILATION */
 
 /**
  * @brief MHS REPL entry point.
@@ -98,12 +100,10 @@ static int needs_extraction(int argc, char **argv) {
  * Starts an interactive MicroHs REPL with MIDI library support.
  * Uses embedded VFS for fast startup (~2s vs ~17s from source).
  *
- * For compilation to executable, extracts embedded files to temp directory.
+ * For compilation to executable (when MHS_ENABLE_COMPILATION=ON),
+ * extracts embedded files to temp directory.
  */
 int mhs_repl_main(int argc, char **argv) {
-    char *temp_dir = NULL;
-    int linking_midi = 0;
-
     /* Handle --help before anything else */
     if (argc >= 2 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
         print_mhs_usage();
@@ -115,6 +115,78 @@ int mhs_repl_main(int argc, char **argv) {
         fprintf(stderr, "Error: Failed to initialize MHS Virtual File System\n");
         return 1;
     }
+
+#ifdef MHS_NO_COMPILATION
+    /*
+     * Compilation disabled - simple VFS-only path
+     * No extraction needed, smaller binary without libremidi
+     */
+
+    /* Check if user is trying to compile to executable */
+    for (int i = 1; i < argc; i++) {
+        if (strncmp(argv[i], "-o", 2) == 0) {
+            const char *output = NULL;
+            if (argv[i][2] != '\0') {
+                output = argv[i] + 2;
+            } else if (i + 1 < argc) {
+                output = argv[i + 1];
+            }
+            if (output) {
+                size_t len = strlen(output);
+                /* Check if output is NOT .c (i.e., trying to compile to executable) */
+                if (len < 2 || strcmp(output + len - 2, ".c") != 0) {
+                    fprintf(stderr, "Error: Compilation to executable is disabled in this build.\n");
+                    fprintf(stderr, "This psnd was built with MHS_ENABLE_COMPILATION=OFF.\n");
+                    fprintf(stderr, "\n");
+                    fprintf(stderr, "Available options:\n");
+                    fprintf(stderr, "  psnd mhs -o%s.c %s   Output C code only\n",
+                            output, argc > i + 2 ? argv[i + 2] : "file.hs");
+                    fprintf(stderr, "  psnd mhs -r file.hs       Run without compiling\n");
+                    fprintf(stderr, "\n");
+                    fprintf(stderr, "To enable compilation, rebuild psnd with:\n");
+                    fprintf(stderr, "  cmake -DMHS_ENABLE_COMPILATION=ON ..\n");
+                    return 1;
+                }
+            }
+        }
+    }
+
+    set_env("MHSDIR", VFS_VIRTUAL_ROOT);
+
+    /* Build argv for MHS: mhs -C -a<path> -pbase -pmusic [user args...] */
+    int extra_args = 4;  /* -C, -a<path>, -pbase, -pmusic */
+    int new_argc = argc + extra_args;
+    char **new_argv = malloc((new_argc + 1) * sizeof(char *));
+    char archive_path[512];
+
+    if (!new_argv) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        return 1;
+    }
+
+    int j = 0;
+    new_argv[j++] = "mhs";
+    new_argv[j++] = "-C";  /* Enable caching */
+    snprintf(archive_path, sizeof(archive_path), "-a%s", VFS_VIRTUAL_ROOT);
+    new_argv[j++] = archive_path;
+    new_argv[j++] = "-pbase";
+    new_argv[j++] = "-pmusic";
+
+    /* Copy user arguments (skip program name) */
+    for (int i = 1; i < argc; i++) {
+        new_argv[j++] = argv[i];
+    }
+    new_argv[j] = NULL;
+    new_argc = j;
+
+    int result = mhs_main(new_argc, new_argv);
+    free(new_argv);
+    return result;
+
+#else /* MHS_NO_COMPILATION not defined - full compilation support */
+
+    char *temp_dir = NULL;
+    int linking_midi = 0;
 
     /* Check if we're compiling to an executable (cc needs real files) */
     if (needs_extraction(argc, argv)) {
@@ -244,6 +316,7 @@ int mhs_repl_main(int argc, char **argv) {
     }
 
     return result;
+#endif /* MHS_NO_COMPILATION */
 }
 
 /**

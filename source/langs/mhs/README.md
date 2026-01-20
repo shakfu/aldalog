@@ -44,24 +44,72 @@ The following MIDI modules are available:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `ENABLE_MHS_INTEGRATION` | ON | Enable MHS in psnd binary |
+| `MHS_EMBED_MODE` | PKG_ZSTD | Embedding mode (see below) |
+| `MHS_ENABLE_COMPILATION` | ON | Enable -o compilation support |
 | `BUILD_MHS_STANDALONE` | ON | Build standalone mhs-midi executables |
-| `BUILD_MHS_PKG_VARIANTS` | OFF | Build package-based variants (fast startup) |
+| `BUILD_MHS_PKG_VARIANTS` | OFF | Build package-based standalone variants |
 
-### Build Commands
+### Embedding Modes (MHS_EMBED_MODE)
+
+| Mode | Startup | Binary Size | Description |
+|------|---------|-------------|-------------|
+| `PKG_ZSTD` | ~2s | ~5.7MB | Precompiled packages + zstd (default) |
+| `PKG` | ~2s | ~6MB | Precompiled packages, no compression |
+| `SRC_ZSTD` | ~17s | ~4MB | Compressed .hs sources |
+| `SRC` | ~17s | ~5MB | Uncompressed .hs sources |
+
+### Compilation Support (MHS_ENABLE_COMPILATION)
+
+When `MHS_ENABLE_COMPILATION=ON` (default):
+- `psnd mhs -oMyProg file.hs` compiles to standalone executable
+- Binary embeds libremidi.a (~1.3MB compressed)
+- Full MHS functionality
+
+When `MHS_ENABLE_COMPILATION=OFF`:
+- `psnd mhs -oMyProg file.hs` will fail (only .c output works)
+- Binary ~1.3MB smaller (no libremidi)
+- REPL and -r modes work normally
+
+### Makefile Targets
+
+The easiest way to build different MHS variants:
+
+| Target | Binary Size | MHS Startup | Compilation | Description |
+|--------|-------------|-------------|-------------|-------------|
+| `make` | ~5.7MB | ~2s | Yes | Full MHS with PKG_ZSTD + compilation |
+| `make mhs-small` | ~4.5MB | ~2s | No | No `-o` executable support |
+| `make mhs-src` | ~4MB | ~17s | Yes | Source embedding (slower startup) |
+| `make mhs-src-small` | ~3.5MB | ~17s | No | Smallest with MHS |
+| `make no-mhs` | ~2.1MB | N/A | N/A | MHS disabled entirely |
+
+### CMake Commands
+
+For more control, use CMake directly:
 
 ```bash
-# Standard psnd build (includes MHS)
+# Standard psnd build (PKG_ZSTD + compilation)
+cmake ..
 make
 
-# Build with package variants (requires mcabal)
+# Smaller binary without compilation support
+cmake -DMHS_ENABLE_COMPILATION=OFF ..
+make
+
+# Use source embedding (smaller but slower startup)
+cmake -DMHS_EMBED_MODE=SRC_ZSTD ..
+make
+
+# Smallest binary (source mode, no compilation)
+cmake -DMHS_EMBED_MODE=SRC_ZSTD -DMHS_ENABLE_COMPILATION=OFF ..
+make
+
+# Build standalone mhs-midi variants
 cmake -DBUILD_MHS_PKG_VARIANTS=ON ..
-make
-
-# Build all MHS variants
 make mhs-midi-all
 
-# Disable MHS integration
+# Disable MHS integration entirely
 cmake -DENABLE_MHS_INTEGRATION=OFF ..
+make
 ```
 
 ## Build Variants

@@ -1,7 +1,8 @@
 .DEFAULT_GOAL := all
 .PHONY: all build clean reset test show-config rebuild remake docs \
 		psnd-tsf default psnd-tsf-csound csound psnd-fluid psnd-fluid-csound \
-		psnd-tsf-web web psnd-fluid-web psnd-fluid-csound-web full
+		psnd-tsf-web web psnd-fluid-web psnd-fluid-csound-web full \
+		mhs-small mhs-src mhs-src-small no-mhs
 
 BUILD_DIR ?= build
 CMAKE ?= cmake
@@ -32,6 +33,19 @@ configure-fluid-web:
 
 configure-fluid-csound-web:
 	@mkdir -p $(BUILD_DIR) && $(CMAKE) -S . -B $(BUILD_DIR) -DBUILD_FLUID_BACKEND=ON -DBUILD_CSOUND_BACKEND=ON -DBUILD_WEB_HOST=ON -DBUILD_TESTING=ON
+
+# MHS variants
+configure-mhs-small:
+	@mkdir -p $(BUILD_DIR) && $(CMAKE) -S . -B $(BUILD_DIR) -DMHS_ENABLE_COMPILATION=OFF -DBUILD_TESTING=ON
+
+configure-mhs-src:
+	@mkdir -p $(BUILD_DIR) && $(CMAKE) -S . -B $(BUILD_DIR) -DMHS_EMBED_MODE=SRC_ZSTD -DBUILD_TESTING=ON
+
+configure-mhs-src-small:
+	@mkdir -p $(BUILD_DIR) && $(CMAKE) -S . -B $(BUILD_DIR) -DMHS_EMBED_MODE=SRC_ZSTD -DMHS_ENABLE_COMPILATION=OFF -DBUILD_TESTING=ON
+
+configure-no-mhs:
+	@mkdir -p $(BUILD_DIR) && $(CMAKE) -S . -B $(BUILD_DIR) -DENABLE_MHS_INTEGRATION=OFF -DBUILD_TESTING=ON
 
 # ============================================================================
 # Build presets
@@ -73,6 +87,26 @@ psnd-fluid-csound-web: configure-fluid-csound-web
 	@$(CMAKE) --build $(BUILD_DIR) --config Release
 
 full: psnd-fluid-csound-web  # alias
+
+# ============================================================================
+# MHS build variants
+# ============================================================================
+
+# MHS without compilation support (~4.5MB binary, no -o executable output)
+mhs-small: configure-mhs-small
+	@$(CMAKE) --build $(BUILD_DIR) --config Release
+
+# MHS with source embedding (~17s startup, ~4MB binary with compilation)
+mhs-src: configure-mhs-src
+	@$(CMAKE) --build $(BUILD_DIR) --config Release
+
+# MHS source mode without compilation (smallest MHS binary, ~17s startup)
+mhs-src-small: configure-mhs-src-small
+	@$(CMAKE) --build $(BUILD_DIR) --config Release
+
+# Disable MHS entirely
+no-mhs: configure-no-mhs
+	@$(CMAKE) --build $(BUILD_DIR) --config Release
 
 # ============================================================================
 

@@ -286,4 +286,9 @@ function(psnd_apply_lang_definitions target)
         string(TOUPPER ${lang} LANG_UPPER)
         target_compile_definitions(${target} PRIVATE LANG_${LANG_UPPER}=1)
     endforeach()
+
+    # MHS-specific: if compilation support is disabled, define MHS_NO_COMPILATION
+    if(ENABLE_MHS_INTEGRATION AND NOT MHS_ENABLE_COMPILATION)
+        target_compile_definitions(${target} PRIVATE MHS_NO_COMPILATION)
+    endif()
 endfunction()
