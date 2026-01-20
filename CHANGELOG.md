@@ -19,6 +19,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **MHS Language Integration**: Micro Haskell with MIDI support for music programming
+  - **REPL Mode**: `psnd mhs` starts interactive Haskell REPL with MIDI libraries
+  - **Run Mode**: `psnd mhs -r file.hs` runs Haskell files with MIDI support
+  - **Compile Mode**: `psnd mhs -oMyProg file.hs` compiles to standalone executable
+  - **VFS Embedding**: Self-contained binary with Virtual File System serving embedded content
+  - **Fast Startup**: ~2s startup with precompiled packages (PKG_ZSTD mode)
+  - **MIDI Modules**: Midi, Music, MusicPerform, MidiPerform, Async
+  - **Build Variants** (Makefile targets):
+    - `make` - Full MHS (~5.7MB, ~2s startup, compilation support)
+    - `make mhs-small` - No compilation (~4.5MB, ~2s startup)
+    - `make mhs-src` - Source embedding (~4.1MB, ~17s startup)
+    - `make mhs-src-small` - Smallest with MHS (~2.9MB, ~17s startup)
+    - `make no-mhs` - MHS disabled (~2.1MB)
+  - **CMake Options**:
+    - `ENABLE_MHS_INTEGRATION` - Enable/disable MHS in psnd
+    - `MHS_EMBED_MODE` - PKG_ZSTD, PKG, SRC_ZSTD, SRC
+    - `MHS_ENABLE_COMPILATION` - Enable `-o` executable output
+  - **Files Added**: `source/langs/mhs/` (repl.c, dispatch.c, register.c, vfs.c, midi_ffi.c, etc.)
+  - **Dependencies**: MicroHs (BSD), zstd, libremidi
+
 - **REPL Tab Completion**: TAB key now cycles through completions in all language REPLs
   - Standard mechanism: `repl_set_completion_words(ed, words, count)` for static word lists
   - Callback mechanism: `repl_set_completion(ed, callback, user_data)` for dynamic sources

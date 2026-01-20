@@ -2,12 +2,13 @@
 
 **psnd** is a self-contained modal editor, REPL, and playback environment aimed at music programming languages. The project is a polyglot platform for composing, live-coding, and rendering music DSLs from one binary.
 
-Four languages are currently supported:
+Five languages are currently supported:
 
 - **[Alda](https://alda.io)** - Declarative music notation language
 - **[Joy](https://github.com/shakfu/midi-langs/tree/main/projects/joy-midi)** - Concatenative (stack-based) functional language for music
 - **[TR7](https://gitlab.com/jobol/tr7)** - R7RS-small Scheme with music extensions
-- **[Bog](https://github.com/shakfu/bog)** - C implementation of [dogalog](https://github.com/danja/dogalog, a prolog-based beats-oriented language for music
+- **[Bog](https://github.com/shakfu/bog)** - C implementation of [dogalog](https://github.com/danja/dogalog), a prolog-based beats-oriented language for music
+- **[MHS](https://github.com/augustss/MicroHs)** - Micro Haskell with MIDI support for functional music programming
 
 All are practical for daily live-coding, REPL sketches, and headless playback. The Alda and Joy MIDI cores are from the [midi-langs](https://github.com/shakfu/midi-langs) project. Languages register themselves via a modular dispatch system, allowing additional DSLs to be integrated without modifying core dispatch logic. Audio output is handled by the built-in [TinySoundFont](https://github.com/schellingb/TinySoundFont) synthesizer or, optionally, a [Csound](https://csound.com/) backend for advanced synthesis. macOS and Linux are currently supported.
 
@@ -15,7 +16,7 @@ All are practical for daily live-coding, REPL sketches, and headless playback. T
 
 - **Vim-style editor** with INSERT/NORMAL modes, live evaluation shortcuts, and Lua scripting (built on [loki](https://github.com/shakfu/loki), a fork of [kilo](https://github.com/antirez/kilo))
 - **Web-based editor** accessible via browser using xterm.js terminal emulator (optional)
-- **Language-aware REPLs** for interactive composition (Alda, Joy, TR7 Scheme, Bog)
+- **Language-aware REPLs** for interactive composition (Alda, Joy, TR7 Scheme, Bog, MHS)
 - **Headless play mode** for batch jobs and automation
 - **Non-blocking async playback** through [libuv](https://github.com/libuv/libuv) - REPLs remain responsive during playback
 - **Integrated MIDI routing** powered by [libremidi](https://github.com/celtera/libremidi)
@@ -43,6 +44,16 @@ Build presets select the synthesizer backend and optional features:
 | `make psnd-tsf-web` | `make web` | TinySoundFont + Web UI |
 | `make psnd-fluid-web` | | FluidSynth + Web UI |
 | `make psnd-fluid-csound-web` | `make full` | Everything |
+
+**MHS (Micro Haskell) build variants:**
+
+| Target | Binary Size | Description |
+|--------|-------------|-------------|
+| `make` | ~5.7MB | Full MHS with fast startup (~2s) and compilation support |
+| `make mhs-small` | ~4.5MB | MHS without compilation to executable |
+| `make mhs-src` | ~4.1MB | MHS with source embedding (~17s startup) |
+| `make mhs-src-small` | ~2.9MB | Smallest binary with MHS |
+| `make no-mhs` | ~2.1MB | MHS disabled entirely |
 
 **Synth backends** (mutually exclusive at compile time):
 - **TinySoundFont** - Lightweight SoundFont synthesizer, fast compilation
@@ -142,7 +153,27 @@ bog> :solo kick
 bog> :q
 ```
 
-**Shared REPL Commands** (work in Alda, Joy, TR7, and Bog, with or without `:`):
+**MHS REPL** (Micro Haskell):
+
+```bash
+psnd mhs                # Start MHS REPL
+psnd mhs -r file.hs     # Run a Haskell file
+psnd mhs -oMyProg file.hs  # Compile to executable
+```
+
+Type Haskell code directly:
+
+```text
+mhs> import Midi
+mhs> midiInit
+mhs> midiOpenVirtual "MHS-MIDI"
+mhs> midiNoteOn 0 60 100
+mhs> midiSleep 500
+mhs> midiNoteOff 0 60
+mhs> :quit
+```
+
+**Shared REPL Commands** (work in Alda, Joy, TR7, Bog, and MHS, with or without `:`):
 
 | Command | Action |
 |---------|--------|
@@ -540,6 +571,65 @@ loki.bog.set_tempo(140)
 loki.bog.set_swing(0.3)
 ```
 
+## MHS Language
+
+MHS (Micro Haskell) is a lightweight Haskell implementation with MIDI support, providing functional programming for music composition.
+
+### Quick Start
+
+```bash
+psnd mhs                    # Start MHS REPL
+psnd mhs -r file.hs         # Run a Haskell file
+psnd mhs -oMyProg file.hs   # Compile to standalone executable
+psnd mhs -oMyProg.c file.hs # Output C code only
+```
+
+### Available Modules
+
+| Module | Description |
+|--------|-------------|
+| `Midi` | Low-level MIDI I/O (ports, note on/off, control change) |
+| `Music` | High-level music notation (notes, chords, sequences) |
+| `MusicPerform` | Music performance/playback |
+| `MidiPerform` | MIDI event scheduling |
+| `Async` | Asynchronous operations |
+
+### Example
+
+```haskell
+import Midi
+
+main :: IO ()
+main = do
+    midiInit
+    midiOpenVirtual "MHS-MIDI"
+
+    -- Play a C major chord
+    midiNoteOn 0 60 100  -- C
+    midiNoteOn 0 64 100  -- E
+    midiNoteOn 0 67 100  -- G
+    midiSleep 1000
+    midiNoteOff 0 60
+    midiNoteOff 0 64
+    midiNoteOff 0 67
+
+    midiCleanup
+```
+
+### Build Variants
+
+MHS can be built with different configurations to trade off binary size vs features:
+
+| Target | Size | Startup | Features |
+|--------|------|---------|----------|
+| `make` | 5.7MB | ~2s | Full: packages + compilation |
+| `make mhs-small` | 4.5MB | ~2s | Packages, no compilation |
+| `make mhs-src` | 4.1MB | ~17s | Source embedding + compilation |
+| `make mhs-src-small` | 2.9MB | ~17s | Source only, no compilation |
+| `make no-mhs` | 2.1MB | N/A | MHS disabled |
+
+See `source/langs/mhs/README.md` for detailed documentation on VFS embedding, compilation, and standalone builds.
+
 ## Ableton Link
 
 psnd supports [Ableton Link](https://www.ableton.com/en/link/) for tempo synchronization with other musicians and applications on the same network.
@@ -724,6 +814,7 @@ psnd provides built-in syntax highlighting for music programming languages with 
 | `.joy` | Joy | Stack ops, combinators, music primitives, note names, comments |
 | `.scm` `.ss` `.scheme` | TR7 Scheme | Keywords, special forms, music primitives, comments |
 | `.bog` | Bog | Predicates, variables, operators, comments |
+| `.hs` `.mhs` | MHS (Haskell) | Keywords, types, operators, strings, comments |
 | `.csd` | Csound CSD | Section-aware (orchestra/score/options), opcodes, control flow |
 | `.orc` | Csound Orchestra | Full orchestra syntax |
 | `.sco` | Csound Score | Score statements, parameters |
@@ -851,6 +942,7 @@ source/
     joy/            # Joy language runtime (parser, primitives, MIDI)
     tr7/            # TR7 Scheme (R7RS-small + music extensions)
     bog/            # Bog language (Prolog-based live coding)
+    mhs/            # MHS (Micro Haskell with MIDI support)
   main.c            # Entry point and CLI dispatch
   thirdparty/       # External dependencies (lua, libremidi, TinySoundFont, mongoose, xterm.js)
 tests/
@@ -871,6 +963,7 @@ See the `docs` folder for full technical documentation.
 - [Joy](https://github.com/shakfu/midi-langs/tree/main/projects/joy-midi) - concatenative music language from midi-langs
 - [TR7](https://gitlab.com/jobol/tr7) - R7RS-small Scheme interpreter
 - [dogalog](https://github.com/danja/dogalog) - Prolog-based live coding inspiration for Bog
+- [MicroHs](https://github.com/augustss/MicroHs) - Small Haskell implementation by Lennart Augustsson
 - [kilo](https://github.com/antirez/kilo) by Salvatore Sanfilippo (antirez) - original editor
 - [loki](https://github.com/shakfu/loki) - Lua-enhanced fork
 - [Csound](https://csound.com/) - sound synthesis system (optional)

@@ -351,6 +351,12 @@ For executable output, files must be extracted to temp. Check that `vfs_extract_
 ### Slow startup (~17s)
 You're using source mode instead of package mode. Ensure `VFS_USE_PKG` is defined and packages are embedded.
 
+### "Compilation to executable is disabled"
+This psnd was built with `MHS_ENABLE_COMPILATION=OFF` (smaller binary). Use `-o file.c` to output C code, or rebuild with `make` or `cmake -DMHS_ENABLE_COMPILATION=ON ..`.
+
+### Source mode works but package mode fails
+Source mode uses `-i` (include paths) while package mode uses `-a` (archive) and `-p` (package) flags. These are handled automatically by repl.c based on the `MHS_USE_PKG` compile definition.
+
 ## Dependencies
 
 - **MicroHs**: `source/thirdparty/MicroHs/` - Haskell compiler/runtime
