@@ -31,6 +31,40 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 
 ## Medium Priority
 
+### MHS (Micro Haskell) REPL Enhancements
+
+The MHS language now has syntax highlighting and CLI flags (`--virtual`, `-sf`, `-p`, `-l`, `-v`).
+Remaining work to achieve full REPL feature parity with Joy/TR7/Bog:
+
+- [ ] Custom REPL loop with `repl_readline()`
+  - Currently delegates entirely to MicroHs's built-in REPL
+  - Would enable syntax highlighting in REPL input
+  - Requires intercepting stdin or implementing wrapper around MicroHs REPL
+  - See `source/langs/joy/repl.c:joy_repl_loop()` for reference pattern
+
+- [ ] Shared command processing
+  - Add support for psnd commands (`:help`, `:list`, `:stop`, `:panic`, etc.)
+  - Intercept colon-prefixed input before passing to MicroHs
+  - Use `shared_process_command()` from `shared/repl_commands.c`
+
+- [ ] Tab completion for Haskell keywords
+  - Add completion callback with Haskell keywords and MIDI primitives
+  - Use `repl_set_completion()` pattern from other languages
+
+- [ ] History persistence
+  - Load/save REPL history to `~/.psnd/mhs_history`
+  - Use `repl_history_load()`/`repl_history_save()` from REPL helpers
+
+- [ ] Piped input support
+  - Handle non-TTY input for scripting: `echo 'putStrLn "hello"' | psnd mhs`
+  - Detect `isatty(STDIN_FILENO)` and use simpler loop
+
+- [ ] Ableton Link callbacks in REPL
+  - Call `shared_repl_link_init_callbacks()` on startup
+  - Call `shared_repl_link_check()` in main loop for tempo notifications
+
+See `docs/LANG_IMPL_COMPARISON.md` for detailed feature comparison.
+
 ### Testing
 
 - [x] Add synthesis backend tests
@@ -258,6 +292,28 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 ---
 
 ## Recently Completed
+
+### MHS Language Improvements
+- Added syntax highlighting for Haskell/MHS (`.hs`, `.mhs`, `.lhs` files)
+  - Keywords, types, MIDI primitives, Music module functions
+  - Created `source/core/loki/syntax/lang_haskell.h`
+- Added syntax highlighting for Bog (`.bog` files)
+  - Predicates, scales, chords, voice names
+  - Created `source/core/loki/syntax/lang_bog.h`
+- Added CLI flags for MHS REPL: `--virtual`, `-sf`, `-p`, `-l`, `-v`
+- Added SharedContext integration for MHS REPL
+  - Routes MIDI through SharedContext for TSF/Csound/Link support
+  - Proper initialization and cleanup of MIDI/audio backends
+- Created `docs/LANG_IMPL_COMPARISON.md` documenting feature parity across languages
+
+### Parameter Binding System
+- Added parameter system for binding named parameters to MIDI CC and OSC
+- Thread-safe atomic floats for lock-free access from MIDI/OSC threads
+- MIDI input support with CC-to-parameter routing
+- OSC endpoints: `/psnd/param/set`, `/psnd/param/get`, `/psnd/param/list`
+- Lua API: `loki.param` / `param` module
+- Joy primitives: `param`, `param!`, `param-list`
+- Files: `source/core/shared/param/param.c`, `source/core/shared/midi/midi_input.c`
 
 ### Web Editor Implementation (Phases 1-7)
 - Eliminated global state and singletons

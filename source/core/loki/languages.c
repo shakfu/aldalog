@@ -28,6 +28,8 @@
 #include "syntax/lang_scheme.h"
 #include "syntax/lang_scala.h"
 #include "syntax/lang_markdown.h"
+#include "syntax/lang_haskell.h"
+#include "syntax/lang_bog.h"
 
 /* ======================= Language Database (MINIMAL) ======================== */
 /* Minimal static definitions kept for backward compatibility with tests.
@@ -113,6 +115,24 @@ struct t_editor_syntax HLDB[] = {
         Scheme_HL_keywords,
         ";","","",
         "()[]{}\"'`,@#",
+        HL_HIGHLIGHT_STRINGS | HL_HIGHLIGHT_NUMBERS,
+        HL_TYPE_C
+    },
+    /* Haskell / MHS (.hs, .mhs, .lhs) */
+    {
+        Haskell_HL_extensions,
+        Haskell_HL_keywords,
+        "--","{-","-}",
+        " \t,.()[]{}+-/*=~%<>:;|\\@$!?",
+        HL_HIGHLIGHT_STRINGS | HL_HIGHLIGHT_NUMBERS,
+        HL_TYPE_C
+    },
+    /* Bog Prolog-based music (.bog) */
+    {
+        Bog_HL_extensions,
+        Bog_HL_keywords,
+        "%","/*","*/",
+        " \t,.()[]{}+-/*=~<>:;|\\",
         HL_HIGHLIGHT_STRINGS | HL_HIGHLIGHT_NUMBERS,
         HL_TYPE_C
     },
