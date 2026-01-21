@@ -32,6 +32,10 @@ void editor_cli_print_usage(void) {
     printf("  --web-port N        Web server port (default: 8080)\n");
     printf("  --web-root PATH     Directory containing web UI files\n");
 #endif
+#ifdef LOKI_WEBVIEW_HOST
+    printf("\nNative Webview Mode:\n");
+    printf("  --native            Run in native webview window (no browser needed)\n");
+#endif
     printf("\nInteractive mode (default):\n");
     printf("  " PSND_NAME " <file.alda>           Open file in editor\n");
     printf("  " PSND_NAME " -sf gm.sf2 song.alda  Open with TinySoundFont synth\n");
@@ -169,6 +173,12 @@ int editor_cli_parse(int argc, char **argv, EditorCliArgs *args) {
                 return -1;
             }
             args->web_root = argv[++i];
+            continue;
+        }
+
+        /* Native webview mode */
+        if (strcmp(arg, "--native") == 0) {
+            args->native_mode = 1;
             continue;
         }
 

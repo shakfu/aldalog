@@ -177,5 +177,20 @@ else()
     message(STATUS "FluidSynth backend disabled (use -DBUILD_FLUID_BACKEND=ON to enable)")
 endif()
 
+# Webview - Cross-platform webview library (optional)
+# Uses amalgamated single-header version at webview/webview_amalgamation.h
+option(BUILD_WEBVIEW_HOST "Build with native webview host" OFF)
+if(BUILD_WEBVIEW_HOST)
+    message(STATUS "Building with webview native UI host (amalgamated header)")
+
+    # Export webview include directory for the main project
+    set(WEBVIEW_INCLUDE_DIRS
+        ${CMAKE_CURRENT_SOURCE_DIR}/webview
+        CACHE INTERNAL "Webview include directories"
+    )
+else()
+    message(STATUS "Webview host disabled (use -DBUILD_WEBVIEW_HOST=ON to enable)")
+endif()
+
 # Restore parent project's BUILD_TESTING
 set(BUILD_TESTING ${PSND_BUILD_TESTING} CACHE BOOL "Build tests" FORCE)

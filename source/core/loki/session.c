@@ -14,6 +14,7 @@
 #include "loki/link.h"
 #include "loki/lua.h"
 #include "syntax.h"
+#include "shared/context.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -171,6 +172,20 @@ EditorSession *editor_session_new(const EditorConfig *config) {
             editor_open(&session->ctx, (char *)config->filename);
         }
 
+        /* Create SharedContext for audio/MIDI/Link state (shared by all languages) */
+        if (!session->ctx.model.shared) {
+            session->ctx.model.shared = (SharedContext *)malloc(sizeof(SharedContext));
+            if (session->ctx.model.shared) {
+                if (shared_context_init(session->ctx.model.shared) != 0) {
+                    fprintf(stderr, "Warning: Failed to initialize shared context\n");
+                    free(session->ctx.model.shared);
+                    session->ctx.model.shared = NULL;
+                }
+            } else {
+                fprintf(stderr, "Warning: Failed to allocate shared context\n");
+            }
+        }
+
         /* Initialize Lua if requested */
         if (config->enable_lua) {
             LuaHost *lua_host = lua_host_create();
@@ -226,6 +241,13 @@ void editor_session_free(EditorSession *session) {
     if (session->ctx.lua_host) {
         lua_host_free(session->ctx.lua_host);
         session->ctx.lua_host = NULL;
+    }
+
+    /* Clean up shared context if we created one */
+    if (session->ctx.model.shared) {
+        shared_context_cleanup(session->ctx.model.shared);
+        free(session->ctx.model.shared);
+        session->ctx.model.shared = NULL;
     }
 
     editor_ctx_free(&session->ctx);

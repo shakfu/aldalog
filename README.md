@@ -15,6 +15,7 @@ All are practical for daily live-coding, REPL sketches, and headless playback. T
 ## Features
 
 - **Vim-style editor** with INSERT/NORMAL modes, live evaluation shortcuts, and Lua scripting (built on [loki](https://github.com/shakfu/loki), a fork of [kilo](https://github.com/antirez/kilo))
+- **Native webview mode** for a self-contained GUI window without requiring a browser (optional)
 - **Web-based editor** accessible via browser using xterm.js terminal emulator (optional)
 - **Language-aware REPLs** for interactive composition (Alda, Joy, TR7 Scheme, Bog, MHS)
 - **Headless play mode** for batch jobs and automation
@@ -64,6 +65,7 @@ CMake options (for custom builds):
 cmake -B build -DBUILD_FLUID_BACKEND=ON  # Use FluidSynth instead of TSF
 cmake -B build -DBUILD_CSOUND_BACKEND=ON # Enable Csound synthesis
 cmake -B build -DBUILD_WEB_HOST=ON       # Enable web server mode
+cmake -B build -DBUILD_WEBVIEW_HOST=ON   # Enable native webview mode
 cmake -B build -DLOKI_EMBED_XTERM=ON     # Embed xterm.js in binary (no CDN)
 ```
 
@@ -304,6 +306,28 @@ Then open `http://localhost:8080` in your browser.
 **Build requirement:** Web mode requires building with `-DBUILD_WEB_HOST=ON`.
 
 **Embedded mode:** Build with `-DLOKI_EMBED_XTERM=ON` to embed xterm.js in the binary, eliminating CDN dependency for offline use.
+
+### Native Webview Mode
+
+Run psnd in a native window using the system's webview (WebKit on macOS, WebKitGTK on Linux). This provides the same xterm.js-based UI as web mode but in a self-contained native application - no browser required.
+
+```bash
+psnd --native song.alda                  # Open file in native window
+psnd --native -sf gm.sf2 song.joy        # Native window with soundfont
+```
+
+**Features:**
+- Same UI as web mode (xterm.js terminal emulation)
+- Play/Stop/Eval buttons in toolbar
+- All editor keybindings work as in terminal mode
+- Works completely offline
+- Clean window close handling
+
+**Build requirement:** Native webview mode requires building with `-DBUILD_WEBVIEW_HOST=ON`.
+
+**Platform dependencies:**
+- **macOS**: WebKit framework (always available)
+- **Linux**: GTK3 and WebKitGTK (`libgtk-3-dev libwebkit2gtk-4.0-dev`)
 
 ### Piped Input
 
@@ -934,6 +958,7 @@ source/
     loki/           # Editor components (core, modal, syntax, lua, hosts)
       host_terminal.c  # Terminal-based host
       host_web.c       # Web server host (mongoose + xterm.js)
+      host_webview.cpp # Native webview host (WebKit/WebKitGTK)
       host_headless.c  # Headless playback host
     shared/         # Language-agnostic backend (audio, MIDI, Link)
     include/        # Public headers
@@ -974,6 +999,7 @@ See the `docs` folder for full technical documentation.
 - [miniaudio](https://github.com/mackron/miniaudio) - Audio playback and capture library written in C, in a single source file
 - [mongoose](https://github.com/cesanta/mongoose) - Embedded web server/networking library (optional, for web mode)
 - [xterm.js](https://xtermjs.org/) - Terminal emulator for the browser (optional, for web mode)
+- [webview](https://github.com/webview/webview) - Cross-platform webview library (optional, for native webview mode)
 
 ## License
 

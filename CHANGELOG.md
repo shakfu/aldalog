@@ -19,6 +19,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Native Webview Mode**: Self-contained native window UI using the webview library
+  - Run with `--native` flag: `psnd --native song.alda`
+  - Same xterm.js-based UI as web mode but in a native window (no browser required)
+  - Works offline with no external dependencies
+  - Full editor functionality: vim keybindings, syntax highlighting, playback controls
+  - Play/Stop/Eval buttons in toolbar
+  - Automatic SharedContext initialization for MIDI/audio
+  - Clean shutdown handling on window close
+  - **Build Option**: Requires `-DBUILD_WEBVIEW_HOST=ON`
+  - **Platform Support**: macOS (WebKit), Linux (GTK + WebKitGTK)
+  - **Files Added**: `source/core/loki/host_webview.cpp`, `source/core/loki/host_webview.h`
+  - **Files Modified**: `source/core/loki/host_web_ui.h` (shared HTML), `source/core/loki/cli.c`, `source/core/loki/cli.h`, `source/core/main.c`, `source/core/loki/session.c`, `source/thirdparty/CMakeLists.txt`, `source/core/CMakeLists.txt`
+
 - **MHS Language Integration**: Micro Haskell with MIDI support for music programming
   - **REPL Mode**: `psnd mhs` starts interactive Haskell REPL with MIDI libraries
   - **Run Mode**: `psnd mhs -r file.hs` runs Haskell files with MIDI support

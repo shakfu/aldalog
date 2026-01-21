@@ -33,6 +33,10 @@
 #include "loki/host_web.h"
 #endif
 
+#ifdef LOKI_WEBVIEW_HOST
+#include "loki/host_webview.h"
+#endif
+
 /* Check for .csd extension (Csound - always supported in editor) */
 static int has_csd_extension(const char *path) {
     if (!path) return 0;
@@ -194,6 +198,43 @@ int main(int argc, char **argv) {
 
         int port = args.web_port > 0 ? args.web_port : 8080;
         return editor_host_web_run(port, args.web_root, &config);
+    }
+#endif
+
+    /* Handle --native flag for native webview mode */
+#ifdef LOKI_WEBVIEW_HOST
+    if (strcmp(first_arg, "--native") == 0) {
+        EditorCliArgs args = {0};
+        if (editor_cli_parse(argc, argv, &args) != 0) {
+            return 1;
+        }
+        if (args.show_help) {
+            editor_cli_print_usage();
+            return 0;
+        }
+        if (args.show_version) {
+            editor_cli_print_version();
+            return 0;
+        }
+
+        EditorConfig config = {
+            .rows = args.rows > 0 ? args.rows : 24,
+            .cols = args.cols > 0 ? args.cols : 80,
+            .filename = args.filename,
+            .line_numbers = args.line_numbers,
+            .word_wrap = args.word_wrap,
+            .enable_lua = 1
+        };
+
+        /* Build window title */
+        char title[256];
+        if (args.filename) {
+            snprintf(title, sizeof(title), PSND_NAME " - %s", args.filename);
+        } else {
+            snprintf(title, sizeof(title), PSND_NAME);
+        }
+
+        return editor_host_webview_run(title, 1024, 768, &config);
     }
 #endif
 

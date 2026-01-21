@@ -31,6 +31,7 @@ typedef struct {
     int json_rpc_single;        /* Single-shot JSON-RPC (--json-rpc-single) */
     int web_mode;               /* Run as web server (--web) */
     int web_port;               /* Web server port (--web-port, default 8080) */
+    int native_mode;            /* Run with native webview (--native) */
     int rows;                   /* Screen rows for headless mode (--rows) */
     int cols;                   /* Screen cols for headless mode (--cols) */
 } EditorCliArgs;

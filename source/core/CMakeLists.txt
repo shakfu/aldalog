@@ -148,6 +148,13 @@ function(psnd_build_loki)
         )
     endif()
 
+    # Webview host sources (native webview window)
+    if(BUILD_WEBVIEW_HOST)
+        list(APPEND LOKI_CORE_SOURCES
+            ${PSND_CORE_DIR}/loki/host_webview.cpp
+        )
+    endif()
+
     # Collect language-specific register sources
     psnd_collect_lang_sources()
 
@@ -173,6 +180,32 @@ function(psnd_build_loki)
         target_include_directories(libloki PRIVATE
             ${PSND_ROOT_DIR}/source/thirdparty/mongoose-7.20
         )
+    endif()
+
+    # Webview host configuration (native webview window)
+    # Uses amalgamated single-header webview library
+    if(BUILD_WEBVIEW_HOST)
+        target_compile_definitions(libloki PUBLIC LOKI_WEBVIEW_HOST)
+        target_include_directories(libloki PRIVATE
+            ${PSND_ROOT_DIR}/source/thirdparty/webview
+        )
+        # Platform-specific frameworks for webview
+        if(APPLE)
+            target_link_libraries(libloki PUBLIC "-framework WebKit")
+        elseif(UNIX AND NOT APPLE)
+            # Linux requires GTK and WebKitGTK
+            find_package(PkgConfig REQUIRED)
+            pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+            pkg_check_modules(WEBKIT2GTK REQUIRED webkit2gtk-4.0)
+            target_include_directories(libloki PRIVATE
+                ${GTK3_INCLUDE_DIRS}
+                ${WEBKIT2GTK_INCLUDE_DIRS}
+            )
+            target_link_libraries(libloki PUBLIC
+                ${GTK3_LIBRARIES}
+                ${WEBKIT2GTK_LIBRARIES}
+            )
+        endif()
     endif()
 
     # Lua sandboxing (disables os, io, debug, load* by default)
@@ -248,6 +281,11 @@ function(psnd_build_binary)
     # Web host configuration for the binary
     if(BUILD_WEB_HOST)
         target_compile_definitions(psnd_bin PRIVATE LOKI_WEB_HOST)
+    endif()
+
+    # Webview host configuration for the binary
+    if(BUILD_WEBVIEW_HOST)
+        target_compile_definitions(psnd_bin PRIVATE LOKI_WEBVIEW_HOST)
     endif()
 
     # Pass through FluidSynth backend flag for help text
