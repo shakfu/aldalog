@@ -108,11 +108,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 - **MHS Language Integration**: Micro Haskell with MIDI support for music programming
   - **REPL Mode**: `psnd mhs` starts interactive Haskell REPL with MIDI libraries
+    - PTY-based stdin interposition: MicroHs runs in forked child process with pseudo-terminal
+    - Syntax-highlighted input for Haskell keywords, types, and MIDI primitives
+    - Tab completion for 80+ Haskell keywords and MIDI functions
+    - History persistence (`~/.psnd/mhs_history`)
+    - All shared REPL commands (`:help`, `:stop`, `:panic`, `:list`, `:sf`, `:link`, etc.)
+    - Ableton Link callback integration for tempo sync
+    - MIDI initialization in child process for proper handle inheritance after fork
   - **Run Mode**: `psnd mhs -r file.hs` runs Haskell files with MIDI support
   - **Compile Mode**: `psnd mhs -oMyProg file.hs` compiles to standalone executable
   - **VFS Embedding**: Self-contained binary with Virtual File System serving embedded content
   - **Fast Startup**: ~2s startup with precompiled packages (PKG_ZSTD mode)
   - **MIDI Modules**: Midi, Music, MusicPerform, MidiPerform, Async
+  - **CLI Flags**: `--virtual NAME`, `-sf PATH`, `-p N`, `-l`, `-v` (same as other languages)
   - **Build Variants** (Makefile targets):
     - `make` - Full MHS (~5.7MB, ~2s startup, compilation support)
     - `make mhs-small` - No compilation (~4.5MB, ~2s startup)

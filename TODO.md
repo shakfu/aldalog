@@ -33,37 +33,33 @@ The web host is functional with xterm.js terminal emulator. Remaining work:
 
 ### MHS (Micro Haskell) REPL Enhancements
 
-The MHS language now has syntax highlighting and CLI flags (`--virtual`, `-sf`, `-p`, `-l`, `-v`).
-Remaining work to achieve full REPL feature parity with Joy/TR7/Bog:
+The MHS language now has full REPL feature parity with Joy/TR7/Bog via PTY-based stdin interposition.
+See `docs/LANG_IMPL_COMPARISON.md` for architecture details.
 
-- [ ] Custom REPL loop with `repl_readline()`
-  - Currently delegates entirely to MicroHs's built-in REPL
-  - Would enable syntax highlighting in REPL input
-  - Requires intercepting stdin or implementing wrapper around MicroHs REPL
-  - See `source/langs/joy/repl.c:joy_repl_loop()` for reference pattern
+**Implementation:** MicroHs REPL runs in a forked child process with a pseudo-terminal (PTY).
+The parent process runs psnd's `repl_readline()` for input with syntax highlighting,
+tab completion, and history. psnd commands are handled locally; Haskell code is
+forwarded to MicroHs via the PTY. MIDI is initialized in the child process after fork
+to ensure proper handle inheritance (libremidi handles don't survive fork).
 
-- [ ] Shared command processing
-  - Add support for psnd commands (`:help`, `:list`, `:stop`, `:panic`, etc.)
-  - Intercept colon-prefixed input before passing to MicroHs
-  - Use `shared_process_command()` from `shared/repl_commands.c`
+Completed:
 
-- [ ] Tab completion for Haskell keywords
-  - Add completion callback with Haskell keywords and MIDI primitives
-  - Use `repl_set_completion()` pattern from other languages
+- [x] Implement PTY-based stdin interposition in `mhs_repl_main()`
+  - Detects interactive mode with `isatty(STDIN_FILENO)`
+  - Creates PTY with `forkpty()`, runs MicroHs in child process
+  - Parent uses psnd's REPL loop with syntax-highlighted input
+  - Filters commands with `shared_process_command()`
+  - MIDI initialized in child after fork for proper handle inheritance
 
-- [ ] History persistence
-  - Load/save REPL history to `~/.psnd/mhs_history`
-  - Use `repl_history_load()`/`repl_history_save()` from REPL helpers
+- [x] Add tab completion for Haskell keywords
+  - 80+ keywords including MIDI primitives
+  - Uses `repl_set_completion()` callback pattern
 
-- [ ] Piped input support
-  - Handle non-TTY input for scripting: `echo 'putStrLn "hello"' | psnd mhs`
-  - Detect `isatty(STDIN_FILENO)` and use simpler loop
+- [x] Add history persistence
+  - Path: `~/.psnd/mhs_history`
 
-- [ ] Ableton Link callbacks in REPL
-  - Call `shared_repl_link_init_callbacks()` on startup
-  - Call `shared_repl_link_check()` in main loop for tempo notifications
-
-See `docs/LANG_IMPL_COMPARISON.md` for detailed feature comparison.
+- [x] Integrate Ableton Link callbacks
+  - Polls `shared_repl_link_check()` in REPL loop
 
 ### Testing
 

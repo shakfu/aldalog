@@ -178,6 +178,15 @@ mhs> midiNoteOff 0 60
 mhs> :quit
 ```
 
+**MHS-specific commands** (MicroHs built-in commands also work):
+
+| Command | Action |
+|---------|--------|
+| `:type EXPR` | Show type of expression |
+| `:kind TYPE` | Show kind of type |
+| `:browse MODULE` | List exports from module |
+| `:quit` | Exit MicroHs REPL |
+
 **Shared REPL Commands** (work in Alda, Joy, TR7, Bog, and MHS, with or without `:`):
 
 | Command | Action |
@@ -606,10 +615,26 @@ MHS (Micro Haskell) is a lightweight Haskell implementation with MIDI support, p
 
 ```bash
 psnd mhs                    # Start MHS REPL
+psnd mhs --virtual MHS-Out  # REPL with virtual MIDI port
+psnd mhs -sf gm.sf2         # REPL with built-in synth
 psnd mhs -r file.hs         # Run a Haskell file
 psnd mhs -oMyProg file.hs   # Compile to standalone executable
 psnd mhs -oMyProg.c file.hs # Output C code only
 ```
+
+### REPL Features
+
+The MHS REPL provides full feature parity with other psnd languages:
+
+- **Syntax highlighting** for Haskell keywords, types, and MIDI primitives
+- **Tab completion** for 80+ Haskell keywords and MIDI functions
+- **History persistence** (`~/.psnd/mhs_history`)
+- **All shared commands** (`:help`, `:stop`, `:panic`, `:list`, `:sf`, `:link`, etc.)
+- **Ableton Link integration** for tempo sync
+
+**Architecture:** MicroHs runs in a forked child process with a pseudo-terminal (PTY).
+The parent process handles psnd's syntax-highlighted input and forwards Haskell code
+to MicroHs via the PTY. MIDI is initialized in the child process after fork.
 
 ### Available Modules
 

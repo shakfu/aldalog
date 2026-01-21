@@ -18,6 +18,13 @@
  *   -p N             Open MIDI port by index
  *   -l, --list       List available MIDI ports
  *   -v, --verbose    Verbose output
+ *
+ * Interactive REPL features (via stdin pipe interposition):
+ *   - Syntax-highlighted input
+ *   - Shared psnd commands (:help, :stop, :panic, :list, etc.)
+ *   - Tab completion for Haskell keywords
+ *   - History persistence
+ *   - Ableton Link callback polling
  */
 
 #include <stdio.h>
@@ -26,11 +33,30 @@
 
 #ifndef _WIN32
 #include <unistd.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+#include <fcntl.h>
+#if defined(__APPLE__) || defined(__FreeBSD__)
+#include <util.h>
+#else
+#include <pty.h>
+#endif
 #endif
 
 #include "vfs.h"
 #include "midi_ffi.h"
-#include "include/psnd.h"
+
+/* psnd core headers */
+#include "psnd.h"       /* from source/core/include */
+#include "repl.h"       /* from source/core */
+#include "loki/core.h"
+#include "loki/internal.h"
+#include "loki/syntax.h"
+#include "loki/repl_helpers.h"
+#include "shared/repl_commands.h"
 
 /* SharedContext integration for TSF/Csound/Link support */
 #ifdef PSND_SHARED_CONTEXT
@@ -117,8 +143,10 @@ static void print_mhs_usage(void) {
     printf("Usage:\n");
     printf("  psnd mhs                     Start interactive REPL\n");
     printf("  psnd mhs -r <file.hs>        Run a Haskell file\n");
+#ifndef MHS_NO_COMPILATION
     printf("  psnd mhs -o<prog> <file.hs>  Compile to executable\n");
     printf("  psnd mhs -o<file.c> <file.hs> Output C code only\n");
+#endif
     printf("  psnd mhs [options]           Pass options to MicroHs\n\n");
     printf("MIDI options:\n");
     printf("  --virtual NAME    Create virtual MIDI port with given name\n");
@@ -134,8 +162,31 @@ static void print_mhs_usage(void) {
     printf("  psnd mhs -sf gm.sf2          Start REPL with built-in synth\n");
     printf("  psnd mhs -p 0                Start REPL using MIDI port 0\n");
     printf("  psnd mhs -r MyFile.hs        Run a Haskell file\n");
+#ifndef MHS_NO_COMPILATION
     printf("  psnd mhs -oMyProg MyFile.hs  Compile to executable\n\n");
+#endif
     printf("MicroHs options: -q (quiet), -C (cache), -i<path> (include)\n");
+}
+
+/**
+ * @brief Print MHS-specific REPL help.
+ */
+static void print_mhs_repl_help(void) {
+    shared_print_command_help();
+
+    printf("MHS-specific:\n");
+    printf("  Lines are passed to MicroHs REPL for evaluation\n");
+    printf("  MicroHs commands: :quit, :type, :kind, :browse, etc.\n");
+    printf("\n");
+    printf("Haskell Quick Reference:\n");
+    printf("  import Midi           Import MIDI module\n");
+    printf("  midiInit              Initialize MIDI (auto-called)\n");
+    printf("  midiNoteOn c p v      Note on (channel, pitch, velocity)\n");
+    printf("  midiNoteOff c p       Note off (channel, pitch)\n");
+    printf("  midiCC c cc v         Control change\n");
+    printf("  midiSleep ms          Sleep for milliseconds\n");
+    printf("  midiPanic             All notes off\n");
+    printf("\n");
 }
 
 /**
@@ -313,6 +364,389 @@ static int set_env(const char *name, const char *value) {
 #endif
 }
 
+/* ============================================================================
+ * Interactive REPL with Stdin Pipe
+ * ============================================================================ */
+
+/* Haskell keywords for tab completion (without type suffix markers) */
+static const char *mhs_completion_words[] = {
+    /* Reserved words */
+    "module", "import", "qualified", "as", "hiding",
+    "where", "let", "in", "case", "of", "if", "then", "else",
+    "do", "return", "class", "instance", "data", "type", "newtype",
+    "deriving", "default", "infix", "infixl", "infixr",
+    /* Common functions */
+    "main", "print", "putStrLn", "putStr", "show", "read",
+    "map", "filter", "foldr", "foldl", "zip", "unzip",
+    "head", "tail", "init", "last", "length", "null", "reverse",
+    "take", "drop", "concat", "sum", "product", "maximum", "minimum",
+    "and", "or", "not", "otherwise",
+    /* Monadic */
+    "pure", "fmap", "bind", "sequence", "mapM", "forM",
+    /* MHS MIDI primitives */
+    "midiInit", "midiCleanup", "midiListPorts", "midiPortCount",
+    "midiOpenPort", "midiOpenVirtual", "midiClose",
+    "midiNoteOn", "midiNoteOff", "midiCC", "midiProgramChange",
+    "midiPitchBend", "midiPanic", "midiSleep",
+    /* Music module */
+    "note", "rest", "chord", "line", "times", "tempo",
+    "instrument", "dynamic", "phrase", "cut", "remove",
+    /* Types */
+    "Int", "Integer", "Float", "Double", "Bool", "Char", "String",
+    "Maybe", "Either", "IO", "List", "Monad", "Functor", "Applicative",
+    "True", "False", "Just", "Nothing", "Left", "Right",
+    NULL
+};
+
+/* PTY master file descriptor for communicating with MHS */
+static int g_mhs_pty_master = -1;
+
+/* Child process PID for MHS */
+static pid_t g_mhs_child_pid = -1;
+
+/* Original terminal settings (to restore on exit) */
+static struct termios g_orig_termios;
+static int g_termios_saved = 0;
+
+/**
+ * @brief Stop callback for MHS REPL - sends panic.
+ */
+static void mhs_stop_playback(void) {
+    midi_panic();
+}
+
+/**
+ * @brief Process MHS REPL command.
+ *
+ * @return 0=continue (command handled), 1=quit, 2=pass to MicroHs
+ */
+static int mhs_process_command(const char *input) {
+    const char *cmd = input;
+    if (cmd[0] == ':') cmd++;
+
+#ifdef PSND_SHARED_CONTEXT
+    int result = shared_process_command(g_mhs_repl_shared, input, mhs_stop_playback);
+#else
+    int result = REPL_CMD_NOT_CMD;
+    /* Basic command handling without SharedContext */
+    if (strcmp(cmd, "quit") == 0 || strcmp(cmd, "q") == 0 ||
+        strcmp(cmd, "exit") == 0) {
+        return 1; /* quit */
+    }
+    if (strcmp(cmd, "panic") == 0 || strcmp(cmd, "p") == 0) {
+        midi_panic();
+        return 0;
+    }
+#endif
+
+    if (result == REPL_CMD_QUIT) {
+        return 1; /* quit */
+    }
+    if (result == REPL_CMD_HANDLED) {
+        return 0; /* command handled */
+    }
+
+    /* Handle MHS-specific help command */
+    if (strcmp(cmd, "help") == 0 || strcmp(cmd, "h") == 0 || strcmp(cmd, "?") == 0) {
+        print_mhs_repl_help();
+        return 0;
+    }
+
+    return 2; /* pass to MicroHs */
+}
+
+/**
+ * @brief Tab completion callback for MHS REPL.
+ */
+static char **mhs_completion_callback(const char *prefix, int *count, void *user_data) {
+    (void)user_data;
+
+    if (!prefix || !count) return NULL;
+
+    size_t prefix_len = strlen(prefix);
+    if (prefix_len == 0) {
+        *count = 0;
+        return NULL;
+    }
+
+    /* Count matches */
+    int matches = 0;
+    for (int i = 0; mhs_completion_words[i]; i++) {
+        if (strncmp(mhs_completion_words[i], prefix, prefix_len) == 0) {
+            matches++;
+        }
+    }
+
+    if (matches == 0) {
+        *count = 0;
+        return NULL;
+    }
+
+    /* Allocate result array */
+    char **result = malloc((matches + 1) * sizeof(char *));
+    if (!result) {
+        *count = 0;
+        return NULL;
+    }
+
+    /* Fill matches */
+    int idx = 0;
+    for (int i = 0; mhs_completion_words[i] && idx < matches; i++) {
+        if (strncmp(mhs_completion_words[i], prefix, prefix_len) == 0) {
+            result[idx++] = strdup(mhs_completion_words[i]);
+        }
+    }
+    result[idx] = NULL;
+
+    *count = matches;
+    return result;
+}
+
+/**
+ * @brief Check if MHS child process is still running.
+ */
+static int mhs_child_running(void) {
+    if (g_mhs_child_pid <= 0) return 0;
+    int status;
+    pid_t result = waitpid(g_mhs_child_pid, &status, WNOHANG);
+    if (result == 0) return 1;  /* Still running */
+    if (result == g_mhs_child_pid) return 0;  /* Exited */
+    return 0;  /* Error or not our child */
+}
+
+/**
+ * @brief Read available output from MHS PTY (non-blocking).
+ *
+ * Reads and prints any output from MicroHs to stdout.
+ */
+static void mhs_read_output(void) {
+    if (g_mhs_pty_master < 0) return;
+
+    char buf[1024];
+    ssize_t n;
+
+    /* Set non-blocking temporarily */
+    int flags = fcntl(g_mhs_pty_master, F_GETFL, 0);
+    fcntl(g_mhs_pty_master, F_SETFL, flags | O_NONBLOCK);
+
+    while ((n = read(g_mhs_pty_master, buf, sizeof(buf) - 1)) > 0) {
+        buf[n] = '\0';
+        /* Filter out MicroHs prompt since we show our own */
+        char *p = buf;
+        while (*p) {
+            /* Skip "> " prompt from MicroHs */
+            if (p[0] == '>' && p[1] == ' ') {
+                p += 2;
+                continue;
+            }
+            putchar(*p++);
+        }
+        fflush(stdout);
+    }
+
+    /* Restore blocking mode */
+    fcntl(g_mhs_pty_master, F_SETFL, flags);
+}
+
+/**
+ * @brief Run the interactive MHS REPL with PTY interposition.
+ *
+ * This function:
+ * 1. Creates a pseudo-terminal (PTY) for MicroHs
+ * 2. Forks a child process to run MicroHs with PTY as its terminal
+ * 3. Child initializes MIDI (must happen after fork for libremidi to work)
+ * 4. Parent runs psnd's REPL loop with syntax highlighting and completion
+ * 5. Processes psnd commands locally, forwards others to MicroHs via PTY
+ *
+ * Using a PTY instead of a pipe allows MicroHs's SimpleReadline to work
+ * because it sees a real terminal (tcgetattr succeeds).
+ */
+static int run_mhs_interactive_repl(int mhs_argc, char **mhs_argv, MhsReplArgs *args) {
+    int result = 0;
+    struct termios slave_termios;
+    struct winsize ws;
+
+    /* Get current terminal settings to copy to PTY */
+    if (tcgetattr(STDIN_FILENO, &g_orig_termios) == 0) {
+        g_termios_saved = 1;
+        slave_termios = g_orig_termios;
+    } else {
+        /* Fallback: use sensible defaults */
+        memset(&slave_termios, 0, sizeof(slave_termios));
+        slave_termios.c_iflag = ICRNL | IXON;
+        slave_termios.c_oflag = OPOST | ONLCR;
+        slave_termios.c_cflag = CS8 | CREAD | CLOCAL;
+        slave_termios.c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK;
+        cfsetispeed(&slave_termios, B9600);
+        cfsetospeed(&slave_termios, B9600);
+    }
+
+    /* Get window size */
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != 0) {
+        ws.ws_row = 24;
+        ws.ws_col = 80;
+        ws.ws_xpixel = 0;
+        ws.ws_ypixel = 0;
+    }
+
+    /* Fork with PTY - child gets slave side as stdin/stdout/stderr */
+    g_mhs_child_pid = forkpty(&g_mhs_pty_master, NULL, &slave_termios, &ws);
+
+    if (g_mhs_child_pid == -1) {
+        fprintf(stderr, "Error: Failed to forkpty\n");
+        return 1;
+    }
+
+    if (g_mhs_child_pid == 0) {
+        /* Child process: run MicroHs with PTY as terminal */
+        /* forkpty already set up stdin/stdout/stderr to the slave PTY */
+
+        /* Initialize MIDI in child process (must happen after fork) */
+        if (setup_midi_for_repl(args) != 0) {
+            fprintf(stderr, "Warning: MIDI initialization failed in child\n");
+        }
+
+        /* Run MicroHs */
+        int mhs_result = mhs_main(mhs_argc, mhs_argv);
+
+        /* Cleanup MIDI before exit */
+        cleanup_midi_for_repl();
+        _exit(mhs_result);
+    }
+
+    /* Parent process: run psnd REPL, communicate via PTY master */
+
+    /* Initialize Link callbacks */
+#ifdef PSND_SHARED_CONTEXT
+    shared_repl_link_init_callbacks(g_mhs_repl_shared);
+#endif
+
+    /* Initialize REPL editor */
+    ReplLineEditor ed;
+    repl_editor_init(&ed);
+
+    /* Set up syntax highlighting context */
+    editor_ctx_t syntax_ctx;
+    editor_ctx_init(&syntax_ctx);
+    syntax_init_default_colors(&syntax_ctx);
+    /* Select Haskell syntax highlighting using dummy filename */
+    syntax_select_for_filename(&syntax_ctx, "input.hs");
+
+    /* Set up tab completion */
+    repl_set_completion(&ed, mhs_completion_callback, NULL);
+
+    /* Load history */
+    char history_path[512] = {0};
+    if (repl_get_history_path("mhs", history_path, sizeof(history_path))) {
+        repl_history_load(&ed, history_path);
+    }
+
+    if (args->verbose) {
+        printf("MHS REPL %s (type :help for psnd commands)\n", PSND_VERSION);
+    }
+
+    /* Give MicroHs time to start and print welcome message */
+    usleep(200000); /* 200ms */
+    mhs_read_output();
+
+    /* Enable raw mode for syntax-highlighted input */
+    repl_enable_raw_mode();
+
+    /* Main REPL loop */
+    while (mhs_child_running()) {
+        char *input = repl_readline(&syntax_ctx, &ed, "mhs> ");
+
+        if (input == NULL) {
+            /* EOF - signal MHS to quit */
+            break;
+        }
+
+        if (input[0] == '\0') {
+            /* Empty line - still send newline to MHS */
+            if (g_mhs_pty_master >= 0) {
+                write(g_mhs_pty_master, "\n", 1);
+            }
+            usleep(50000);
+            mhs_read_output();
+            continue;
+        }
+
+        repl_add_history(&ed, input);
+
+        /* Process command */
+        int cmd_result = mhs_process_command(input);
+
+        if (cmd_result == 1) {
+            /* Quit requested */
+            break;
+        }
+
+        if (cmd_result == 0) {
+            /* Command handled by psnd */
+#ifdef PSND_SHARED_CONTEXT
+            shared_repl_link_check();
+#endif
+            continue;
+        }
+
+        /* Pass input to MicroHs via PTY */
+        if (g_mhs_pty_master >= 0) {
+            write(g_mhs_pty_master, input, strlen(input));
+            write(g_mhs_pty_master, "\n", 1);
+        }
+
+        /* Give MicroHs time to process and output */
+        usleep(100000); /* 100ms for output to appear */
+        mhs_read_output();
+
+        /* Poll Link callbacks */
+#ifdef PSND_SHARED_CONTEXT
+        shared_repl_link_check();
+#endif
+    }
+
+    /* Disable raw mode */
+    repl_disable_raw_mode();
+
+    /* Save history */
+    if (history_path[0]) {
+        repl_history_save(&ed, history_path);
+    }
+
+    /* Cleanup editor */
+    repl_editor_cleanup(&ed);
+    /* Note: syntax_ctx doesn't have Lua host, so minimal cleanup needed */
+
+    /* Signal MHS to exit by sending :quit and closing PTY */
+    if (g_mhs_pty_master >= 0) {
+        const char *quit_cmd = ":quit\n";
+        write(g_mhs_pty_master, quit_cmd, strlen(quit_cmd));
+        close(g_mhs_pty_master);
+        g_mhs_pty_master = -1;
+    }
+
+    /* Wait for MHS child to finish */
+    if (g_mhs_child_pid > 0) {
+        int status;
+        waitpid(g_mhs_child_pid, &status, 0);
+        if (WIFEXITED(status)) {
+            result = WEXITSTATUS(status);
+        }
+        g_mhs_child_pid = -1;
+    }
+
+    /* Cleanup Link callbacks */
+#ifdef PSND_SHARED_CONTEXT
+    shared_repl_link_cleanup_callbacks();
+#endif
+
+    return result;
+}
+
+/* ============================================================================
+ * Build MHS argv with VFS paths
+ * ============================================================================ */
+
 #ifndef MHS_NO_COMPILATION
 /**
  * @brief Check if we need to extract files for compilation.
@@ -346,10 +780,6 @@ static int needs_extraction(int argc, char **argv) {
     return 0;  /* No -o flag, VFS works fine */
 }
 #endif /* MHS_NO_COMPILATION */
-
-/* ============================================================================
- * Build MHS argv with VFS paths
- * ============================================================================ */
 
 static char **build_mhs_argv(MhsReplArgs *args, int *out_argc, char *path_buf1,
                              char *path_buf2, size_t buf_size) {
@@ -390,6 +820,30 @@ static char **build_mhs_argv(MhsReplArgs *args, int *out_argc, char *path_buf1,
     return new_argv;
 }
 
+/**
+ * @brief Check if MHS will run in REPL mode (no -r or file argument).
+ */
+static int is_repl_mode(MhsReplArgs *args) {
+    for (int i = 1; i < args->mhs_argc; i++) {
+        /* Check for -r (run) flag */
+        if (strcmp(args->mhs_argv[i], "-r") == 0) {
+            return 0;
+        }
+        /* Check for -o (compile) flag */
+        if (strncmp(args->mhs_argv[i], "-o", 2) == 0) {
+            return 0;
+        }
+        /* Check for .hs file argument (not a flag) */
+        if (args->mhs_argv[i][0] != '-') {
+            const char *ext = strrchr(args->mhs_argv[i], '.');
+            if (ext && (strcmp(ext, ".hs") == 0 || strcmp(ext, ".mhs") == 0)) {
+                return 0;
+            }
+        }
+    }
+    return 1; /* No file or -r flag, so REPL mode */
+}
+
 /* ============================================================================
  * MHS REPL Main Entry Point
  * ============================================================================ */
@@ -401,8 +855,11 @@ static char **build_mhs_argv(MhsReplArgs *args, int *out_argc, char *path_buf1,
  * Starts an interactive MicroHs REPL with MIDI library support.
  * Uses embedded VFS for fast startup (~2s vs ~17s from source).
  *
- * For compilation to executable (when MHS_ENABLE_COMPILATION=ON),
- * extracts embedded files to temp directory.
+ * For interactive mode on a TTY, uses stdin pipe interposition to provide:
+ * - Syntax-highlighted input
+ * - Shared psnd commands
+ * - Tab completion
+ * - History persistence
  */
 int mhs_repl_main(int argc, char **argv) {
     /* Parse arguments */
@@ -430,16 +887,20 @@ int mhs_repl_main(int argc, char **argv) {
         return 1;
     }
 
-    /* Setup MIDI/audio for REPL */
-    if (setup_midi_for_repl(&args) != 0) {
-        free_mhs_args(&args);
-        return 1;
+    /* Check if running in interactive REPL mode on a TTY */
+    int interactive_repl = is_repl_mode(&args) && isatty(STDIN_FILENO);
+
+    /* Setup MIDI/audio - but NOT for interactive mode (child will do it after fork) */
+    if (!interactive_repl) {
+        if (setup_midi_for_repl(&args) != 0) {
+            free_mhs_args(&args);
+            return 1;
+        }
     }
 
 #ifdef MHS_NO_COMPILATION
     /*
      * Compilation disabled - simple VFS-only path
-     * No extraction needed, smaller binary without libremidi
      */
 
     /* Check if user is trying to compile to executable */
@@ -453,7 +914,6 @@ int mhs_repl_main(int argc, char **argv) {
             }
             if (output) {
                 size_t len = strlen(output);
-                /* Check if output is NOT .c (i.e., trying to compile to executable) */
                 if (len < 2 || strcmp(output + len - 2, ".c") != 0) {
                     fprintf(stderr, "Error: Compilation to executable is disabled in this build.\n");
                     fprintf(stderr, "This psnd was built with MHS_ENABLE_COMPILATION=OFF.\n");
@@ -485,10 +945,19 @@ int mhs_repl_main(int argc, char **argv) {
         return 1;
     }
 
-    int result = mhs_main(new_argc, new_argv);
+    int result;
+    if (interactive_repl) {
+        /* Use enhanced REPL with PTY - MIDI init happens in child after fork */
+        result = run_mhs_interactive_repl(new_argc, new_argv, &args);
+    } else {
+        /* Non-interactive: run MHS directly */
+        result = mhs_main(new_argc, new_argv);
+    }
 
     free(new_argv);
-    cleanup_midi_for_repl();
+    if (!interactive_repl) {
+        cleanup_midi_for_repl();
+    }
     free_mhs_args(&args);
     return result;
 
@@ -509,27 +978,23 @@ int mhs_repl_main(int argc, char **argv) {
         /* Set MHSDIR to temp directory for cc to find runtime files */
         set_env("MHSDIR", temp_dir);
         linking_midi = 1;
+        interactive_repl = 0; /* Compilation mode, not REPL */
     } else {
         /* Use VFS - set MHSDIR to virtual root */
         set_env("MHSDIR", VFS_VIRTUAL_ROOT);
     }
 
     /* Build argv for MHS */
-    /* When linking: add -optl flags for MIDI libraries and frameworks */
 #ifdef __APPLE__
-    /* macOS: 3 libraries + 3 frameworks + C++ runtime = 7 -optl pairs = 14 args */
     #define LINK_EXTRA_ARGS 14
 #else
-    /* Linux: --no-as-needed + 3 libraries + ALSA + C++ runtime + math = 7 -optl pairs = 14 args */
     #define LINK_EXTRA_ARGS 14
 #endif
 
 #ifdef MHS_USE_PKG
-    /* Package mode: mhs -C -a<path> -pbase -pmusic */
-    int extra_args = 4;  /* -C, -a<path>, -pbase, -pmusic */
+    int extra_args = 4;
 #else
-    /* Source mode: mhs -C -i<path> -i<path>/lib */
-    int extra_args = 3;  /* -C, -i<path>, -i<path>/lib */
+    int extra_args = 3;
 #endif
     if (linking_midi) {
         extra_args += LINK_EXTRA_ARGS;
@@ -538,7 +1003,6 @@ int mhs_repl_main(int argc, char **argv) {
     int new_argc = args.mhs_argc + extra_args;
     char **new_argv = malloc((new_argc + 1) * sizeof(char *));
 
-    /* Buffers for path arguments */
     char path_arg1[512];
     char path_arg2[512];
     char lib_libremidi[512];
@@ -555,20 +1019,18 @@ int mhs_repl_main(int argc, char **argv) {
 
     int j = 0;
     new_argv[j++] = "mhs";
-    new_argv[j++] = "-C";  /* Enable caching */
+    new_argv[j++] = "-C";
 
 #ifdef MHS_USE_PKG
-    /* Package mode: set archive path */
     if (temp_dir) {
         snprintf(path_arg1, sizeof(path_arg1), "-a%s", temp_dir);
     } else {
         snprintf(path_arg1, sizeof(path_arg1), "-a%s", VFS_VIRTUAL_ROOT);
     }
     new_argv[j++] = path_arg1;
-    new_argv[j++] = "-pbase";   /* Preload base package */
-    new_argv[j++] = "-pmusic";  /* Preload music package */
+    new_argv[j++] = "-pbase";
+    new_argv[j++] = "-pmusic";
 #else
-    /* Source mode: set include paths */
     if (temp_dir) {
         snprintf(path_arg1, sizeof(path_arg1), "-i%s", temp_dir);
         snprintf(path_arg2, sizeof(path_arg2), "-i%s/lib", temp_dir);
@@ -580,14 +1042,11 @@ int mhs_repl_main(int argc, char **argv) {
     new_argv[j++] = path_arg2;
 #endif
 
-    /* Add linker flags for MIDI libraries if compiling to executable */
     if (linking_midi) {
-        /* Build library paths from temp directory */
         snprintf(lib_midi_ffi, sizeof(lib_midi_ffi), "%s/lib/libmidi_ffi.a", temp_dir);
         snprintf(lib_music_theory, sizeof(lib_music_theory), "%s/lib/libmusic_theory.a", temp_dir);
         snprintf(lib_libremidi, sizeof(lib_libremidi), "%s/lib/liblibremidi.a", temp_dir);
 
-        /* Add -optl flags for each library */
         new_argv[j++] = "-optl";
         new_argv[j++] = lib_midi_ffi;
         new_argv[j++] = "-optl";
@@ -596,7 +1055,6 @@ int mhs_repl_main(int argc, char **argv) {
         new_argv[j++] = lib_libremidi;
 
 #ifdef __APPLE__
-        /* macOS frameworks */
         new_argv[j++] = "-optl";
         new_argv[j++] = "-framework";
         new_argv[j++] = "-optl";
@@ -609,45 +1067,44 @@ int mhs_repl_main(int argc, char **argv) {
         new_argv[j++] = "-framework";
         new_argv[j++] = "-optl";
         new_argv[j++] = "CoreAudio";
-        /* C++ standard library (libremidi is C++) */
         new_argv[j++] = "-optl";
         new_argv[j++] = "-lc++";
 #else
-        /* Linux: Force linker to include libraries */
         new_argv[j++] = "-optl";
         new_argv[j++] = "-Wl,--no-as-needed";
-        /* Linux: ALSA */
         new_argv[j++] = "-optl";
         new_argv[j++] = "-lasound";
-        /* C++ standard library */
         new_argv[j++] = "-optl";
         new_argv[j++] = "-lstdc++";
-        /* Math library */
         new_argv[j++] = "-optl";
         new_argv[j++] = "-lm";
 #endif
     }
 
-    /* Copy user's MHS arguments (skip argv[0]) */
     for (int i = 1; i < args.mhs_argc; i++) {
         new_argv[j++] = args.mhs_argv[i];
     }
     new_argv[j] = NULL;
-
-    /* Update argc to match */
     new_argc = j;
 
-    /* Run MHS */
-    int result = mhs_main(new_argc, new_argv);
+    int result;
+    if (interactive_repl) {
+        /* Use enhanced REPL with PTY - MIDI init happens in child after fork */
+        result = run_mhs_interactive_repl(new_argc, new_argv, &args);
+    } else {
+        /* Non-interactive: run MHS directly */
+        result = mhs_main(new_argc, new_argv);
+    }
 
     free(new_argv);
 
-    /* Clean up temp directory if we extracted */
     if (temp_dir) {
         vfs_cleanup_temp(temp_dir);
     }
 
-    cleanup_midi_for_repl();
+    if (!interactive_repl) {
+        cleanup_midi_for_repl();
+    }
     free_mhs_args(&args);
 
     return result;
@@ -712,13 +1169,11 @@ int mhs_play_main(int argc, char **argv) {
 
     /* Build argv for MHS run */
 #ifdef MHS_USE_PKG
-    /* Package mode: mhs -C -a<path> -pbase -pmusic -r <file> */
-    int extra_args = 5;  /* -C, -a<path>, -pbase, -pmusic, -r */
+    int extra_args = 5;
 #else
-    /* Source mode: mhs -C -i<path> -i<path>/lib -r <file> */
-    int extra_args = 4;  /* -C, -i<path>, -i<path>/lib, -r */
+    int extra_args = 4;
 #endif
-    int new_argc = 1 + extra_args + 1;  /* mhs + extra + file */
+    int new_argc = 1 + extra_args + 1;
     char **new_argv = malloc((new_argc + 1) * sizeof(char *));
     char path_arg1[512];
     char path_arg2[512];
@@ -731,20 +1186,20 @@ int mhs_play_main(int argc, char **argv) {
 
     int j = 0;
     new_argv[j++] = "mhs";
-    new_argv[j++] = "-C";               /* Enable caching */
+    new_argv[j++] = "-C";
 
 #ifdef MHS_USE_PKG
     snprintf(path_arg1, sizeof(path_arg1), "-a%s", VFS_VIRTUAL_ROOT);
     new_argv[j++] = path_arg1;
-    new_argv[j++] = "-pbase";           /* Preload base package */
-    new_argv[j++] = "-pmusic";          /* Preload music package */
+    new_argv[j++] = "-pbase";
+    new_argv[j++] = "-pmusic";
 #else
     snprintf(path_arg1, sizeof(path_arg1), "-i%s", VFS_VIRTUAL_ROOT);
     snprintf(path_arg2, sizeof(path_arg2), "-i%s/lib", VFS_VIRTUAL_ROOT);
     new_argv[j++] = path_arg1;
     new_argv[j++] = path_arg2;
 #endif
-    new_argv[j++] = "-r";               /* Run mode */
+    new_argv[j++] = "-r";
     new_argv[j++] = (char *)input_file;
     new_argv[j] = NULL;
 
@@ -752,7 +1207,6 @@ int mhs_play_main(int argc, char **argv) {
         printf("Running: %s\n", input_file);
     }
 
-    /* Run MHS */
     int result = mhs_main(j, new_argv);
 
     free(new_argv);
