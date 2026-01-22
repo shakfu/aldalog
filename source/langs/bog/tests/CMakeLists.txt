@@ -21,6 +21,7 @@ macro(add_bog_test TEST_NAME)
 endmacro()
 
 # Add all bog tests
+add_bog_test(tokenizer)
 add_bog_test(parser)
 add_bog_test(unify)
 add_bog_test(builtins)

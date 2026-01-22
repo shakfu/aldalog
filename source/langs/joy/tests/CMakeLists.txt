@@ -19,6 +19,7 @@ macro(add_joy_test TEST_NAME)
 endmacro()
 
 # Add all joy tests
+add_joy_test(lexer)
 add_joy_test(parser)
 add_joy_test(primitives)
 add_joy_test(midi)

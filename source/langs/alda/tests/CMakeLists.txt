@@ -19,6 +19,7 @@ macro(add_alda_test TEST_NAME)
 endmacro()
 
 # Add all alda tests
+add_alda_test(scanner)
 add_alda_test(interpreter)
 add_alda_test(parser)
 add_alda_test(backends)

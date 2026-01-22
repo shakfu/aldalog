@@ -27,4 +27,5 @@ macro(add_tr7_test TEST_NAME)
 endmacro()
 
 # Add all tr7 tests
+add_tr7_test(reader)
 add_tr7_test(music)
