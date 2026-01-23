@@ -22,6 +22,7 @@ set(LIBSHARED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/shared/audio/tsf_backend.c
     ${CMAKE_CURRENT_SOURCE_DIR}/shared/audio/csound_backend.c
     ${CMAKE_CURRENT_SOURCE_DIR}/shared/audio/fluid_backend.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/shared/audio/minihost_backend.c
     ${CMAKE_CURRENT_SOURCE_DIR}/shared/midi/midi.c
     ${CMAKE_CURRENT_SOURCE_DIR}/shared/midi/midi_input.c
     ${CMAKE_CURRENT_SOURCE_DIR}/shared/midi/events.c
@@ -68,6 +69,12 @@ if(BUILD_FLUID_BACKEND)
         ${CMAKE_BINARY_DIR}/source/thirdparty/fluidsynth/include
     )
     target_link_libraries(shared PRIVATE libfluidsynth)
+endif()
+
+if(BUILD_MINIHOST_BACKEND)
+    target_compile_definitions(shared PRIVATE BUILD_MINIHOST_BACKEND)
+    target_link_libraries(shared PRIVATE minihost)
+    message(STATUS "Minihost plugin backend enabled")
 endif()
 
 if(BUILD_OSC)
@@ -132,6 +139,7 @@ function(psnd_build_loki)
         ${PSND_CORE_DIR}/loki/command/csd.c
         ${PSND_CORE_DIR}/loki/command/export.c
         ${PSND_CORE_DIR}/loki/command/loop.c
+        ${PSND_CORE_DIR}/loki/command/plugin.c
         ${PSND_CORE_DIR}/loki/terminal.c
         ${PSND_CORE_DIR}/loki/undo.c
         ${PSND_CORE_DIR}/loki/buffers.c
@@ -229,6 +237,11 @@ function(psnd_build_loki)
         )
     endif()
 
+    # Minihost plugin support (propagate from shared library)
+    if(BUILD_MINIHOST_BACKEND)
+        target_compile_definitions(libloki PUBLIC BUILD_MINIHOST_BACKEND)
+    endif()
+
     # Lua sandboxing (disables os, io, debug, load* by default)
     if(LUA_SANDBOX)
         target_compile_definitions(libloki PRIVATE LUA_SANDBOX)
@@ -312,6 +325,11 @@ function(psnd_build_binary)
     # Pass through FluidSynth backend flag for help text
     if(BUILD_FLUID_BACKEND)
         target_compile_definitions(psnd_bin PRIVATE BUILD_FLUID_BACKEND)
+    endif()
+
+    # Pass through Minihost backend flag for help text
+    if(BUILD_MINIHOST_BACKEND)
+        target_compile_definitions(psnd_bin PRIVATE BUILD_MINIHOST_BACKEND)
     endif()
 endfunction()
 

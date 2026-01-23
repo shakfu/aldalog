@@ -2,6 +2,7 @@
 .PHONY: all build clean reset test show-config rebuild remake docs \
 		psnd-tsf default psnd-tsf-csound csound psnd-fluid psnd-fluid-csound \
 		psnd-tsf-web web psnd-fluid-web psnd-fluid-csound-web full \
+		psnd-minihost minihost psnd-minihost-csound \
 		mhs-small mhs-src mhs-src-small no-mhs
 
 BUILD_DIR ?= build
@@ -33,6 +34,14 @@ configure-fluid-web:
 
 configure-fluid-csound-web:
 	@mkdir -p $(BUILD_DIR) && $(CMAKE) -S . -B $(BUILD_DIR) -DBUILD_FLUID_BACKEND=ON -DBUILD_CSOUND_BACKEND=ON -DBUILD_WEB_HOST=ON -DBUILD_TESTING=ON
+
+# Minihost (VST/AU plugin) variants
+# Note: JUCE is fetched automatically during configure (first build takes longer)
+configure-minihost:
+	@mkdir -p $(BUILD_DIR) && $(CMAKE) -S . -B $(BUILD_DIR) -DBUILD_MINIHOST_BACKEND=ON -DBUILD_TESTING=ON
+
+configure-minihost-csound:
+	@mkdir -p $(BUILD_DIR) && $(CMAKE) -S . -B $(BUILD_DIR) -DBUILD_MINIHOST_BACKEND=ON -DBUILD_CSOUND_BACKEND=ON -DBUILD_TESTING=ON
 
 # MHS variants
 configure-mhs-small:
@@ -87,6 +96,20 @@ psnd-fluid-csound-web: configure-fluid-csound-web
 	@$(CMAKE) --build $(BUILD_DIR) --config Release
 
 full: psnd-fluid-csound-web  # alias
+
+# ============================================================================
+# Minihost (VST/AU plugin) build variants
+# ============================================================================
+
+# TinySoundFont + Minihost
+psnd-minihost: configure-minihost
+	@$(CMAKE) --build $(BUILD_DIR) --config Release
+
+minihost: psnd-minihost  # alias
+
+# TinySoundFont + Minihost + Csound
+psnd-minihost-csound: configure-minihost-csound
+	@$(CMAKE) --build $(BUILD_DIR) --config Release
 
 # ============================================================================
 # MHS build variants

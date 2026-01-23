@@ -34,6 +34,9 @@
 #include "async_queue.h"
 #include "shared/context.h"
 #include "shared/osc/osc.h"
+#ifdef BUILD_MINIHOST_BACKEND
+#include "shared/audio/minihost_backend.h"
+#endif
 
 /* ======================== Main Editor Instance ============================ */
 
@@ -270,6 +273,10 @@ static void print_usage(void) {
     printf("  -v, --version       Show version information\n");
     printf("  -sf PATH            Use built-in synth with soundfont (.sf2)\n");
     printf("  -cs PATH            Use Csound synthesis with .csd file\n");
+#ifdef BUILD_MINIHOST_BACKEND
+    printf("  -pg, --plugin PATH  Use VST3/AU plugin for synthesis\n");
+    printf("  --plugin-log PATH   Write plugin debug output to file\n");
+#endif
 #ifdef PSND_OSC
     printf("\nOSC (Open Sound Control):\n");
     printf("  --osc               Enable OSC server (default port: %d)\n", PSND_OSC_DEFAULT_PORT);
@@ -312,6 +319,8 @@ int loki_editor_main(int argc, char **argv) {
     const char *filename = NULL;
     const char *soundfont_path = NULL;
     const char *csound_path = NULL;
+    const char *plugin_path = NULL;
+    const char *plugin_log = NULL;
     int osc_enabled = 0;
     int osc_port = 0;
     const char *osc_send_host = NULL;
@@ -332,6 +341,14 @@ int loki_editor_main(int argc, char **argv) {
         }
         if (strcmp(argv[i], "-cs") == 0 && i + 1 < argc) {
             csound_path = argv[++i];
+            continue;
+        }
+        if ((strcmp(argv[i], "--plugin") == 0 || strcmp(argv[i], "-pg") == 0) && i + 1 < argc) {
+            plugin_path = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "--plugin-log") == 0 && i + 1 < argc) {
+            plugin_log = argv[++i];
             continue;
         }
         /* OSC options */
@@ -486,6 +503,32 @@ int loki_editor_main(int argc, char **argv) {
             }
 #endif
 
+            /* Load VST3/AU plugin if requested via CLI */
+#ifdef BUILD_MINIHOST_BACKEND
+            if (plugin_path && ctx->model.shared) {
+                /* Set log file before loading (NULL = suppress to /dev/null) */
+                shared_minihost_set_log_file(plugin_log);
+                if (shared_minihost_init() == 0) {
+                    if (shared_minihost_load(0, plugin_path) == 0) {
+                        const char *plugin_name = shared_minihost_get_plugin_name(0);
+                        if (shared_minihost_enable() == 0) {
+                            ctx->model.shared->minihost_enabled = 1;
+                            editor_set_status_msg(ctx, "Plugin loaded: %s",
+                                plugin_name ? plugin_name : plugin_path);
+                        } else {
+                            editor_set_status_msg(ctx, "Failed to enable plugin audio");
+                        }
+                    } else {
+                        editor_set_status_msg(ctx, "Failed to load plugin: %s", plugin_path);
+                    }
+                } else {
+                    editor_set_status_msg(ctx, "Failed to initialize plugin host");
+                }
+            }
+#else
+            (void)plugin_path;  /* Suppress unused variable warning */
+#endif
+
             int ret = loki_lang_init_for_file(ctx);
             if (ret == 0) {
                 const LokiLangOps *lang = loki_lang_for_file(ctx->model.filename);
@@ -507,10 +550,11 @@ int loki_editor_main(int argc, char **argv) {
                         } else if (soundfont_path) {
                             editor_set_status_msg(ctx, "Failed to load soundfont: %s", err ? err : soundfont_path);
                         }
-                    } else {
+                    } else if (!plugin_path) {
                         /* No backend requested - show default message */
                         editor_set_status_msg(ctx, "%s: Ctrl-E eval, Ctrl-G stop", lang->name);
                     }
+                    /* If plugin_path was set, status was already shown above */
                 }
             } else if (ret == -1) {
                 const char *err = loki_lang_get_error(ctx);

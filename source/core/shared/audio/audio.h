@@ -396,6 +396,194 @@ float shared_fluid_get_gain(void);
  */
 int shared_fluid_get_active_voice_count(void);
 
+/* ============================================================================
+ * Minihost Backend (VST3/AU Plugin Host)
+ *
+ * Provides plugin hosting for software instruments and effects.
+ * Supports up to 8 plugin slots (slot 0 for instrument, slots 1-7 for effects).
+ *
+ * Build with -DBUILD_MINIHOST_BACKEND=ON to enable.
+ * ============================================================================ */
+
+/** Maximum number of plugin slots */
+#define MINIHOST_MAX_PLUGINS 8
+
+/**
+ * @brief Initialize the minihost backend.
+ * @return 0 on success, -1 on error.
+ */
+int shared_minihost_init(void);
+
+/**
+ * @brief Cleanup minihost resources.
+ */
+void shared_minihost_cleanup(void);
+
+/**
+ * @brief Check if minihost backend is available (compiled in).
+ * @return Non-zero if available, 0 if not compiled in.
+ */
+int shared_minihost_is_available(void);
+
+/**
+ * @brief Load a VST3 or AU plugin into a slot.
+ * @param slot Plugin slot (0-7).
+ * @param path Path to the plugin bundle.
+ * @return 0 on success, -1 on error.
+ */
+int shared_minihost_load(int slot, const char* path);
+
+/**
+ * @brief Unload plugin from a slot.
+ * @param slot Plugin slot (0-7).
+ */
+void shared_minihost_unload(int slot);
+
+/**
+ * @brief Check if a plugin is loaded in a slot.
+ * @param slot Plugin slot (0-7).
+ * @return Non-zero if plugin is loaded, 0 if empty.
+ */
+int shared_minihost_has_plugin(int slot);
+
+/**
+ * @brief Get the name of the loaded plugin.
+ * @param slot Plugin slot (0-7).
+ * @return Plugin name, or NULL if no plugin loaded.
+ */
+const char* shared_minihost_get_plugin_name(int slot);
+
+/**
+ * @brief Enable the minihost backend (starts audio output).
+ * @return 0 on success, -1 on error.
+ */
+int shared_minihost_enable(void);
+
+/**
+ * @brief Disable the minihost backend (stops audio output).
+ */
+void shared_minihost_disable(void);
+
+/**
+ * @brief Check if minihost is enabled.
+ * @return Non-zero if enabled, 0 if disabled.
+ */
+int shared_minihost_is_enabled(void);
+
+/**
+ * @brief Send a note-on message to the instrument plugin.
+ * @param channel MIDI channel (1-16).
+ * @param pitch Note pitch (0-127).
+ * @param velocity Note velocity (0-127).
+ */
+void shared_minihost_send_note_on(int channel, int pitch, int velocity);
+
+/**
+ * @brief Send a note-off message to the instrument plugin.
+ * @param channel MIDI channel (1-16).
+ * @param pitch Note pitch (0-127).
+ */
+void shared_minihost_send_note_off(int channel, int pitch);
+
+/**
+ * @brief Send a control change to the instrument plugin.
+ * @param channel MIDI channel (1-16).
+ * @param cc Controller number (0-127).
+ * @param value Controller value (0-127).
+ */
+void shared_minihost_send_cc(int channel, int cc, int value);
+
+/**
+ * @brief Send a program change to the instrument plugin.
+ * @param channel MIDI channel (1-16).
+ * @param program Program number (0-127).
+ */
+void shared_minihost_send_program(int channel, int program);
+
+/**
+ * @brief Send pitch bend to the instrument plugin.
+ * @param channel MIDI channel (1-16).
+ * @param bend Pitch bend value (-8192 to 8191, 0 = center).
+ */
+void shared_minihost_send_pitch_bend(int channel, int bend);
+
+/**
+ * @brief Send all notes off to the instrument plugin.
+ */
+void shared_minihost_all_notes_off(void);
+
+/**
+ * @brief Get the number of parameters for a plugin.
+ * @param slot Plugin slot (0-7).
+ * @return Number of parameters, or 0 if no plugin loaded.
+ */
+int shared_minihost_get_num_params(int slot);
+
+/**
+ * @brief Get a parameter value.
+ * @param slot Plugin slot (0-7).
+ * @param index Parameter index.
+ * @return Parameter value (0.0-1.0), or 0 on error.
+ */
+float shared_minihost_get_param(int slot, int index);
+
+/**
+ * @brief Set a parameter value.
+ * @param slot Plugin slot (0-7).
+ * @param index Parameter index.
+ * @param value Parameter value (0.0-1.0).
+ * @return 0 on success, -1 on error.
+ */
+int shared_minihost_set_param(int slot, int index, float value);
+
+/**
+ * @brief Get a parameter name.
+ * @param slot Plugin slot (0-7).
+ * @param index Parameter index.
+ * @param buf Buffer to write name into.
+ * @param size Buffer size.
+ * @return 0 on success, -1 on error.
+ */
+int shared_minihost_get_param_name(int slot, int index, char* buf, int size);
+
+/**
+ * @brief Save plugin state to a file.
+ * @param slot Plugin slot (0-7).
+ * @param path Path to save state file.
+ * @return 0 on success, -1 on error.
+ */
+int shared_minihost_save_state(int slot, const char* path);
+
+/**
+ * @brief Load plugin state from a file.
+ * @param slot Plugin slot (0-7).
+ * @param path Path to state file.
+ * @return 0 on success, -1 on error.
+ */
+int shared_minihost_load_state(int slot, const char* path);
+
+/**
+ * @brief Callback type for plugin scanning.
+ */
+typedef void (*minihost_scan_callback)(const char* name, const char* path, void* userdata);
+
+/**
+ * @brief Scan a directory for VST3/AU plugins.
+ * @param path Directory to scan.
+ * @param callback Function called for each plugin found.
+ * @param userdata User data passed to callback.
+ * @return Number of plugins found, or -1 on error.
+ */
+int shared_minihost_scan_directory(const char* path,
+    minihost_scan_callback callback, void* userdata);
+
+/**
+ * @brief Process audio block through the plugin chain.
+ * @param output Interleaved stereo output buffer.
+ * @param frames Number of frames to process.
+ */
+void shared_minihost_process_block(float* output, int frames);
+
 #ifdef __cplusplus
 }
 #endif

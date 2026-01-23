@@ -96,3 +96,21 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 set_tests_properties(shared_fluid_backend_tests PROPERTIES LABELS "unit")
+
+# Test for Minihost (VST/AU plugin) audio backend
+add_executable(test_minihost_backend test_minihost_backend.c)
+target_include_directories(test_minihost_backend PRIVATE
+    ${PSND_ROOT_DIR}/source/core/include
+    ${PSND_ROOT_DIR}/source/core/shared
+    ${PSND_ROOT_DIR}/source/testing
+)
+target_link_libraries(test_minihost_backend PRIVATE shared test_framework m)
+if(BUILD_MINIHOST_BACKEND)
+    target_compile_definitions(test_minihost_backend PRIVATE BUILD_MINIHOST_BACKEND)
+endif()
+add_test(
+    NAME shared_minihost_backend_tests
+    COMMAND $<TARGET_FILE:test_minihost_backend>
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+set_tests_properties(shared_minihost_backend_tests PROPERTIES LABELS "unit")

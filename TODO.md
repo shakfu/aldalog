@@ -1,5 +1,68 @@
 # Psnd TODO
 
+## Known Bugs
+
+### `:plugin presets` buffer switch not working
+
+**Status:** Unresolved
+
+**Description:** The `:plugin presets` command is intended to open a new scratch buffer displaying all plugin presets, allowing users to scroll through and view the full list. The command executes without errors, but the new buffer does not appear - the editor stays on the original buffer.
+
+**Expected behavior:**
+1. User types `:plugin presets` and presses Enter
+2. A new buffer opens showing:
+   - Plugin name header
+   - Total preset count and current preset number
+   - Full list of presets with indices (e.g., `*   42: Warm Pad` where `*` marks current)
+3. User can scroll through presets, then close buffer with `:q`
+
+**Actual behavior:** Command returns success but display doesn't change. The original file buffer remains visible.
+
+**Root cause analysis:**
+
+The issue appears to be related to how buffer switching interacts with command mode exit:
+
+1. In `command/plugin.c`, the `:plugin presets` handler:
+   - Calls `buffer_create(NULL)` to create a new empty buffer
+   - Calls `buffer_switch(buf_id)` to switch to the new buffer
+   - Gets new context via `preset_ctx = buffer_get_current()`
+   - Populates the buffer with preset data via `editor_insert_row()`
+   - Sets `preset_ctx->view.mode = MODE_NORMAL`
+   - Returns success (1)
+
+2. In `command.c:command_mode_handle_key()`, after the command handler returns:
+   - `command_mode_exit(ctx)` is called with the ORIGINAL context
+   - This sets `ctx->view.mode = MODE_NORMAL` on the OLD buffer
+   - Clears the status message on the OLD buffer
+
+3. In `editor.c` main loop:
+   - Each iteration calls `ctx = buffer_get_current()` which SHOULD return the new buffer
+   - Calls `editor_refresh_screen(ctx)` which SHOULD render the new buffer
+
+**What was tried:**
+1. Verified `buffer_create()` returns valid buffer ID (checked object file symbols)
+2. Verified `buffer_switch()` updates `buffer_state.current_buffer_id`
+3. Added explicit `preset_ctx->view.mode = MODE_NORMAL` after buffer switch
+4. Confirmed all code is compiled in (strings present in binary)
+5. Clean rebuild with `BUILD_MINIHOST_BACKEND=ON`
+
+**Possible issues to investigate:**
+1. `buffer_switch()` may not properly save/restore state between buffers
+2. The `ctx` passed to command handler may be cached somewhere else
+3. Screen refresh may be using a stale context pointer
+4. Buffer initialization may be incomplete (missing screen dimensions, etc.)
+5. The command handler's return may trigger additional processing that resets state
+
+**Files involved:**
+- `source/core/loki/command/plugin.c` - Command implementation
+- `source/core/loki/command.c` - Command execution and mode handling
+- `source/core/loki/buffers.c` - Buffer management
+- `source/core/loki/editor.c` - Main loop and screen refresh
+
+**Workaround:** Use `:plugin preset <n>` to select presets by number, or `:plugin preset <name>` for partial name matching. The status bar shows current preset info with `:plugin`.
+
+---
+
 ## High Priority
 
 ### Web Host Enhancements

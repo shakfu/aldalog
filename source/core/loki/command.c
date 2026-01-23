@@ -73,6 +73,9 @@ static command_def_t builtin_commands[] = {
     {"loop",   cmd_loop,        "Start live loop (beats)",        0, 1},
     {"unloop", cmd_unloop,      "Stop live loop",                 0, 0},
 
+    /* Plugin control (plugin.c) */
+    {"plugin", cmd_plugin,      "Plugin preset control",          0, -1},
+
     {NULL, NULL, NULL, 0, 0}  /* Sentinel */
 };
 

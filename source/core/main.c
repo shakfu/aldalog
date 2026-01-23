@@ -97,6 +97,10 @@ static void print_unified_help(const char *prog) {
     printf("Editor Options:\n");
     printf("  -sf PATH               Use built-in %s synth\n", BUILTIN_SYNTH_NAME);
     printf("  -cs PATH               Use Csound synthesis with .csd file\n");
+#ifdef BUILD_MINIHOST_BACKEND
+    printf("  -pg, --plugin PATH     Use VST3/AU plugin for synthesis\n");
+    printf("  --plugin-log PATH      Write plugin debug output to file\n");
+#endif
 #ifdef PSND_OSC
     printf("  --osc                  Enable OSC server (default port: 7770)\n");
     printf("  --osc-port N           OSC server port\n");

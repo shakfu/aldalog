@@ -20,6 +20,10 @@ void editor_cli_print_usage(void) {
     printf("  -v, --version       Show version information\n");
     printf("  -sf PATH            Use built-in synth with soundfont (.sf2)\n");
     printf("  -cs PATH            Use Csound synthesis with .csd file\n");
+#ifdef BUILD_MINIHOST_BACKEND
+    printf("  -pg, --plugin PATH  Use VST3/AU plugin for synthesis\n");
+    printf("  --plugin-log PATH   Write plugin debug output to file\n");
+#endif
     printf("  --line-numbers      Show line numbers\n");
     printf("  --word-wrap         Enable word wrap\n");
     printf("  --json-rpc          Run in JSON-RPC mode (stdin/stdout)\n");
@@ -97,6 +101,26 @@ int editor_cli_parse(int argc, char **argv, EditorCliArgs *args) {
                 return -1;
             }
             args->csound_path = argv[++i];
+            continue;
+        }
+
+        /* Plugin option (VST3/AU) */
+        if (strcmp(arg, "--plugin") == 0 || strcmp(arg, "-pg") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: %s requires a path argument\n", arg);
+                return -1;
+            }
+            args->plugin_path = argv[++i];
+            continue;
+        }
+
+        /* Plugin log option */
+        if (strcmp(arg, "--plugin-log") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --plugin-log requires a path argument\n");
+                return -1;
+            }
+            args->plugin_log = argv[++i];
             continue;
         }
 

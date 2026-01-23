@@ -103,6 +103,11 @@ int cmd_loop(editor_ctx_t *ctx, const char *args);
 /* :unloop - Stop live loop for current buffer */
 int cmd_unloop(editor_ctx_t *ctx, const char *args);
 
+/* ======================== Plugin Commands (plugin.c) ======================== */
+
+/* :plugin - Plugin preset control */
+int cmd_plugin(editor_ctx_t *ctx, const char *args);
+
 /* ======================== Helper for find_command (used by cmd_help) ======================== */
 
 /* Find a command by name (defined in command.c) */

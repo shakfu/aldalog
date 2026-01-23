@@ -218,5 +218,15 @@ else()
     message(STATUS "OSC support disabled (use -DBUILD_OSC=ON to enable)")
 endif()
 
+# minihost - Minimal audio plugin host (VST3/AU) using JUCE (optional)
+# Enables loading software instruments and effects plugins
+option(BUILD_MINIHOST_BACKEND "Build with minihost VST/AU plugin support" OFF)
+if(BUILD_MINIHOST_BACKEND)
+    message(STATUS "Building with minihost plugin host (fetching JUCE...)")
+    add_subdirectory(minihost)
+else()
+    message(STATUS "Minihost plugin backend disabled (use -DBUILD_MINIHOST_BACKEND=ON to enable)")
+endif()
+
 # Restore parent project's BUILD_TESTING
 set(BUILD_TESTING ${PSND_BUILD_TESTING} CACHE BOOL "Build tests" FORCE)

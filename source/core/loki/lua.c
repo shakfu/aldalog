@@ -41,6 +41,7 @@
 #include "shared/midi/midi.h"  /* MIDI port functions */
 #include "shared/osc/osc.h"   /* OSC functions */
 #include "shared/param/param.h"  /* Parameter system */
+#include "shared/audio/audio.h"  /* Audio backends including minihost */
 
 /* ======================= Lua API bindings ================================ */
 
@@ -2232,6 +2233,231 @@ static void lua_register_param_module(lua_State *L) {
     lua_setfield(L, -2, "param");  /* Set as loki.param */
 }
 
+/* ======================= Plugin (Minihost) Lua Bindings ======================= */
+
+/* Lua API: loki.plugin.load(slot, path) - Load a VST3/AU plugin */
+static int lua_plugin_load(lua_State *L) {
+    int slot = (int)luaL_checkinteger(L, 1);
+    const char* path = luaL_checkstring(L, 2);
+    int result = shared_minihost_load(slot, path);
+    lua_pushboolean(L, result == 0);
+    return 1;
+}
+
+/* Lua API: loki.plugin.unload(slot) - Unload a plugin */
+static int lua_plugin_unload(lua_State *L) {
+    int slot = (int)luaL_checkinteger(L, 1);
+    shared_minihost_unload(slot);
+    return 0;
+}
+
+/* Lua API: loki.plugin.has_plugin(slot) - Check if a plugin is loaded */
+static int lua_plugin_has_plugin(lua_State *L) {
+    int slot = (int)luaL_checkinteger(L, 1);
+    lua_pushboolean(L, shared_minihost_has_plugin(slot));
+    return 1;
+}
+
+/* Lua API: loki.plugin.name(slot) - Get the plugin name */
+static int lua_plugin_name(lua_State *L) {
+    int slot = (int)luaL_checkinteger(L, 1);
+    const char* name = shared_minihost_get_plugin_name(slot);
+    if (name) {
+        lua_pushstring(L, name);
+    } else {
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
+/* Lua API: loki.plugin.enable() - Enable the minihost backend */
+static int lua_plugin_enable(lua_State *L) {
+    editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (ctx && ctx->model.shared) {
+        ctx->model.shared->minihost_enabled = 1;
+        int result = shared_minihost_enable();
+        lua_pushboolean(L, result == 0);
+    } else {
+        lua_pushboolean(L, 0);
+    }
+    return 1;
+}
+
+/* Lua API: loki.plugin.disable() - Disable the minihost backend */
+static int lua_plugin_disable(lua_State *L) {
+    editor_ctx_t *ctx = loki_lua_get_editor_context(L);
+    if (ctx && ctx->model.shared) {
+        ctx->model.shared->minihost_enabled = 0;
+        shared_minihost_disable();
+    }
+    return 0;
+}
+
+/* Lua API: loki.plugin.is_enabled() - Check if minihost is enabled */
+static int lua_plugin_is_enabled(lua_State *L) {
+    lua_pushboolean(L, shared_minihost_is_enabled());
+    return 1;
+}
+
+/* Lua API: loki.plugin.is_available() - Check if minihost is compiled in */
+static int lua_plugin_is_available(lua_State *L) {
+    lua_pushboolean(L, shared_minihost_is_available());
+    return 1;
+}
+
+/* Lua API: loki.plugin.set_param(slot, index, value) - Set a parameter (0-1) */
+static int lua_plugin_set_param(lua_State *L) {
+    int slot = (int)luaL_checkinteger(L, 1);
+    int index = (int)luaL_checkinteger(L, 2);
+    float value = (float)luaL_checknumber(L, 3);
+    int result = shared_minihost_set_param(slot, index, value);
+    lua_pushboolean(L, result == 0);
+    return 1;
+}
+
+/* Lua API: loki.plugin.get_param(slot, index) - Get a parameter value */
+static int lua_plugin_get_param(lua_State *L) {
+    int slot = (int)luaL_checkinteger(L, 1);
+    int index = (int)luaL_checkinteger(L, 2);
+    lua_pushnumber(L, shared_minihost_get_param(slot, index));
+    return 1;
+}
+
+/* Lua API: loki.plugin.num_params(slot) - Get number of parameters */
+static int lua_plugin_num_params(lua_State *L) {
+    int slot = (int)luaL_checkinteger(L, 1);
+    lua_pushinteger(L, shared_minihost_get_num_params(slot));
+    return 1;
+}
+
+/* Lua API: loki.plugin.params(slot) - List all parameter names */
+static int lua_plugin_params(lua_State *L) {
+    int slot = (int)luaL_checkinteger(L, 1);
+    int count = shared_minihost_get_num_params(slot);
+
+    lua_newtable(L);
+    for (int i = 0; i < count; i++) {
+        char name[256];
+        if (shared_minihost_get_param_name(slot, i, name, sizeof(name)) == 0) {
+            lua_pushstring(L, name);
+        } else {
+            lua_pushfstring(L, "param_%d", i);
+        }
+        lua_rawseti(L, -2, i + 1);  /* 1-based index */
+    }
+    return 1;
+}
+
+/* Lua API: loki.plugin.save_state(slot, path) - Save plugin state */
+static int lua_plugin_save_state(lua_State *L) {
+    int slot = (int)luaL_checkinteger(L, 1);
+    const char* path = luaL_checkstring(L, 2);
+    int result = shared_minihost_save_state(slot, path);
+    lua_pushboolean(L, result == 0);
+    return 1;
+}
+
+/* Lua API: loki.plugin.load_state(slot, path) - Load plugin state */
+static int lua_plugin_load_state(lua_State *L) {
+    int slot = (int)luaL_checkinteger(L, 1);
+    const char* path = luaL_checkstring(L, 2);
+    int result = shared_minihost_load_state(slot, path);
+    lua_pushboolean(L, result == 0);
+    return 1;
+}
+
+/* Callback data for plugin scanning */
+typedef struct {
+    lua_State *L;
+    int table_index;
+} scan_callback_data;
+
+static void lua_plugin_scan_callback(const char* name, const char* path, void* userdata) {
+    scan_callback_data* data = (scan_callback_data*)userdata;
+    lua_State *L = data->L;
+
+    /* Create entry table {name=..., path=...} */
+    lua_newtable(L);
+    lua_pushstring(L, name);
+    lua_setfield(L, -2, "name");
+    lua_pushstring(L, path);
+    lua_setfield(L, -2, "path");
+
+    /* Append to result table */
+    lua_rawseti(L, data->table_index, lua_rawlen(L, data->table_index) + 1);
+}
+
+/* Lua API: loki.plugin.scan(directory) - Scan for plugins */
+static int lua_plugin_scan(lua_State *L) {
+    const char* dir = luaL_checkstring(L, 1);
+
+    lua_newtable(L);  /* Result table */
+    int table_index = lua_gettop(L);
+
+    scan_callback_data data = { L, table_index };
+    shared_minihost_scan_directory(dir, lua_plugin_scan_callback, &data);
+
+    return 1;
+}
+
+/* Register plugin module as loki.plugin subtable */
+static void lua_register_plugin_module(lua_State *L) {
+    /* Assumes loki table is on top of stack */
+    lua_newtable(L);  /* Create plugin subtable */
+
+    /* Plugin loading */
+    lua_pushcfunction(L, lua_plugin_load);
+    lua_setfield(L, -2, "load");
+
+    lua_pushcfunction(L, lua_plugin_unload);
+    lua_setfield(L, -2, "unload");
+
+    lua_pushcfunction(L, lua_plugin_has_plugin);
+    lua_setfield(L, -2, "has_plugin");
+
+    lua_pushcfunction(L, lua_plugin_name);
+    lua_setfield(L, -2, "name");
+
+    /* Enable/disable */
+    lua_pushcfunction(L, lua_plugin_enable);
+    lua_setfield(L, -2, "enable");
+
+    lua_pushcfunction(L, lua_plugin_disable);
+    lua_setfield(L, -2, "disable");
+
+    lua_pushcfunction(L, lua_plugin_is_enabled);
+    lua_setfield(L, -2, "is_enabled");
+
+    lua_pushcfunction(L, lua_plugin_is_available);
+    lua_setfield(L, -2, "is_available");
+
+    /* Parameters */
+    lua_pushcfunction(L, lua_plugin_set_param);
+    lua_setfield(L, -2, "set_param");
+
+    lua_pushcfunction(L, lua_plugin_get_param);
+    lua_setfield(L, -2, "get_param");
+
+    lua_pushcfunction(L, lua_plugin_num_params);
+    lua_setfield(L, -2, "num_params");
+
+    lua_pushcfunction(L, lua_plugin_params);
+    lua_setfield(L, -2, "params");
+
+    /* State persistence */
+    lua_pushcfunction(L, lua_plugin_save_state);
+    lua_setfield(L, -2, "save_state");
+
+    lua_pushcfunction(L, lua_plugin_load_state);
+    lua_setfield(L, -2, "load_state");
+
+    /* Scanning */
+    lua_pushcfunction(L, lua_plugin_scan);
+    lua_setfield(L, -2, "scan");
+
+    lua_setfield(L, -2, "plugin");  /* Set as loki.plugin */
+}
+
 /* Register midi module as loki.midi subtable */
 static void lua_register_midi_module(lua_State *L) {
     /* Assumes loki table is on top of stack */
@@ -2396,6 +2622,9 @@ void loki_lua_bind_editor(lua_State *L) {
     /* Register param module as loki.param */
     lua_register_param_module(L);
 
+    /* Register plugin module as loki.plugin */
+    lua_register_plugin_module(L);
+
     /* Set as global 'loki' */
     lua_setglobal(L, "loki");
 
@@ -2410,6 +2639,8 @@ void loki_lua_bind_editor(lua_State *L) {
     lua_setglobal(L, "osc");
     lua_getfield(L, -1, "param");
     lua_setglobal(L, "param");
+    lua_getfield(L, -1, "plugin");
+    lua_setglobal(L, "plugin");
     lua_pop(L, 1);  /* pop loki table */
 
     /* Register language-specific Lua APIs via the bridge */

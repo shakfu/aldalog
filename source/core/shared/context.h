@@ -38,6 +38,7 @@ typedef void *lo_address;
  */
 typedef struct SharedContext {
     /* Backend enable flags */
+    int minihost_enabled;   /* Use minihost plugin host (highest priority) */
     int builtin_synth_enabled;  /* Use built-in synth (TSF or FluidSynth) */
     int csound_enabled;     /* Use Csound if available */
     int link_enabled;       /* Use Ableton Link for tempo */

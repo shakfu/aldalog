@@ -3,7 +3,7 @@
  * @brief Shared audio/MIDI context implementation.
  *
  * Handles context lifecycle and priority-based event routing to backends.
- * Priority: Csound > Built-in Synth (FluidSynth or TSF) > MIDI
+ * Priority: Minihost > Csound > Built-in Synth (FluidSynth or TSF) > MIDI
  *
  * BUILD_FLUID_BACKEND selects FluidSynth as the built-in synth.
  * Otherwise, TinySoundFont is used.
@@ -96,6 +96,11 @@ void shared_context_cleanup(SharedContext* ctx) {
     shared_send_panic(ctx);
 
     /* Disable backends that this context had enabled */
+    if (ctx->minihost_enabled) {
+        shared_minihost_disable();
+        ctx->minihost_enabled = 0;
+    }
+
     if (ctx->builtin_synth_enabled) {
         builtin_synth_disable();
         ctx->builtin_synth_enabled = 0;
@@ -140,6 +145,13 @@ void shared_send_note_on(SharedContext* ctx, int channel, int pitch, int velocit
     /* channel is 1-based internally, OSC uses 0-based */
     shared_osc_send_note(ctx, channel - 1, pitch, velocity);
 
+    /* Priority 0: Minihost plugin (if enabled and has instrument) */
+    if (ctx->minihost_enabled && shared_minihost_is_enabled()
+        && shared_minihost_has_plugin(0)) {
+        shared_minihost_send_note_on(channel, pitch, velocity);
+        return;
+    }
+
     /* Priority 1: Csound (if enabled and available) */
     if (ctx->csound_enabled && shared_csound_is_enabled()) {
         shared_csound_send_note_on(channel, pitch, velocity);
@@ -167,6 +179,13 @@ void shared_send_note_on_freq(SharedContext* ctx, int channel, double freq,
     /* Use midi_pitch for OSC since OSC uses standard MIDI values */
     shared_osc_send_note(ctx, channel - 1, midi_pitch, velocity);
 
+    /* Priority 0: Minihost plugin (no native frequency support, use MIDI pitch) */
+    if (ctx->minihost_enabled && shared_minihost_is_enabled()
+        && shared_minihost_has_plugin(0)) {
+        shared_minihost_send_note_on(channel, midi_pitch, velocity);
+        return;
+    }
+
     /* Priority 1: Csound (supports microtuning via frequency) */
     if (ctx->csound_enabled && shared_csound_is_enabled()) {
         shared_csound_send_note_on_freq(channel, freq, velocity, midi_pitch);
@@ -192,6 +211,13 @@ void shared_send_note_off(SharedContext* ctx, int channel, int pitch) {
     /* channel is 1-based internally, OSC uses 0-based; velocity 0 = note off */
     shared_osc_send_note(ctx, channel - 1, pitch, 0);
 
+    /* Priority 0: Minihost plugin */
+    if (ctx->minihost_enabled && shared_minihost_is_enabled()
+        && shared_minihost_has_plugin(0)) {
+        shared_minihost_send_note_off(channel, pitch);
+        return;
+    }
+
     /* Priority 1: Csound */
     if (ctx->csound_enabled && shared_csound_is_enabled()) {
         shared_csound_send_note_off(channel, pitch);
@@ -213,6 +239,13 @@ void shared_send_note_off(SharedContext* ctx, int channel, int pitch) {
 void shared_send_program(SharedContext* ctx, int channel, int program) {
     if (!ctx) return;
 
+    /* Priority 0: Minihost plugin */
+    if (ctx->minihost_enabled && shared_minihost_is_enabled()
+        && shared_minihost_has_plugin(0)) {
+        shared_minihost_send_program(channel, program);
+        return;
+    }
+
     /* Priority 1: Csound */
     if (ctx->csound_enabled && shared_csound_is_enabled()) {
         shared_csound_send_program(channel, program);
@@ -233,6 +266,13 @@ void shared_send_program(SharedContext* ctx, int channel, int program) {
 
 void shared_send_cc(SharedContext* ctx, int channel, int cc, int value) {
     if (!ctx) return;
+
+    /* Priority 0: Minihost plugin */
+    if (ctx->minihost_enabled && shared_minihost_is_enabled()
+        && shared_minihost_has_plugin(0)) {
+        shared_minihost_send_cc(channel, cc, value);
+        return;
+    }
 
     /* Priority 1: Csound */
     if (ctx->csound_enabled && shared_csound_is_enabled()) {
@@ -261,6 +301,11 @@ void shared_send_panic(SharedContext* ctx) {
      * A session may have sent notes to multiple backends (e.g., user
      * switched backends mid-session, or backend was toggled).
      */
+
+    /* Minihost plugin */
+    if (shared_minihost_is_enabled()) {
+        shared_minihost_all_notes_off();
+    }
 
     /* Csound */
     if (shared_csound_is_enabled()) {
