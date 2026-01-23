@@ -6,6 +6,7 @@ set(TRACKER_SOURCES
     ${PSND_ROOT_DIR}/source/core/tracker/tracker_plugin.c
     ${PSND_ROOT_DIR}/source/core/tracker/tracker_plugin_notes.c
     ${PSND_ROOT_DIR}/source/core/tracker/tracker_engine.c
+    ${PSND_ROOT_DIR}/source/core/tracker/tracker_audio.c
     ${PSND_ROOT_DIR}/source/core/tracker/tracker_view.c
     ${PSND_ROOT_DIR}/source/core/tracker/tracker_view_theme.c
     ${PSND_ROOT_DIR}/source/core/tracker/tracker_view_undo.c
@@ -18,7 +19,10 @@ add_library(tracker STATIC ${TRACKER_SOURCES})
 target_include_directories(tracker PUBLIC
     ${PSND_ROOT_DIR}/source/core/tracker
     ${PSND_ROOT_DIR}/source/core/include
+    ${PSND_ROOT_DIR}/source/core/shared
 )
+# Link against shared library for audio integration
+target_link_libraries(tracker PUBLIC shared)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(tracker PRIVATE -Wall -Wextra -Wno-unused-function)
 endif()
@@ -46,3 +50,4 @@ endmacro()
 
 # Add tracker tests
 add_tracker_test(plugin_notes)
+add_tracker_test(audio)

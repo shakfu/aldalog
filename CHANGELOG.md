@@ -19,6 +19,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Tracker Sequencer**: MIDI tracker/step sequencer with plugin-based cell evaluation
+  - **Core Components**:
+    - `tracker_model` - Data structures (TrackerSong, TrackerPattern, TrackerTrack, TrackerCell, TrackerPhrase, TrackerEvent)
+    - `tracker_plugin` - Plugin system for different notation languages with capability flags (EVALUATE, VALIDATION, TRANSFORMS)
+    - `tracker_engine` - Playback engine with event queue, active note tracking, and transport controls
+    - `tracker_view` - View layer with theme, undo, clipboard, and JSON serialization
+  - **Notes Plugin** (`tracker_plugin_notes`):
+    - Simple note notation: `C4`, `D#5`, `Bb3`, `F##2`
+    - Velocity: `C4@100` or `C4 v100`
+    - Gate/duration: `C4~2` (2 rows)
+    - Chords: `C4 E4 G4` or `C4,E4,G4`
+    - Rest: `r` or `-`
+    - Note-off: `x` or `off`
+    - Transforms: `transpose`/`tr`, `velocity`/`vel`, `octave`/`oct`, `invert`/`inv`
+  - **Audio Integration** (`tracker_audio`):
+    - `tracker_audio_connect(engine, ctx)` - Wire engine to SharedContext for audio output
+    - `tracker_audio_disconnect(engine)` - Disconnect and send all notes off
+    - `tracker_audio_engine_new(ctx)` - Create engine already connected to context
+    - `tracker_audio_enable_link_sync(engine, ctx)` - Enable Ableton Link tempo/transport sync
+    - `tracker_audio_link_poll(engine, ctx)` - Poll Link state for updates
+    - Automatic channel mapping (tracker 0-based to shared 1-based)
+    - Routes through shared backend priority (Minihost > Csound > TSF/FluidSynth > MIDI)
+  - **Tests**: 75 unit tests (55 for notes plugin, 20 for audio integration)
+  - **Files Added**:
+    - `source/core/tracker/tracker_model.h`, `source/core/tracker/tracker_model.c`
+    - `source/core/tracker/tracker_plugin.h`, `source/core/tracker/tracker_plugin.c`
+    - `source/core/tracker/tracker_plugin_notes.h`, `source/core/tracker/tracker_plugin_notes.c`
+    - `source/core/tracker/tracker_engine.h`, `source/core/tracker/tracker_engine.c`
+    - `source/core/tracker/tracker_audio.h`, `source/core/tracker/tracker_audio.c`
+    - `source/core/tracker/tracker_view.h`, `source/core/tracker/tracker_view.c`
+    - `source/core/tracker/tracker_view_theme.c`, `source/core/tracker/tracker_view_undo.c`
+    - `source/core/tracker/tracker_view_clipboard.c`, `source/core/tracker/tracker_view_json.c`
+    - `source/core/tests/tracker/CMakeLists.txt`
+    - `source/core/tests/tracker/test_plugin_notes.c`, `source/core/tests/tracker/test_audio.c`
+
 - **Parameter Binding System**: Bind named parameters to OSC addresses and MIDI CC for real-time control from physical controllers (knobs, faders)
   - Thread-safe atomic float values for lock-free access from MIDI/OSC threads
   - Parameters have name, type (float/int/bool), min/max/default values
