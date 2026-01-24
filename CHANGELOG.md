@@ -91,6 +91,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - 'D' key (Shift+d) deletes current pattern (cannot delete last pattern)
     - Status bar shows current pattern number (e.g., "Pattern 2/4")
     - All changes sync with playback engine and mark song as modified
+  - **Row Operations**:
+    - 'o' key inserts empty row at cursor (shifts rows down)
+    - 'O' key duplicates current row (inserts copy above)
+    - 'X' key deletes current row (shifts rows up)
+    - All operations record undo history and mark song as modified
+  - **Track Operations**:
+    - 'a' key adds new track to pattern (auto-assigns MIDI channel)
+    - 'A' key removes current track from pattern
+    - Cannot remove the last track (minimum 1 track per pattern)
+    - Maximum 64 tracks per pattern
+    - New tracks auto-assigned incrementing MIDI channels (1-16)
   - **Interactive Demo** (`tracker_demo`):
     - Standalone demo program for testing the terminal UI
     - Pre-populated 4-track, 16-row pattern (lead, bass, drums, pad)

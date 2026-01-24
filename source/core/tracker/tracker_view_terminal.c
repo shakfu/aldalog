@@ -1081,6 +1081,15 @@ static TrackerInputType translate_key(int key, uint32_t* modifiers) {
         case 'n': return TRACKER_INPUT_NEW_PATTERN;
         case 'D': return TRACKER_INPUT_DELETE_PATTERN;
         case 'c': return TRACKER_INPUT_CLONE_PATTERN;
+
+        /* Row operations */
+        case 'o': return TRACKER_INPUT_INSERT_ROW;
+        case 'O': return TRACKER_INPUT_DUPLICATE_ROW;
+        case 'X': return TRACKER_INPUT_DELETE_ROW;
+
+        /* Track operations */
+        case 'a': return TRACKER_INPUT_ADD_TRACK;
+        case 'A': return TRACKER_INPUT_DELETE_TRACK;
     }
 
     /* Printable character */

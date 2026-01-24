@@ -403,6 +403,12 @@ bool tracker_view_handle_input(TrackerView* view, const TrackerInputEvent* event
         case TRACKER_INPUT_DELETE_PATTERN:
             tracker_view_delete_pattern(view);
             break;
+        case TRACKER_INPUT_ADD_TRACK:
+            tracker_view_add_track(view);
+            break;
+        case TRACKER_INPUT_DELETE_TRACK:
+            tracker_view_remove_track(view);
+            break;
 
         /* Editing */
         case TRACKER_INPUT_ENTER_EDIT:
@@ -983,6 +989,80 @@ void tracker_view_delete_pattern(TrackerView* view) {
     tracker_view_invalidate(view);
     tracker_view_show_status(view, "Deleted pattern %d (%d remaining)",
         delete_index + 1, view->song->num_patterns);
+}
+
+/*============================================================================
+ * Track Management
+ *============================================================================*/
+
+void tracker_view_add_track(TrackerView* view) {
+    if (!view || !view->song) return;
+
+    TrackerPattern* pattern = tracker_view_get_current_pattern(view);
+    if (!pattern) return;
+
+    /* Check track limit */
+    if (pattern->num_tracks >= TRACKER_MAX_TRACKS) {
+        tracker_view_show_status(view, "Maximum tracks reached (%d)", TRACKER_MAX_TRACKS);
+        return;
+    }
+
+    /* Generate track name */
+    char name[32];
+    snprintf(name, sizeof(name), "Track %d", pattern->num_tracks + 1);
+
+    /* Determine channel - use next available or default to 1 */
+    uint8_t channel = (pattern->num_tracks < 16) ? (pattern->num_tracks + 1) : 1;
+
+    /* Add track to pattern */
+    if (!tracker_pattern_add_track(pattern, name, channel)) {
+        tracker_view_show_status(view, "Failed to add track");
+        return;
+    }
+
+    /* Move cursor to new track */
+    view->state.cursor_track = pattern->num_tracks - 1;
+
+    view->modified = true;
+    tracker_view_clamp_cursor(view);
+    tracker_view_ensure_visible(view);
+    tracker_view_invalidate(view);
+    tracker_view_show_status(view, "Added track %d (ch %d)",
+        pattern->num_tracks, channel);
+}
+
+void tracker_view_remove_track(TrackerView* view) {
+    if (!view || !view->song) return;
+
+    TrackerPattern* pattern = tracker_view_get_current_pattern(view);
+    if (!pattern) return;
+
+    /* Don't allow removing the last track */
+    if (pattern->num_tracks <= 1) {
+        tracker_view_show_status(view, "Cannot remove last track");
+        return;
+    }
+
+    int track_index = view->state.cursor_track;
+    int track_num = track_index + 1;
+
+    /* Remove track from pattern */
+    if (!tracker_pattern_remove_track(pattern, track_index)) {
+        tracker_view_show_status(view, "Failed to remove track");
+        return;
+    }
+
+    /* Adjust cursor if needed */
+    if (view->state.cursor_track >= pattern->num_tracks) {
+        view->state.cursor_track = pattern->num_tracks - 1;
+    }
+
+    view->modified = true;
+    tracker_view_clamp_cursor(view);
+    tracker_view_ensure_visible(view);
+    tracker_view_invalidate(view);
+    tracker_view_show_status(view, "Removed track %d (%d remaining)",
+        track_num, pattern->num_tracks);
 }
 
 void tracker_view_ensure_visible(TrackerView* view) {

@@ -434,7 +434,9 @@ void tracker_view_insert_row(TrackerView* view) {
         tracker_cell_clear(&track->cells[row]);
     }
 
+    view->modified = true;
     tracker_view_invalidate(view);
+    tracker_view_show_status(view, "Inserted row at %d", row + 1);
 }
 
 void tracker_view_delete_row(TrackerView* view) {
@@ -482,7 +484,9 @@ void tracker_view_delete_row(TrackerView* view) {
         }
     }
 
+    view->modified = true;
     tracker_view_invalidate(view);
+    tracker_view_show_status(view, "Deleted row %d", row + 1);
 }
 
 void tracker_view_duplicate_row(TrackerView* view) {
@@ -506,5 +510,7 @@ void tracker_view_duplicate_row(TrackerView* view) {
         }
     }
 
+    view->modified = true;
     tracker_view_invalidate(view);
+    tracker_view_show_status(view, "Duplicated row %d", row + 1);
 }

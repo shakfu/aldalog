@@ -906,6 +906,21 @@ void tracker_view_clone_pattern(TrackerView* view);
 void tracker_view_delete_pattern(TrackerView* view);
 
 /*============================================================================
+ * Track Management
+ *============================================================================*/
+
+/**
+ * Add a new track to the current pattern.
+ */
+void tracker_view_add_track(TrackerView* view);
+
+/**
+ * Remove the current track from the pattern.
+ * Cannot remove the last remaining track.
+ */
+void tracker_view_remove_track(TrackerView* view);
+
+/*============================================================================
  * Selection
  *============================================================================*/
 
