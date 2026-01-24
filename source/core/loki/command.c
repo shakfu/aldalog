@@ -23,6 +23,7 @@
 
 #include "command.h"
 #include "internal.h"
+#include "buffers.h"
 #include "command/command_impl.h"
 #include <lua.h>
 
@@ -326,7 +327,8 @@ void command_mode_handle_key(editor_ctx_t *ctx, int fd, int key) {
             if (ctx->view.cmd_length > 1) {  /* More than just ':' */
                 command_execute(ctx, ctx->view.cmd_buffer);
             }
-            command_mode_exit(ctx);
+            /* Get current context after command execution - buffer may have switched */
+            command_mode_exit(buffer_get_current());
             break;
 
         case BACKSPACE:

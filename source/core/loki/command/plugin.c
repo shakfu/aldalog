@@ -17,6 +17,7 @@ void editor_del_row(editor_ctx_t *ctx, int at);
 int buffer_create(const char *filename);
 int buffer_switch(int buffer_id);
 editor_ctx_t *buffer_get_current(void);
+int buffer_get_current_id(void);
 
 /* Helper: find preset by name (case-insensitive partial match) */
 static int find_preset_by_name(int slot, const char *name) {
@@ -92,7 +93,18 @@ int cmd_plugin(editor_ctx_t *ctx, const char *args) {
             return 0;
         }
 
-        buffer_switch(buf_id);
+        if (buffer_switch(buf_id) != 0) {
+            editor_set_status_msg(ctx, "Failed to switch to preset buffer");
+            return 0;
+        }
+
+        /* Verify buffer switch worked */
+        int current_id = buffer_get_current_id();
+        if (current_id != buf_id) {
+            editor_set_status_msg(ctx, "Buffer switch failed: expected %d, got %d", buf_id, current_id);
+            return 0;
+        }
+
         editor_ctx_t *preset_ctx = buffer_get_current();
         if (!preset_ctx) {
             editor_set_status_msg(ctx, "Failed to switch to preset buffer");

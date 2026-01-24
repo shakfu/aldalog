@@ -45,13 +45,39 @@ The issue appears to be related to how buffer switching interacts with command m
 3. Added explicit `preset_ctx->view.mode = MODE_NORMAL` after buffer switch
 4. Confirmed all code is compiled in (strings present in binary)
 5. Clean rebuild with `BUILD_MINIHOST_BACKEND=ON`
+6. Added explicit error checking for `buffer_switch()` return value in plugin.c
+7. Created comprehensive unit test `buffer_command_workflow` that simulates the exact workflow - test passes, confirming buffer management works correctly in isolation
 
-**Possible issues to investigate:**
-1. `buffer_switch()` may not properly save/restore state between buffers
-2. The `ctx` passed to command handler may be cached somewhere else
-3. Screen refresh may be using a stale context pointer
-4. Buffer initialization may be incomplete (missing screen dimensions, etc.)
-5. The command handler's return may trigger additional processing that resets state
+**Analysis (2026-01-24):**
+The buffer management code is correct. A new unit test in `test_buffers.c` simulates exactly what `:plugin presets` does:
+- Create buffer, switch to it, delete initial row, insert content rows
+- All operations complete successfully and `buffer_get_current()` returns the correct context
+
+**Systematic investigation of potential causes:**
+
+| Hypothesis | Finding | Evidence |
+|------------|---------|----------|
+| Minihost plugin | **Not the cause** | Plugin functions are pure read-only queries. Audio runs in separate thread with proper mutex isolation. No editor state modification. |
+| Async event queue | **Not the cause** | All handlers call Lua callbacks or evaluate specific buffers by ID. None modify `current_buffer_id`. |
+| Terminal rendering | **Not the cause** | Both renderer and VT100 paths work correctly. `command_mode_exit` only modifies mode/status on OLD context. |
+
+**Improvements made:**
+- Added explicit error checking for `buffer_switch()` return value
+- Added runtime verification that buffer ID matches after switch
+- Status messages now include diagnostic info on failure
+
+**Remaining possibilities:**
+1. Environment-specific - Bug only manifests with specific plugins or terminal emulators
+2. Timing-related - Possible race condition in real-world conditions
+3. Already fixed - The bug may have been resolved by other changes
+
+**Ruled out:**
+1. ~~`buffer_switch()` may not properly save/restore state between buffers~~ (confirmed working via unit test)
+2. ~~The `ctx` passed to command handler may be cached somewhere else~~ (code trace shows ctx is local variable)
+3. ~~Screen refresh may be using a stale context pointer~~ (main loop fetches ctx each iteration)
+4. ~~Buffer initialization may be incomplete (missing screen dimensions, etc.)~~ (confirmed working via unit test)
+5. ~~The command handler's return may trigger additional processing that resets state~~ (no such code exists)
+6. ~~Async event queue dispatch has side effects~~ (handlers don't modify buffer state)
 
 **Files involved:**
 - `source/core/loki/command/plugin.c` - Command implementation

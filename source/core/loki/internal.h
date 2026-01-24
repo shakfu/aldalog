@@ -315,6 +315,7 @@ void editor_del_char(editor_ctx_t *ctx);
 
 /* Row management (test helpers) */
 void editor_insert_row(editor_ctx_t *ctx, int at, char *s, size_t len);
+void editor_del_row(editor_ctx_t *ctx, int at);
 
 /* Screen rendering */
 void editor_refresh_screen(editor_ctx_t *ctx);

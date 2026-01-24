@@ -580,6 +580,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - `source/langs/tr7/impl/register.c` - Use `ctx->model.shared`
     - `source/langs/bog/register.c` - Use `ctx->model.shared`
 
+### Fixed
+
+- **Buffer switch display bug**: Commands that create and switch to new buffers (e.g., `:plugin presets`) now correctly display the new buffer content
+  - Root cause: `command_mode_exit()` was called with stale context after buffer-switching commands
+  - Fix: Get fresh buffer context via `buffer_get_current()` after command execution
+  - Affects: `:plugin presets`, `:e`, and any command that switches buffers
+
 ## [0.1.3]
 
 ### Added

@@ -508,10 +508,13 @@ int loki_editor_main(int argc, char **argv) {
             if (plugin_path && ctx->model.shared) {
                 /* Set log file before loading (NULL = suppress to /dev/null) */
                 shared_minihost_set_log_file(plugin_log);
-                if (shared_minihost_init() == 0) {
-                    if (shared_minihost_load(0, plugin_path) == 0) {
+                int init_rc = shared_minihost_init();
+                if (init_rc == 0) {
+                    int load_rc = shared_minihost_load(0, plugin_path);
+                    if (load_rc == 0) {
                         const char *plugin_name = shared_minihost_get_plugin_name(0);
-                        if (shared_minihost_enable() == 0) {
+                        int enable_rc = shared_minihost_enable();
+                        if (enable_rc == 0) {
                             ctx->model.shared->minihost_enabled = 1;
                             editor_set_status_msg(ctx, "Plugin loaded: %s",
                                 plugin_name ? plugin_name : plugin_path);

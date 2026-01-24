@@ -244,6 +244,76 @@ TEST(buffer_tabs_rendering) {
     buffers_free();
 }
 
+/* Test: Command-style buffer creation and population
+ * This simulates what :plugin presets does:
+ * 1. Create new buffer
+ * 2. Switch to it
+ * 3. Add content
+ * 4. Verify buffer is current with correct content */
+TEST(buffer_command_workflow) {
+    editor_ctx_t ctx;
+    init_test_context(&ctx);
+    ctx.view.screencols = 80;
+    ctx.view.screenrows = 24;
+    ctx.view.screenrows_total = 24;
+
+    buffers_init(&ctx);
+
+    int original_id = buffer_get_current_id();
+    editor_ctx_t *original_ctx = buffer_get_current();
+    ASSERT_NOT_NULL(original_ctx);
+
+    /* Simulate :plugin presets command workflow */
+
+    /* 1. Create new buffer */
+    int new_id = buffer_create(NULL);
+    ASSERT_TRUE(new_id >= 0);
+    ASSERT_NEQ(new_id, original_id);
+
+    /* 2. Switch to new buffer */
+    int switch_result = buffer_switch(new_id);
+    ASSERT_EQ(switch_result, 0);
+    ASSERT_EQ(buffer_get_current_id(), new_id);
+
+    /* 3. Get new buffer context */
+    editor_ctx_t *new_ctx = buffer_get_current();
+    ASSERT_NOT_NULL(new_ctx);
+    ASSERT_TRUE(new_ctx != original_ctx);
+
+    /* Verify screen dimensions were copied */
+    ASSERT_EQ(new_ctx->view.screencols, 80);
+    ASSERT_EQ(new_ctx->view.screenrows, 24);
+
+    /* 4. Clear initial empty row and add content (like plugin.c does) */
+    if (new_ctx->model.numrows > 0) {
+        editor_del_row(new_ctx, 0);
+    }
+    ASSERT_EQ(new_ctx->model.numrows, 0);
+
+    /* Add test content */
+    editor_insert_row(new_ctx, 0, "Header line", 11);
+    editor_insert_row(new_ctx, 1, "Content line 1", 14);
+    editor_insert_row(new_ctx, 2, "Content line 2", 14);
+
+    ASSERT_EQ(new_ctx->model.numrows, 3);
+
+    /* Verify content */
+    ASSERT_NOT_NULL(new_ctx->model.row);
+    ASSERT_NOT_NULL(new_ctx->model.row[0].chars);
+    ASSERT_STR_EQ(new_ctx->model.row[0].chars, "Header line");
+
+    /* 5. Set mode and verify buffer is still current */
+    new_ctx->view.mode = MODE_NORMAL;
+    ASSERT_EQ(buffer_get_current_id(), new_id);
+
+    /* 6. Verify buffer_get_current returns correct context with content */
+    editor_ctx_t *verify_ctx = buffer_get_current();
+    ASSERT_TRUE(verify_ctx == new_ctx);
+    ASSERT_EQ(verify_ctx->model.numrows, 3);
+
+    buffers_free();
+}
+
 /* Test suite */
 BEGIN_TEST_SUITE("Buffer Management")
     RUN_TEST(buffer_init);
@@ -256,4 +326,5 @@ BEGIN_TEST_SUITE("Buffer Management")
     RUN_TEST(buffer_list);
     RUN_TEST(buffer_limit);
     RUN_TEST(buffer_tabs_rendering);
+    RUN_TEST(buffer_command_workflow);
 END_TEST_SUITE()
