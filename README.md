@@ -15,6 +15,7 @@ All are practical for daily live-coding, REPL sketches, and headless playback. T
 ## Features
 
 - **Vim-style editor** with INSERT/NORMAL modes, live evaluation shortcuts, and Lua scripting (built on [loki](https://github.com/shakfu/loki), a fork of [kilo](https://github.com/antirez/kilo))
+- **MIDI tracker/step sequencer** with terminal UI, plugin-based cell notation, and pattern looping
 - **Native webview mode** for a self-contained GUI window without requiring a browser (optional)
 - **Web-based editor** accessible via browser using xterm.js terminal emulator (optional)
 - **Language-aware REPLs** for interactive composition (Alda, Joy, TR7 Scheme, Bog, MHS)
@@ -687,6 +688,73 @@ MHS can be built with different configurations to trade off binary size vs featu
 
 See `source/langs/mhs/README.md` for detailed documentation on VFS embedding, compilation, and standalone builds.
 
+## Tracker Sequencer
+
+psnd includes a MIDI tracker/step sequencer with a terminal-based UI, inspired by classic trackers like FastTracker and Renoise.
+
+### Quick Start
+
+Run the interactive demo:
+
+```bash
+./build/tests/tracker/tracker_demo ~/Music/sf2/FluidR3_GM.sf2
+```
+
+### Controls
+
+| Key | Action |
+|-----|--------|
+| `h/j/k/l` or arrows | Navigate cells |
+| `Enter` or `i` | Edit cell |
+| `Escape` | Exit edit mode / Quit |
+| `Space` | Play/Stop |
+| `q` or `Q` | Quit |
+
+### Cell Notation (Notes Plugin)
+
+The tracker uses a simple note notation language:
+
+| Syntax | Description |
+|--------|-------------|
+| `C4` | Middle C |
+| `D#5` | D sharp, octave 5 |
+| `Bb3` | B flat, octave 3 |
+| `C4@80` | C4 with velocity 80 |
+| `C4~2` | C4 held for 2 rows |
+| `C4 E4 G4` | C major chord |
+| `r` or `-` | Rest |
+| `x` or `off` | Note off |
+
+### Architecture
+
+The tracker is built with a modular plugin system:
+
+- **`tracker_model`** - Data structures (songs, patterns, tracks, cells)
+- **`tracker_plugin`** - Plugin system for notation languages
+- **`tracker_engine`** - Playback engine with event scheduling
+- **`tracker_view`** - View layer (theme, undo, clipboard, JSON)
+- **`tracker_audio`** - Audio integration with SharedContext
+
+### API Example
+
+```c
+// Create a song and pattern
+TrackerSong* song = tracker_song_new("My Song");
+TrackerPattern* pattern = tracker_pattern_new(16, 4, "Pattern 1");
+tracker_song_add_pattern(song, pattern);
+
+// Add notes to cells
+TrackerCell* cell = tracker_pattern_get_cell(pattern, 0, 0);
+tracker_cell_set_expression(cell, "C4@80", "notes");
+
+// Create engine and connect to audio
+TrackerEngine* engine = tracker_audio_engine_new(&audio_ctx);
+tracker_engine_load_song(engine, song);
+
+// Start playback
+tracker_engine_play(engine);
+```
+
 ## Ableton Link
 
 psnd supports [Ableton Link](https://www.ableton.com/en/link/) for tempo synchronization with other musicians and applications on the same network.
@@ -1253,6 +1321,13 @@ source/
       host_web.c       # Web server host (mongoose + xterm.js)
       host_webview.cpp # Native webview host (WebKit/WebKitGTK)
       host_headless.c  # Headless playback host
+    tracker/        # MIDI tracker/step sequencer
+      tracker_model.c    # Data structures (song, pattern, track, cell)
+      tracker_plugin.c   # Plugin system for notation languages
+      tracker_engine.c   # Playback engine with event scheduling
+      tracker_audio.c    # Audio integration with SharedContext
+      tracker_view.c     # View layer (theme, undo, clipboard)
+      tracker_view_terminal.c  # Terminal UI with VT100 rendering
     shared/         # Language-agnostic backend (audio, MIDI, Link)
     include/        # Public headers
   langs/
@@ -1268,6 +1343,7 @@ tests/
   alda/             # Alda parser tests
   joy/              # Joy parser and MIDI tests
   bog/              # Bog parser and runtime tests
+  tracker/          # Tracker unit tests
   shared/           # Shared backend tests
 ```
 

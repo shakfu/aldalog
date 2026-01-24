@@ -41,6 +41,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - `tracker_audio_link_poll(engine, ctx)` - Poll Link state for updates
     - Automatic channel mapping (tracker 0-based to shared 1-based)
     - Routes through shared backend priority (Minihost > Csound > TSF/FluidSynth > MIDI)
+    - Automatic program change initialization on playback start (required for TSF/FluidSynth)
+  - **Terminal UI** (`tracker_view_terminal`):
+    - VT100/ANSI terminal rendering with box-drawing characters
+    - Vim-style navigation (h/j/k/l or arrow keys)
+    - Cell editing with Enter/i to enter edit mode, Escape to exit
+    - Playback control with Space (play/stop)
+    - Row highlighting during playback
+    - Beat row highlighting (every 4th row by default)
+    - Track headers with names and channel numbers
+    - Configurable cell width and colors
+  - **Interactive Demo** (`tracker_demo`):
+    - Standalone demo program for testing the terminal UI
+    - Pre-populated 4-track, 16-row pattern (lead, bass, drums, pad)
+    - TinySoundFont audio output
+    - Run with: `./build/tests/tracker/tracker_demo [soundfont.sf2]`
   - **Tests**: 75 unit tests (55 for notes plugin, 20 for audio integration)
   - **Files Added**:
     - `source/core/tracker/tracker_model.h`, `source/core/tracker/tracker_model.c`
@@ -51,8 +66,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - `source/core/tracker/tracker_view.h`, `source/core/tracker/tracker_view.c`
     - `source/core/tracker/tracker_view_theme.c`, `source/core/tracker/tracker_view_undo.c`
     - `source/core/tracker/tracker_view_clipboard.c`, `source/core/tracker/tracker_view_json.c`
+    - `source/core/tracker/tracker_view_terminal.h`, `source/core/tracker/tracker_view_terminal.c`
     - `source/core/tests/tracker/CMakeLists.txt`
     - `source/core/tests/tracker/test_plugin_notes.c`, `source/core/tests/tracker/test_audio.c`
+    - `source/core/tests/tracker/tracker_demo.c`
 
 - **Parameter Binding System**: Bind named parameters to OSC addresses and MIDI CC for real-time control from physical controllers (knobs, faders)
   - Thread-safe atomic float values for lock-free access from MIDI/OSC threads
