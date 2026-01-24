@@ -554,6 +554,7 @@ typedef enum {
     TRACKER_INPUT_CANCEL,
     TRACKER_INPUT_BACKSPACE,
     TRACKER_INPUT_DELETE,
+    TRACKER_INPUT_TAB,
     TRACKER_INPUT_CLEAR_CELL,
     TRACKER_INPUT_INSERT_ROW,
     TRACKER_INPUT_DELETE_ROW,
@@ -766,9 +767,9 @@ struct TrackerViewState {
     /* FX editor state */
     TrackerFxTarget fx_target;  /* what FX chain are we editing */
     int fx_cursor;              /* cursor position in FX chain */
-    int fx_edit_field;          /* 0=name, 1=params, 2=enabled */
-    char* fx_edit_buffer;       /* buffer for editing FX name/params */
-    int fx_edit_buffer_len;
+    bool fx_editing;            /* true if editing an FX entry */
+    int fx_edit_field;          /* 0=name, 1=params */
+    char fx_edit_buffer[64];    /* buffer for editing FX name/params */
     int fx_edit_cursor;         /* cursor in edit buffer */
 
     /* Theme */

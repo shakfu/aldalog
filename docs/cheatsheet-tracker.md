@@ -102,16 +102,32 @@ Quick reference for psnd tracker keybindings and commands.
 | `x` | Remove effect |
 | `K` `J` | Move effect up / down |
 | `Space` | Toggle effect on/off |
+| `Enter` `i` `e` | Edit FX parameters |
+
+### FX Parameter Editing
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Switch between name/params fields |
+| Up/Down | Cycle through FX types (when editing name) |
+| `Enter` | Save changes |
+| `Esc` | Cancel editing |
 
 ### Available FX
 
-| Name | Description |
-|------|-------------|
-| `transpose` | Transpose note by semitones |
-| `velocity` | Adjust note velocity |
-| `arpeggio` | Arpeggiate notes |
-| `delay` | Echo/delay effect |
-| `ratchet` | Repeat note rapidly |
+| Name | Params | Description |
+|------|--------|-------------|
+| `transpose` / `tr` | semitones | Transpose notes (+/- semitones) |
+| `velocity` / `vel` | 0-127 | Set note velocity |
+| `octave` / `oct` | octaves | Shift by octaves |
+| `invert` / `inv` | pivot | Invert around pivot note |
+| `arpeggio` / `arp` | speed | Spread chord notes (ticks between) |
+| `delay` | time,count,decay | Echo effect (e.g., `12,3,70`) |
+| `ratchet` / `rat` | count,speed | Rapid repeats (e.g., `4,3`) |
+| `humanize` / `hum` | timing,vel | Random variation (e.g., `2,10`) |
+| `chance` / `prob` | percent | Probability 0-100 (default 75) |
+| `reverse` / `rev` | - | Reverse note order |
+| `stutter` / `stut` | count,decay | Repeat with decay (e.g., `3,80`) |
 
 ## File
 

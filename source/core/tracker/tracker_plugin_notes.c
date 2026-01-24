@@ -29,6 +29,13 @@ static const char* transform_names[] = {
     "velocity", "vel",
     "octave", "oct",
     "invert", "inv",
+    "arpeggio", "arp",
+    "delay",
+    "ratchet", "rat",
+    "humanize", "hum",
+    "chance", "prob",
+    "reverse", "rev",
+    "stutter", "stut",
     NULL
 };
 
@@ -388,6 +395,439 @@ static TrackerPhrase* transform_invert(
     return result;
 }
 
+/**
+ * Arpeggio transform - spread chord notes across time.
+ * Params: "speed" - ticks between notes (default 4)
+ */
+static TrackerPhrase* transform_arpeggio(
+    const TrackerPhrase* input,
+    const char* params,
+    TrackerContext* ctx
+) {
+    (void)ctx;
+    if (!input || input->count == 0) return NULL;
+
+    int speed = 4;  /* ticks between arp notes */
+    if (params) {
+        parse_int(params, &speed, NULL);
+        if (speed < 1) speed = 1;
+        if (speed > 48) speed = 48;
+    }
+
+    /* Count note-on events */
+    int note_count = 0;
+    for (int i = 0; i < input->count; i++) {
+        if (input->events[i].type == TRACKER_EVENT_NOTE_ON) {
+            note_count++;
+        }
+    }
+
+    if (note_count <= 1) {
+        /* No arpeggiation needed for single notes */
+        return tracker_phrase_clone(input);
+    }
+
+    TrackerPhrase* result = tracker_phrase_clone(input);
+    if (!result) return NULL;
+
+    /* Spread note-ons across time */
+    int note_idx = 0;
+    for (int i = 0; i < result->count; i++) {
+        TrackerEvent* e = &result->events[i];
+        if (e->type == TRACKER_EVENT_NOTE_ON) {
+            e->offset_ticks = note_idx * speed;
+            note_idx++;
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Delay transform - create echo effect.
+ * Params: "time,feedback,decay" - delay time in ticks, number of echoes, velocity decay %
+ *         e.g., "12,3,70" = 12 tick delay, 3 echoes, 70% velocity each echo
+ */
+static TrackerPhrase* transform_delay(
+    const TrackerPhrase* input,
+    const char* params,
+    TrackerContext* ctx
+) {
+    (void)ctx;
+    if (!input || input->count == 0) return NULL;
+
+    int delay_time = 12;  /* ticks */
+    int feedback = 2;     /* number of echoes */
+    int decay = 70;       /* velocity decay percentage */
+
+    if (params) {
+        const char* p = params;
+        parse_int(p, &delay_time, &p);
+        if (*p == ',') p++;
+        parse_int(p, &feedback, &p);
+        if (*p == ',') p++;
+        parse_int(p, &decay, NULL);
+    }
+
+    if (delay_time < 1) delay_time = 1;
+    if (feedback < 0) feedback = 0;
+    if (feedback > 8) feedback = 8;
+    if (decay < 0) decay = 0;
+    if (decay > 100) decay = 100;
+
+    /* Count note events */
+    int note_on_count = 0;
+    int note_off_count = 0;
+    for (int i = 0; i < input->count; i++) {
+        if (input->events[i].type == TRACKER_EVENT_NOTE_ON) note_on_count++;
+        if (input->events[i].type == TRACKER_EVENT_NOTE_OFF) note_off_count++;
+    }
+
+    /* Calculate total events needed */
+    int total_note_ons = note_on_count * (feedback + 1);
+    int total_note_offs = note_off_count * (feedback + 1);
+    int other_events = input->count - note_on_count - note_off_count;
+    int total_events = total_note_ons + total_note_offs + other_events;
+
+    TrackerPhrase* result = tracker_phrase_new(total_events);
+    if (!result) return NULL;
+
+    /* Copy original events first */
+    for (int i = 0; i < input->count; i++) {
+        tracker_phrase_add_event(result, &input->events[i]);
+    }
+
+    /* Add delayed echoes */
+    for (int echo = 1; echo <= feedback; echo++) {
+        int echo_delay = delay_time * echo;
+        int vel_mult = 100;
+        for (int j = 0; j < echo; j++) {
+            vel_mult = vel_mult * decay / 100;
+        }
+
+        for (int i = 0; i < input->count; i++) {
+            const TrackerEvent* orig = &input->events[i];
+            if (orig->type == TRACKER_EVENT_NOTE_ON) {
+                TrackerEvent e = *orig;
+                e.offset_ticks = orig->offset_ticks + echo_delay;
+                e.data2 = (uint8_t)(orig->data2 * vel_mult / 100);
+                if (e.data2 < 1) e.data2 = 1;
+                tracker_phrase_add_event(result, &e);
+            } else if (orig->type == TRACKER_EVENT_NOTE_OFF) {
+                TrackerEvent e = *orig;
+                e.offset_ticks = orig->offset_ticks + echo_delay;
+                tracker_phrase_add_event(result, &e);
+            }
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Ratchet transform - repeat notes rapidly.
+ * Params: "count,speed" - number of repeats, ticks between repeats
+ *         e.g., "4,3" = 4 repeats, 3 ticks apart
+ */
+static TrackerPhrase* transform_ratchet(
+    const TrackerPhrase* input,
+    const char* params,
+    TrackerContext* ctx
+) {
+    (void)ctx;
+    if (!input || input->count == 0) return NULL;
+
+    int count = 4;    /* number of repeats */
+    int speed = 3;    /* ticks between repeats */
+
+    if (params) {
+        const char* p = params;
+        parse_int(p, &count, &p);
+        if (*p == ',') p++;
+        parse_int(p, &speed, NULL);
+    }
+
+    if (count < 1) count = 1;
+    if (count > 16) count = 16;
+    if (speed < 1) speed = 1;
+    if (speed > 24) speed = 24;
+
+    /* Count note-on events */
+    int note_count = 0;
+    for (int i = 0; i < input->count; i++) {
+        if (input->events[i].type == TRACKER_EVENT_NOTE_ON) {
+            note_count++;
+        }
+    }
+
+    /* Calculate events needed: original + (count-1) * note pairs */
+    int extra_events = note_count * (count - 1) * 2;  /* note-on + note-off per repeat */
+    int total_events = input->count + extra_events;
+
+    TrackerPhrase* result = tracker_phrase_new(total_events);
+    if (!result) return NULL;
+
+    /* Process each event */
+    for (int i = 0; i < input->count; i++) {
+        const TrackerEvent* orig = &input->events[i];
+
+        if (orig->type == TRACKER_EVENT_NOTE_ON) {
+            /* Find matching note-off to get duration */
+            int orig_duration = speed;  /* default duration if no note-off found */
+            for (int j = i + 1; j < input->count; j++) {
+                if (input->events[j].type == TRACKER_EVENT_NOTE_OFF &&
+                    input->events[j].data1 == orig->data1) {
+                    orig_duration = input->events[j].offset_ticks - orig->offset_ticks;
+                    break;
+                }
+            }
+
+            /* Calculate per-note duration */
+            int note_duration = speed - 1;
+            if (note_duration < 1) note_duration = 1;
+
+            /* Add ratcheted notes */
+            for (int r = 0; r < count; r++) {
+                TrackerEvent note_on = *orig;
+                note_on.offset_ticks = orig->offset_ticks + r * speed;
+                tracker_phrase_add_event(result, &note_on);
+
+                TrackerEvent note_off = {
+                    .type = TRACKER_EVENT_NOTE_OFF,
+                    .offset_ticks = note_on.offset_ticks + note_duration,
+                    .channel = orig->channel,
+                    .data1 = orig->data1,
+                    .data2 = 0
+                };
+                tracker_phrase_add_event(result, &note_off);
+            }
+        } else if (orig->type != TRACKER_EVENT_NOTE_OFF) {
+            /* Copy non-note events as-is */
+            tracker_phrase_add_event(result, orig);
+        }
+        /* Skip original note-offs - we generate our own */
+    }
+
+    return result;
+}
+
+/**
+ * Humanize transform - add random variation.
+ * Params: "timing,velocity" - max timing offset, max velocity variation
+ *         e.g., "2,10" = +/-2 ticks timing, +/-10 velocity
+ */
+static TrackerPhrase* transform_humanize(
+    const TrackerPhrase* input,
+    const char* params,
+    TrackerContext* ctx
+) {
+    (void)ctx;
+    if (!input || input->count == 0) return NULL;
+
+    int timing_var = 2;    /* max timing variation in ticks */
+    int velocity_var = 10; /* max velocity variation */
+
+    if (params) {
+        const char* p = params;
+        parse_int(p, &timing_var, &p);
+        if (*p == ',') p++;
+        parse_int(p, &velocity_var, NULL);
+    }
+
+    if (timing_var < 0) timing_var = 0;
+    if (timing_var > 12) timing_var = 12;
+    if (velocity_var < 0) velocity_var = 0;
+    if (velocity_var > 64) velocity_var = 64;
+
+    TrackerPhrase* result = tracker_phrase_clone(input);
+    if (!result) return NULL;
+
+    /* Simple pseudo-random based on note data */
+    for (int i = 0; i < result->count; i++) {
+        TrackerEvent* e = &result->events[i];
+        if (e->type == TRACKER_EVENT_NOTE_ON) {
+            /* Use note and position for pseudo-random variation */
+            int seed = e->data1 * 17 + i * 31 + e->offset_ticks * 7;
+
+            if (timing_var > 0) {
+                int t_offset = (seed % (timing_var * 2 + 1)) - timing_var;
+                int new_tick = e->offset_ticks + t_offset;
+                if (new_tick < 0) new_tick = 0;
+                e->offset_ticks = new_tick;
+            }
+
+            if (velocity_var > 0) {
+                int v_offset = ((seed / 3) % (velocity_var * 2 + 1)) - velocity_var;
+                int new_vel = (int)e->data2 + v_offset;
+                if (new_vel < 1) new_vel = 1;
+                if (new_vel > 127) new_vel = 127;
+                e->data2 = (uint8_t)new_vel;
+            }
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Chance transform - probability-based note triggering.
+ * Params: "percent" - probability that note plays (0-100)
+ *         e.g., "75" = 75% chance each note plays
+ */
+static TrackerPhrase* transform_chance(
+    const TrackerPhrase* input,
+    const char* params,
+    TrackerContext* ctx
+) {
+    (void)ctx;
+    if (!input || input->count == 0) return NULL;
+
+    int percent = 75;  /* probability percentage */
+
+    if (params) {
+        parse_int(params, &percent, NULL);
+    }
+
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+
+    TrackerPhrase* result = tracker_phrase_new(input->count);
+    if (!result) return NULL;
+
+    /* Determine which notes to keep using pseudo-random */
+    for (int i = 0; i < input->count; i++) {
+        const TrackerEvent* e = &input->events[i];
+
+        if (e->type == TRACKER_EVENT_NOTE_ON) {
+            /* Pseudo-random based on note data */
+            int seed = e->data1 * 23 + i * 47 + e->offset_ticks * 13;
+            int roll = seed % 100;
+
+            if (roll < percent) {
+                /* Note plays - add it and its note-off */
+                tracker_phrase_add_event(result, e);
+            }
+            /* Otherwise skip the note */
+        } else if (e->type == TRACKER_EVENT_NOTE_OFF) {
+            /* Only add note-off if note-on was added */
+            /* Check if we have a matching note-on in result */
+            bool found = false;
+            for (int j = 0; j < result->count; j++) {
+                if (result->events[j].type == TRACKER_EVENT_NOTE_ON &&
+                    result->events[j].data1 == e->data1 &&
+                    result->events[j].channel == e->channel) {
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                tracker_phrase_add_event(result, e);
+            }
+        } else {
+            /* Copy other events */
+            tracker_phrase_add_event(result, e);
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Reverse transform - reverse note order.
+ * Params: none
+ */
+static TrackerPhrase* transform_reverse(
+    const TrackerPhrase* input,
+    const char* params,
+    TrackerContext* ctx
+) {
+    (void)ctx;
+    (void)params;
+    if (!input || input->count == 0) return NULL;
+
+    TrackerPhrase* result = tracker_phrase_clone(input);
+    if (!result) return NULL;
+
+    /* Find time range */
+    int min_tick = 0x7FFFFFFF;
+    int max_tick = 0;
+    for (int i = 0; i < result->count; i++) {
+        int t = result->events[i].offset_ticks;
+        if (t < min_tick) min_tick = t;
+        if (t > max_tick) max_tick = t;
+    }
+
+    /* Reverse timing */
+    for (int i = 0; i < result->count; i++) {
+        result->events[i].offset_ticks = max_tick - (result->events[i].offset_ticks - min_tick);
+    }
+
+    return result;
+}
+
+/**
+ * Stutter transform - repeat phrase with variations.
+ * Params: "count,decay" - number of repeats, velocity decay %
+ *         e.g., "3,80" = 3 repeats, 80% velocity each time
+ */
+static TrackerPhrase* transform_stutter(
+    const TrackerPhrase* input,
+    const char* params,
+    TrackerContext* ctx
+) {
+    (void)ctx;
+    if (!input || input->count == 0) return NULL;
+
+    int count = 2;    /* number of total plays */
+    int decay = 80;   /* velocity decay percentage */
+
+    if (params) {
+        const char* p = params;
+        parse_int(p, &count, &p);
+        if (*p == ',') p++;
+        parse_int(p, &decay, NULL);
+    }
+
+    if (count < 1) count = 1;
+    if (count > 8) count = 8;
+    if (decay < 0) decay = 0;
+    if (decay > 100) decay = 100;
+
+    /* Find phrase duration */
+    int max_tick = 0;
+    for (int i = 0; i < input->count; i++) {
+        if (input->events[i].offset_ticks > max_tick) {
+            max_tick = input->events[i].offset_ticks;
+        }
+    }
+    int phrase_len = max_tick + 1;
+
+    /* Create result with repeated events */
+    int total_events = input->count * count;
+    TrackerPhrase* result = tracker_phrase_new(total_events);
+    if (!result) return NULL;
+
+    for (int rep = 0; rep < count; rep++) {
+        int time_offset = rep * phrase_len;
+        int vel_mult = 100;
+        for (int j = 0; j < rep; j++) {
+            vel_mult = vel_mult * decay / 100;
+        }
+
+        for (int i = 0; i < input->count; i++) {
+            TrackerEvent e = input->events[i];
+            e.offset_ticks += time_offset;
+            if (e.type == TRACKER_EVENT_NOTE_ON) {
+                e.data2 = (uint8_t)(e.data2 * vel_mult / 100);
+                if (e.data2 < 1) e.data2 = 1;
+            }
+            tracker_phrase_add_event(result, &e);
+        }
+    }
+
+    return result;
+}
+
 /*============================================================================
  * Plugin Callbacks
  *============================================================================*/
@@ -462,6 +902,27 @@ static TrackerTransformFn plugin_get_transform(const char* fx_name) {
     if (strcmp(fx_name, "invert") == 0 || strcmp(fx_name, "inv") == 0) {
         return transform_invert;
     }
+    if (strcmp(fx_name, "arpeggio") == 0 || strcmp(fx_name, "arp") == 0) {
+        return transform_arpeggio;
+    }
+    if (strcmp(fx_name, "delay") == 0) {
+        return transform_delay;
+    }
+    if (strcmp(fx_name, "ratchet") == 0 || strcmp(fx_name, "rat") == 0) {
+        return transform_ratchet;
+    }
+    if (strcmp(fx_name, "humanize") == 0 || strcmp(fx_name, "hum") == 0) {
+        return transform_humanize;
+    }
+    if (strcmp(fx_name, "chance") == 0 || strcmp(fx_name, "prob") == 0) {
+        return transform_chance;
+    }
+    if (strcmp(fx_name, "reverse") == 0 || strcmp(fx_name, "rev") == 0) {
+        return transform_reverse;
+    }
+    if (strcmp(fx_name, "stutter") == 0 || strcmp(fx_name, "stut") == 0) {
+        return transform_stutter;
+    }
 
     return NULL;
 }
@@ -493,6 +954,27 @@ static const char* plugin_describe_transform(const char* fx_name) {
     if (strcmp(fx_name, "invert") == 0 || strcmp(fx_name, "inv") == 0) {
         return "Invert notes around a pivot";
     }
+    if (strcmp(fx_name, "arpeggio") == 0 || strcmp(fx_name, "arp") == 0) {
+        return "Spread chord notes across time";
+    }
+    if (strcmp(fx_name, "delay") == 0) {
+        return "Create echo/delay effect";
+    }
+    if (strcmp(fx_name, "ratchet") == 0 || strcmp(fx_name, "rat") == 0) {
+        return "Repeat notes rapidly";
+    }
+    if (strcmp(fx_name, "humanize") == 0 || strcmp(fx_name, "hum") == 0) {
+        return "Add random timing/velocity variation";
+    }
+    if (strcmp(fx_name, "chance") == 0 || strcmp(fx_name, "prob") == 0) {
+        return "Probability-based note triggering";
+    }
+    if (strcmp(fx_name, "reverse") == 0 || strcmp(fx_name, "rev") == 0) {
+        return "Reverse note order";
+    }
+    if (strcmp(fx_name, "stutter") == 0 || strcmp(fx_name, "stut") == 0) {
+        return "Repeat phrase with velocity decay";
+    }
 
     return NULL;
 }
@@ -511,6 +993,27 @@ static const char* plugin_get_transform_params_doc(const char* fx_name) {
     }
     if (strcmp(fx_name, "invert") == 0 || strcmp(fx_name, "inv") == 0) {
         return "pivot: note name (e.g., C4) or MIDI number (default: 60)";
+    }
+    if (strcmp(fx_name, "arpeggio") == 0 || strcmp(fx_name, "arp") == 0) {
+        return "speed: ticks between notes (default: 4)";
+    }
+    if (strcmp(fx_name, "delay") == 0) {
+        return "time,feedback,decay: delay ticks, echo count, velocity % (e.g., 12,3,70)";
+    }
+    if (strcmp(fx_name, "ratchet") == 0 || strcmp(fx_name, "rat") == 0) {
+        return "count,speed: repeats, ticks between (e.g., 4,3)";
+    }
+    if (strcmp(fx_name, "humanize") == 0 || strcmp(fx_name, "hum") == 0) {
+        return "timing,velocity: max variation (e.g., 2,10)";
+    }
+    if (strcmp(fx_name, "chance") == 0 || strcmp(fx_name, "prob") == 0) {
+        return "percent: probability 0-100 (default: 75)";
+    }
+    if (strcmp(fx_name, "reverse") == 0 || strcmp(fx_name, "rev") == 0) {
+        return "(no parameters)";
+    }
+    if (strcmp(fx_name, "stutter") == 0 || strcmp(fx_name, "stut") == 0) {
+        return "count,decay: repeats, velocity % (e.g., 3,80)";
     }
 
     return NULL;

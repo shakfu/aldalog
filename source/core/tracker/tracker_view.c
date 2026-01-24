@@ -594,6 +594,13 @@ bool tracker_view_handle_input(TrackerView* view, const TrackerInputEvent* event
 
     /* Handle FX edit mode input */
     if (view->state.view_mode == TRACKER_VIEW_MODE_FX) {
+        /* Available FX types for cycling */
+        static const char* fx_types[] = {
+            "transpose", "velocity", "arpeggio", "delay", "ratchet",
+            "octave", "humanize", "chance", "reverse", "stutter"
+        };
+        static const int num_fx_types = 10;
+
         TrackerFxChain* chain = NULL;
         if (view->song) {
             switch (view->state.fx_target) {
@@ -615,6 +622,164 @@ bool tracker_view_handle_input(TrackerView* view, const TrackerInputEvent* event
             }
         }
 
+        /* Handle FX parameter editing mode */
+        if (view->state.fx_editing) {
+            TrackerFxEntry* entry = chain ? tracker_fx_chain_get(chain, view->state.fx_cursor) : NULL;
+
+            switch (event->type) {
+                case TRACKER_INPUT_CHAR: {
+                    /* Add character to edit buffer */
+                    int len = (int)strlen(view->state.fx_edit_buffer);
+                    if (len < 62 && event->character >= 32 && event->character < 127) {
+                        /* Insert at cursor */
+                        memmove(&view->state.fx_edit_buffer[view->state.fx_edit_cursor + 1],
+                                &view->state.fx_edit_buffer[view->state.fx_edit_cursor],
+                                len - view->state.fx_edit_cursor + 1);
+                        view->state.fx_edit_buffer[view->state.fx_edit_cursor] = (char)event->character;
+                        view->state.fx_edit_cursor++;
+                        tracker_view_invalidate(view);
+                    }
+                    return true;
+                }
+
+                case TRACKER_INPUT_BACKSPACE:
+                    if (view->state.fx_edit_cursor > 0) {
+                        int len = (int)strlen(view->state.fx_edit_buffer);
+                        memmove(&view->state.fx_edit_buffer[view->state.fx_edit_cursor - 1],
+                                &view->state.fx_edit_buffer[view->state.fx_edit_cursor],
+                                len - view->state.fx_edit_cursor + 1);
+                        view->state.fx_edit_cursor--;
+                        tracker_view_invalidate(view);
+                    }
+                    return true;
+
+                case TRACKER_INPUT_DELETE:
+                    {
+                        int len = (int)strlen(view->state.fx_edit_buffer);
+                        if (view->state.fx_edit_cursor < len) {
+                            memmove(&view->state.fx_edit_buffer[view->state.fx_edit_cursor],
+                                    &view->state.fx_edit_buffer[view->state.fx_edit_cursor + 1],
+                                    len - view->state.fx_edit_cursor);
+                            tracker_view_invalidate(view);
+                        }
+                    }
+                    return true;
+
+                case TRACKER_INPUT_CURSOR_LEFT:
+                    if (view->state.fx_edit_cursor > 0) {
+                        view->state.fx_edit_cursor--;
+                        tracker_view_invalidate(view);
+                    }
+                    return true;
+
+                case TRACKER_INPUT_CURSOR_RIGHT:
+                    if (view->state.fx_edit_cursor < (int)strlen(view->state.fx_edit_buffer)) {
+                        view->state.fx_edit_cursor++;
+                        tracker_view_invalidate(view);
+                    }
+                    return true;
+
+                case TRACKER_INPUT_HOME:
+                    view->state.fx_edit_cursor = 0;
+                    tracker_view_invalidate(view);
+                    return true;
+
+                case TRACKER_INPUT_END:
+                    view->state.fx_edit_cursor = (int)strlen(view->state.fx_edit_buffer);
+                    tracker_view_invalidate(view);
+                    return true;
+
+                case TRACKER_INPUT_CURSOR_UP:
+                    /* Cycle to previous FX type when editing name field */
+                    if (view->state.fx_edit_field == 0 && entry) {
+                        int current = -1;
+                        for (int i = 0; i < num_fx_types; i++) {
+                            if (strcmp(view->state.fx_edit_buffer, fx_types[i]) == 0) {
+                                current = i;
+                                break;
+                            }
+                        }
+                        int next = (current <= 0) ? num_fx_types - 1 : current - 1;
+                        strncpy(view->state.fx_edit_buffer, fx_types[next], 63);
+                        view->state.fx_edit_buffer[63] = '\0';
+                        view->state.fx_edit_cursor = (int)strlen(view->state.fx_edit_buffer);
+                        tracker_view_invalidate(view);
+                    }
+                    return true;
+
+                case TRACKER_INPUT_CURSOR_DOWN:
+                    /* Cycle to next FX type when editing name field */
+                    if (view->state.fx_edit_field == 0 && entry) {
+                        int current = -1;
+                        for (int i = 0; i < num_fx_types; i++) {
+                            if (strcmp(view->state.fx_edit_buffer, fx_types[i]) == 0) {
+                                current = i;
+                                break;
+                            }
+                        }
+                        int next = (current < 0 || current >= num_fx_types - 1) ? 0 : current + 1;
+                        strncpy(view->state.fx_edit_buffer, fx_types[next], 63);
+                        view->state.fx_edit_buffer[63] = '\0';
+                        view->state.fx_edit_cursor = (int)strlen(view->state.fx_edit_buffer);
+                        tracker_view_invalidate(view);
+                    }
+                    return true;
+
+                case TRACKER_INPUT_TAB:
+                    /* Switch between name and params fields */
+                    if (entry) {
+                        /* Save current field */
+                        if (view->state.fx_edit_field == 0) {
+                            free(entry->name);
+                            entry->name = str_dup(view->state.fx_edit_buffer);
+                        } else {
+                            free(entry->params);
+                            entry->params = str_dup(view->state.fx_edit_buffer);
+                        }
+                        /* Switch to other field */
+                        view->state.fx_edit_field = 1 - view->state.fx_edit_field;
+                        /* Load new field into buffer */
+                        const char* src = (view->state.fx_edit_field == 0) ?
+                            (entry->name ? entry->name : "") :
+                            (entry->params ? entry->params : "");
+                        strncpy(view->state.fx_edit_buffer, src, 63);
+                        view->state.fx_edit_buffer[63] = '\0';
+                        view->state.fx_edit_cursor = (int)strlen(view->state.fx_edit_buffer);
+                        view->modified = true;
+                        tracker_view_invalidate(view);
+                    }
+                    return true;
+
+                case TRACKER_INPUT_ENTER_EDIT:
+                    /* Save and exit edit mode */
+                    if (entry) {
+                        if (view->state.fx_edit_field == 0) {
+                            free(entry->name);
+                            entry->name = str_dup(view->state.fx_edit_buffer);
+                        } else {
+                            free(entry->params);
+                            entry->params = str_dup(view->state.fx_edit_buffer);
+                        }
+                        view->modified = true;
+                        tracker_view_show_status(view, "FX updated");
+                    }
+                    view->state.fx_editing = false;
+                    tracker_view_invalidate(view);
+                    return true;
+
+                case TRACKER_INPUT_CANCEL:
+                    /* Cancel edit mode without saving */
+                    view->state.fx_editing = false;
+                    tracker_view_show_status(view, "Edit cancelled");
+                    tracker_view_invalidate(view);
+                    return true;
+
+                default:
+                    return true;
+            }
+        }
+
+        /* Normal FX navigation mode */
         switch (event->type) {
             case TRACKER_INPUT_CURSOR_UP:
                 if (view->state.fx_cursor > 0) {
@@ -635,9 +800,27 @@ bool tracker_view_handle_input(TrackerView* view, const TrackerInputEvent* event
                 }
                 return true;
             case TRACKER_INPUT_CURSOR_RIGHT:
-                if (view->state.fx_edit_field < 2) {
+                if (view->state.fx_edit_field < 1) {
                     view->state.fx_edit_field++;
                     tracker_view_invalidate(view);
+                }
+                return true;
+
+            /* Enter edit mode with Enter, 'i', or 'e' */
+            case TRACKER_INPUT_ENTER_EDIT:  /* Enter or 'i' key */
+            case TRACKER_INPUT_FX_EDIT:
+                if (chain && view->state.fx_cursor < chain->count) {
+                    TrackerFxEntry* entry = tracker_fx_chain_get(chain, view->state.fx_cursor);
+                    if (entry) {
+                        view->state.fx_editing = true;
+                        view->state.fx_edit_field = 0;  /* Start with name */
+                        const char* src = entry->name ? entry->name : "";
+                        strncpy(view->state.fx_edit_buffer, src, 63);
+                        view->state.fx_edit_buffer[63] = '\0';
+                        view->state.fx_edit_cursor = (int)strlen(view->state.fx_edit_buffer);
+                        tracker_view_show_status(view, "Editing FX (Tab=switch field, Up/Down=cycle type)");
+                        tracker_view_invalidate(view);
+                    }
                 }
                 return true;
 

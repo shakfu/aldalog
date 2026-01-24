@@ -204,8 +204,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - 'x' key removes current effect
     - 'K' / 'J' keys move effect up/down in chain
     - Space toggles effect enabled/disabled
-    - Available FX: transpose, velocity, arpeggio, delay, ratchet
+    - Available FX: transpose, velocity, arpeggio, delay, ratchet, octave, humanize, chance, reverse, stutter
     - Esc returns to pattern view
+  - **FX Parameter Editing**:
+    - Enter, 'i', or 'e' key to edit selected FX
+    - Tab switches between name and params fields
+    - Up/Down arrows cycle through FX types when editing name
+    - Enter saves changes, Esc cancels
+    - Inline text editing with cursor movement (left/right, home/end, backspace/delete)
+  - **FX Processing Runtime**:
+    - Full FX chain processing during playback at cell, track, and master levels
+    - 11 transform types with parameter support:
+      - `transpose`/`tr` - Transpose by semitones
+      - `velocity`/`vel` - Set velocity (0-127)
+      - `octave`/`oct` - Shift by octaves
+      - `invert`/`inv` - Invert around pivot note
+      - `arpeggio`/`arp` - Spread chord notes across time
+      - `delay` - Echo/delay effect (time,count,decay)
+      - `ratchet`/`rat` - Rapid note repeats
+      - `humanize`/`hum` - Random timing/velocity variation
+      - `chance`/`prob` - Probability-based triggering (0-100%)
+      - `reverse`/`rev` - Reverse note order
+      - `stutter`/`stut` - Repeat phrase with velocity decay
   - **Interactive Demo** (`tracker_demo`):
     - Standalone demo program for testing the terminal UI
     - Pre-populated 4-track, 16-row pattern (lead, bass, drums, pad)

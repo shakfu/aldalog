@@ -1086,6 +1086,7 @@ static void render_fx(TrackerView* view) {
         if (!entry) continue;
 
         bool is_cursor = (i == cursor);
+        bool is_editing = is_cursor && view->state.fx_editing;
 
         /* Cursor indicator */
         if (is_cursor) {
@@ -1106,21 +1107,88 @@ static void render_fx(TrackerView* view) {
             output_printf(tb, "[ ] ");
         }
 
-        /* FX name */
-        output_printf(tb, "%-12s", entry->name ? entry->name : "(unnamed)");
+        if (is_editing) {
+            /* Show edit buffer with cursor */
+            reset_style(tb);
 
-        /* Parameters */
-        if (entry->params && entry->params[0]) {
-            output_printf(tb, " (%s)", entry->params);
+            /* Name field */
+            if (view->state.fx_edit_field == 0) {
+                apply_style(tb, &theme->cell_note);
+                /* Show text before cursor */
+                for (int c = 0; c < view->state.fx_edit_cursor; c++) {
+                    output_printf(tb, "%c", view->state.fx_edit_buffer[c]);
+                }
+                /* Show cursor */
+                output_write(tb, "\x1b[7m", -1);  /* Reverse video for cursor */
+                if (view->state.fx_edit_buffer[view->state.fx_edit_cursor]) {
+                    output_printf(tb, "%c", view->state.fx_edit_buffer[view->state.fx_edit_cursor]);
+                } else {
+                    output_printf(tb, " ");
+                }
+                output_write(tb, "\x1b[27m", -1);  /* Normal video */
+                /* Show text after cursor */
+                if (view->state.fx_edit_buffer[view->state.fx_edit_cursor]) {
+                    output_printf(tb, "%s", &view->state.fx_edit_buffer[view->state.fx_edit_cursor + 1]);
+                }
+                reset_style(tb);
+                /* Pad to fixed width */
+                int name_len = (int)strlen(view->state.fx_edit_buffer);
+                for (int p = name_len; p < 12; p++) output_printf(tb, " ");
+            } else {
+                /* Name field not being edited */
+                apply_style(tb, &theme->default_style);
+                output_printf(tb, "%-12s", entry->name ? entry->name : "(unnamed)");
+            }
+
+            /* Params field */
+            output_printf(tb, " (");
+            if (view->state.fx_edit_field == 1) {
+                apply_style(tb, &theme->cell_note);
+                /* Show text before cursor */
+                for (int c = 0; c < view->state.fx_edit_cursor; c++) {
+                    output_printf(tb, "%c", view->state.fx_edit_buffer[c]);
+                }
+                /* Show cursor */
+                output_write(tb, "\x1b[7m", -1);
+                if (view->state.fx_edit_buffer[view->state.fx_edit_cursor]) {
+                    output_printf(tb, "%c", view->state.fx_edit_buffer[view->state.fx_edit_cursor]);
+                } else {
+                    output_printf(tb, " ");
+                }
+                output_write(tb, "\x1b[27m", -1);
+                /* Show text after cursor */
+                if (view->state.fx_edit_buffer[view->state.fx_edit_cursor]) {
+                    output_printf(tb, "%s", &view->state.fx_edit_buffer[view->state.fx_edit_cursor + 1]);
+                }
+                reset_style(tb);
+            } else {
+                /* Params field not being edited */
+                apply_style(tb, &theme->default_style);
+                output_printf(tb, "%s", entry->params ? entry->params : "");
+            }
+            output_printf(tb, ")");
+        } else {
+            /* Normal display (not editing) */
+            /* FX name */
+            output_printf(tb, "%-12s", entry->name ? entry->name : "(unnamed)");
+
+            /* Parameters */
+            if (entry->params && entry->params[0]) {
+                output_printf(tb, " (%s)", entry->params);
+            }
         }
 
-        if (is_cursor) {
+        if (is_cursor && !is_editing) {
             reset_style(tb);
         }
         output_printf(tb, "\n");
     }
 
+    /* Show editing instructions when in edit mode */
     reset_style(tb);
+    if (view->state.fx_editing) {
+        output_printf(tb, "\n  [EDIT] Tab=switch field | Up/Down=cycle FX type | Enter=save | Esc=cancel\n");
+    }
 }
 
 static void render_arrange(TrackerView* view) {
@@ -1399,6 +1467,7 @@ static TrackerInputType translate_key(int key, uint32_t* modifiers) {
     switch (key) {
         case '\r':
         case '\n':   return TRACKER_INPUT_ENTER_EDIT;
+        case '\t':   return TRACKER_INPUT_TAB;
         case '\x1b': return TRACKER_INPUT_CANCEL;  /* Escape - cancel in edit, quit in nav */
         case 127:
         case '\b':   return TRACKER_INPUT_BACKSPACE;
@@ -1480,6 +1549,7 @@ static TrackerInputType translate_key(int key, uint32_t* modifiers) {
         /* FX mode */
         case 'F': return TRACKER_INPUT_MODE_FX;
         case 't': return TRACKER_INPUT_FX_TRACK;  /* FX track target */
+        case 'e': return TRACKER_INPUT_FX_EDIT;   /* Edit FX params */
 
         /* Sequence operations (work in arrange mode) */
         case 'K': return TRACKER_INPUT_SEQ_MOVE_UP;
