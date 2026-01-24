@@ -255,20 +255,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - TinySoundFont audio output
     - Run with: `./build/tests/tracker/tracker_demo [soundfont.sf2] [song.trk]`
     - Supports loading saved tracker files from command line
-  - **Tests**: 75 unit tests (55 for notes plugin, 20 for audio integration)
+  - **Tests**: 80 unit tests (55 for notes plugin, 20 for audio integration, 5 for MIDI import)
   - **Files Added**:
     - `source/core/tracker/tracker_model.h`, `source/core/tracker/tracker_model.c`
     - `source/core/tracker/tracker_plugin.h`, `source/core/tracker/tracker_plugin.c`
     - `source/core/tracker/tracker_plugin_notes.h`, `source/core/tracker/tracker_plugin_notes.c`
     - `source/core/tracker/tracker_engine.h`, `source/core/tracker/tracker_engine.c`
     - `source/core/tracker/tracker_audio.h`, `source/core/tracker/tracker_audio.c`
+    - `source/core/tracker/tracker_midi_import.h`, `source/core/tracker/tracker_midi_import.cpp`
     - `source/core/tracker/tracker_view.h`, `source/core/tracker/tracker_view.c`
     - `source/core/tracker/tracker_view_theme.c`, `source/core/tracker/tracker_view_undo.c`
     - `source/core/tracker/tracker_view_clipboard.c`, `source/core/tracker/tracker_view_json.c`
     - `source/core/tracker/tracker_view_terminal.h`, `source/core/tracker/tracker_view_terminal.c`
     - `source/core/tests/tracker/CMakeLists.txt`
     - `source/core/tests/tracker/test_plugin_notes.c`, `source/core/tests/tracker/test_audio.c`
-    - `source/core/tests/tracker/tracker_demo.c`
+    - `source/core/tests/tracker/test_midi_import.c`, `source/core/tests/tracker/tracker_demo.c`
 
 - **Parameter Binding System**: Bind named parameters to OSC addresses and MIDI CC for real-time control from physical controllers (knobs, faders)
   - Thread-safe atomic float values for lock-free access from MIDI/OSC threads
