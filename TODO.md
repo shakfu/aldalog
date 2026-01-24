@@ -320,6 +320,48 @@ Completed:
 - [ ] funcbeat
 - [ ] drumbeat (see: <https://wavepot.com>)
 
+## Tracker Enhancements
+
+Future features for the tracker sequencer (`tracker_demo`):
+
+- [ ] **Automation Lanes**
+  - Per-row parameter automation (volume, pan, CC values)
+  - Interpolation modes: step, linear, exponential
+  - Visual lane display alongside pattern grid
+  - Automation curves for smooth transitions
+
+- [ ] **Live Jam Mode**
+  - Real-time performance with pattern triggering via keyboard
+  - Instant scene/pattern switching without stopping playback
+  - Keyboard-as-instrument mode for live note input
+  - Quick mute/solo toggles with visual feedback
+
+- [ ] **Quantize**
+  - Snap recorded MIDI notes to grid
+  - Quantize strengths: 1/4, 1/8, 1/16, 1/32, triplets
+  - Adjustable quantize amount (0-100%)
+  - Apply to selection or entire pattern
+
+- [ ] **Piano Roll View**
+  - Graphical note editing as alternative to text cells
+  - Visual representation of note lengths and velocities
+  - Mouse-based note entry and editing
+  - Toggle between tracker grid and piano roll views
+
+- [ ] **Pattern Templates**
+  - Save/load pattern templates for quick reuse
+  - Template library with categories (drums, bass, chords, etc.)
+  - Cross-song template sharing
+  - Include FX chains in templates
+
+- [ ] **Sample Trigger**
+  - Trigger one-shot audio samples from cells
+  - Sample browser with preview
+  - Per-cell sample parameters (pitch, volume, start offset)
+  - Basic sample slicing
+
+---
+
 ## Feature Opportunities
 
 ### Preset Browser & Layering
